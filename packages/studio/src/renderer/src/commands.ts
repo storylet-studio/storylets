@@ -86,13 +86,14 @@ export function createCommands(ctx: CommandsContext) {
   }
 
   /** Edit > Undo / Redo: land pending edits, step history, and fall back calmly
-   *  if the step took away what was open. */
-  async function undoRedo(which: "undo" | "redo"): Promise<void> {
+   *  if the step took away what was open. `project`: asked from a view window,
+   *  whose Undo is the project's, never the typing of a field left focused here. */
+  async function undoRedo(which: "undo" | "redo", project = false): Promise<void> {
     // Typing in the focused field is undone there first, by the page's own text
     // undo, and its row commits the result as it commits any typing: the screen
     // and the file stay in step (Patterpad's rule, patter ee3b612). In a dialog,
     // Settings or the identity fields too, which have no project step at all.
-    if (fieldUndo.route(which) === "field") { document.execCommand(which); return; }
+    if (!project && fieldUndo.route(which) === "field") { document.execCommand(which); return; }
     if (!session.project) return;
     await saves.flush();   // land pending edits before stepping history
     const result = which === "undo" ? await studio.undo() : await studio.redo();
@@ -149,6 +150,27 @@ export function createCommands(ctx: CommandsContext) {
       : `Opening Patterpad at ${result.address}. The published Patter bundle has no scene by that name yet.`, "ok");
   }
 
+  /** File > Add Extension...: main asks for the package, takes its manifest into the project as one undo step,
+   *  and installs its views on this machine. */
+  async function addExtension(): Promise<void> {
+    await saves.flush();
+    const before = new Set((session.project?.extensions ?? []).map((x) => `${x.id}@${x.version}`));
+    const result = await studio.addExtension();
+    if (result === null || !ctx.applied(result) || "error" in result) return;
+    const added = (result.project.extensions ?? []).find((x) => !before.has(`${x.id}@${x.version}`));
+    flash(added ? `Added ${added.name} ${added.version}, and installed it on this machine` : "Installed the extension on this machine", "ok");
+    ctx.render();
+  }
+
+  /** Window > Install <Name> on This Machine...: the project is left as it is. */
+  async function installExtension(extension: string): Promise<void> {
+    const result = await studio.installExtension(extension);
+    if (result === null) return;
+    if ("error" in result) { flashError(result.error); return; }
+    const name = session.project?.extensions?.find((x) => x.id === extension)?.name ?? extension;
+    flash(`Installed ${name} ${result.installed} on this machine`, "ok");
+  }
+
   function onMenu(command: MenuCommand): void {
     const project = session.project;
     switch (command.cmd) {
@@ -161,8 +183,8 @@ export function createCommands(ctx: CommandsContext) {
       case "replace": if (project) void studio.openSearch({ mode: "replace" }); break;
       case "search-property": if (project) void studio.openSearch({ mode: "property" }); break;
       case "search-field": if (project) void studio.openSearch({ mode: "field" }); break;
-      case "undo": void undoRedo("undo"); break;
-      case "redo": void undoRedo("redo"); break;
+      case "undo": void undoRedo("undo", command.project === true); break;
+      case "redo": void undoRedo("redo", command.project === true); break;
       case "table": if (project) afterFlush(() => studio.openTable()); break;
       case "coverage": if (project) afterFlush(() => studio.openCoverage()); break;
       // The card goes WITH the request, so the window cannot boot and read the
@@ -221,6 +243,10 @@ export function createCommands(ctx: CommandsContext) {
       case "save": if (project) void saves.flush(); break;
       case "go-up": if (project) nav.goUp(); break;
       case "close-project": if (project) void ctx.closeProject(); break;
+      // View extensions (patterkit design/view-extensions.md): what is typed lands before the project changes.
+      case "add-extension": if (project) void addExtension(); break;
+      case "install-extension": void installExtension(command.extension); break;
+      case "open-view": if (project) void studio.openView(command.extension, command.view).then((r) => { if (r) flashError(r.error); }); break;
       // Help > Open an Example: main asks before leaving an open project, then for a folder.
       case "open-example": void ctx.adopt(studio.openExample(command.file)); break;
       case "nav-back": if (project) nav.back(); break;
@@ -354,6 +380,7 @@ export function createCommands(ctx: CommandsContext) {
 
   return {
     onMenu,
+    undoRedo,
     /** Register the window's own keys: the Esc capture first, then the map. */
     listen(): void {
       window.addEventListener("keydown", onKeyCapture, true);

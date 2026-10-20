@@ -139,3 +139,36 @@ describe("items that need a project (item 24)", () => {
     expect(item(file, "New Card")?.enabled).toBe(false);
   });
 });
+
+describe("view extensions (patterkit design/view-extensions.md)", () => {
+  const views = {
+    items: [
+      { extension: "probe", extensionName: "Probe", view: "inspect", name: "Probe view" },
+      { extension: "shot", extensionName: "Pattershot", view: "sheet", name: "Performance sheet", why: "Pattershot isn't installed on this machine." },
+      { extension: "shot", extensionName: "Pattershot", view: "timeline", name: "Timeline", why: "Pattershot isn't installed on this machine." },
+    ],
+    isView: () => false,
+  };
+
+  it("puts Add Extension... beside Project Settings, greyed with no project", async () => {
+    const file = shape(submenu(await menuOn("darwin"), "File"));
+    expect(file[file.indexOf("Project Settings…") + 1]).toBe("Add Extension…");
+    expect(item(submenu(await menuOn("darwin", { open: false, deckFocused: false }), "File"), "Add Extension…")?.enabled).toBe(false);
+  });
+
+  it("lists the project's views by name in the Window menu, one not installed greyed with why, and its Install once", async () => {
+    const window = submenu(await menuOn("darwin", { open: true, deckFocused: false, views } as never), "Window");
+    expect(shape(window)).toEqual([
+      "role:minimize", "role:zoom", "-",
+      "Probe view", "Performance sheet", "Pattershot isn't installed on this machine.", "Install Pattershot on This Machine…",
+      "Timeline", "Pattershot isn't installed on this machine.",
+      "-", "role:front",
+    ]);
+    expect(item(window, "Probe view")?.enabled).not.toBe(false);
+    expect(item(window, "Performance sheet")?.enabled).toBe(false);
+  });
+
+  it("is the platform's Window menu alone when the project has no views", async () => {
+    expect(shape(submenu(await menuOn("win32"), "Window"))).toEqual(["role:minimize", "role:close"]);
+  });
+});

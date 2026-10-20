@@ -222,6 +222,11 @@ const api: StudioApi = {
   setFieldsFollow: (on) => invoke("fields:setFollow", on),
   setFieldsPinned: (on) => invoke("fields:setPin", on),
   closeFields: () => invoke("fields:close"),
+  // View extensions (patterkit design/view-extensions.md).
+  setExtensionValues: (extension, label, edits) => invoke("extension:setValues", extension, label, edits),
+  addExtension: () => invoke("extension:add"),
+  installExtension: (extension) => invoke("extension:install", extension),
+  openView: (extension, view) => invoke("view:open", extension, view),
   exportBundle: (opts) => invoke("bundle:export", opts),
   exportXlsx: () => invoke("xlsx:export"),   // Publish Spreadsheet
   exportHtml: () => invoke("html:export"),   // Publish Playable HTML
@@ -301,3 +306,15 @@ const api: StudioApi = {
 };
 
 contextBridge.exposeInMainWorld("studio", api);
+
+/** The page's window, as far as the port's hand-over needs it (this file is built without the DOM's types). */
+declare const window: { postMessage(message: unknown, targetOrigin: string, transfer?: readonly unknown[]): void };
+
+// A view's port (app-shell README v0.58, step 3): main hands this window one end of a MessageChannel for each
+// view it opens, and the page takes it with the shell's `onViewPort`. Posted rather than bridged, since a port
+// can't cross contextBridge; the channel and message names are the shell's (view-protocol's VIEW_PORT_CHANNEL
+// and VIEW_PORT_MESSAGE), written out because a sandboxed preload imports nothing but electron.
+// A closed view's meta comes the same way with no port (`closed: true`), so the page drops its handle.
+ipcRenderer.on("wildwinter-view:port", (event, meta) => {
+  window.postMessage({ type: "wildwinter-view:port", meta }, "*", event.ports);
+});

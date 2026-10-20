@@ -9,6 +9,8 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { ASSETS_DIR, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
 import { plural } from "@wildwinter/app-shell/util";
+import { viewSchemePrivileges } from "@wildwinter/app-shell/view-host";
+import { VIEW_SCHEME } from "./view-extensions.js";
 import type { ProjectSession } from "./project.js";
 import { ASSET_SCHEME, PROJECT_MAP_ASSETS } from "../shared/api.js";
 
@@ -21,10 +23,17 @@ import { ASSET_SCHEME, PROJECT_MAP_ASSETS } from "../shared/api.js";
  * `stream` is the point of the whole scheme - a 10MB site plan arriving in chunks
  * rather than as one buffer. `supportFetchAPI` is what lets the renderer fetch()
  * one directly, which is how a picture's size gets checked without decoding it.
+ *
+ * The view scheme (`storylet-view://`, a view extension's installed files) is
+ * registered in this SAME call: Electron keeps only the last
+ * `registerSchemesAsPrivileged`, so a second call for it would quietly take the
+ * asset scheme's privileges away. The shell says what a view scheme gets
+ * (`viewSchemePrivileges`); it is served per view session, when a view opens.
  */
 export function registerAssetScheme(): void {
   protocol.registerSchemesAsPrivileged([
     { scheme: ASSET_SCHEME, privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+    viewSchemePrivileges(VIEW_SCHEME),
   ]);
 }
 

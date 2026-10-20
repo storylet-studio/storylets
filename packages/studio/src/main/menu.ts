@@ -39,6 +39,47 @@ export interface ServerMenuState {
 export interface MenuProject {
   open: boolean;
   deckFocused: boolean;
+  /** The open project's view extensions, for the Window menu, and how to tell one's window. */
+  views?: MenuViews;
+}
+
+/** One view the project offers: opened by name, or, when this machine hasn't installed it, why not. */
+export interface MenuView {
+  extension: string;
+  extensionName: string;
+  view: string;
+  name: string;
+  /** Why it can't open here ("Probe isn't installed on this machine."); absent when it can. */
+  why?: string;
+}
+
+export interface MenuViews {
+  items: readonly MenuView[];
+  /** Is this window a view's? Its Undo and Redo are the project's, run by the editor. */
+  isView(win: BrowserWindow | null): boolean;
+}
+
+/**
+ * The Window menu's views (patterkit design/view-extensions.md), by name in the project's order, each opening its
+ * window. One that can't open here is shown disabled with why under it, and its extension's Install item after
+ * (once per extension).
+ */
+export function viewMenuItems(
+  items: readonly MenuView[], send: (command: MenuCommand) => () => void,
+): Electron.MenuItemConstructorOptions[] {
+  const out: Electron.MenuItemConstructorOptions[] = [];
+  const offeredInstall = new Set<string>();
+  for (const v of items) {
+    if (v.why === undefined) {
+      out.push({ label: v.name, click: send({ cmd: "open-view", extension: v.extension, view: v.view }) });
+      continue;
+    }
+    out.push({ label: v.name, enabled: false, toolTip: v.why }, { label: v.why, enabled: false });
+    if (offeredInstall.has(v.extension)) continue;
+    offeredInstall.add(v.extension);
+    out.push({ label: `Install ${v.extensionName} on This Machine\u2026`, click: send({ cmd: "install-extension", extension: v.extension }) });
+  }
+  return out;
 }
 
 /** `liveLink`: the Live Link server is up (listening or connected), so Play >
@@ -54,6 +95,7 @@ export function refreshMenu(
 ): void {
   const isMac = process.platform === "darwin";
   const open = project.open;
+  const views = project.views;
   const send = (command: MenuCommand) => () => { if (window) push(window.webContents, "menu", command); };
   // The family's labels AND keys, from the shell's tables rather than typed
   // here (the menu spine, app-shell 0.16.0; the File / Play / Review / Publish /
@@ -172,6 +214,9 @@ export function refreshMenu(
         { label: "New Card", accelerator: "Shift+CmdOrCtrl+N", enabled: open && project.deckFocused, click: send({ cmd: "new-card" }) },
         { type: "separator" },
         { ...FILE_MENU.projectSettings, enabled: open, click: send({ cmd: "project-settings" }) },
+        // An extension's package taken into the project, and its views installed here (patterkit
+        // design/view-extensions.md): beside Project Settings, where the extensions the project takes are set.
+        { label: "Add Extension\u2026", enabled: open, click: send({ cmd: "add-extension" }) },
         // The game's shared scopes folder (patterkit design/shared-scopes.md): creating it is
         // an explicit act, never a side effect, and this is the act. Beside Project Settings
         // because it is about the project's place in the game rather than about any one shard.
@@ -208,6 +253,8 @@ export function refreshMenu(
           ...EDIT_MENU.undo,
           click: () => {
             const focused = BrowserWindow.getFocusedWindow();
+            // A view's window has no undo of its own: its Undo is the project's, which the editor runs.
+            if (views?.isView(focused)) { send({ cmd: "undo", project: true })(); return; }
             if (focused && focused !== window) { focused.webContents.undo(); return; }
             send({ cmd: "undo" })();
           },
@@ -216,6 +263,7 @@ export function refreshMenu(
           ...EDIT_MENU.redo,
           click: () => {
             const focused = BrowserWindow.getFocusedWindow();
+            if (views?.isView(focused)) { send({ cmd: "redo", project: true })(); return; }
             if (focused && focused !== window) { focused.webContents.redo(); return; }
             send({ cmd: "redo" })();
           },
@@ -400,7 +448,19 @@ export function refreshMenu(
         ]),
       ],
     },
-    { role: "windowMenu" },
+    // The platform's Window menu, written out so the project's views can join it: its own items first (as
+    // the role draws them), then each view by name, the tool windows' kin, where a family user looks for a
+    // window. With no views it's the role's menu as it was.
+    {
+      label: "Window",
+      role: "windowMenu",
+      submenu: [
+        { role: "minimize" as const },
+        ...(isMac ? [{ role: "zoom" as const }] : [{ role: "close" as const }]),
+        ...(views && views.items.length > 0 ? [{ type: "separator" as const }, ...viewMenuItems(views.items, send)] : []),
+        ...(isMac ? [{ type: "separator" as const }, { role: "front" as const }] : []),
+      ],
+    },
     {
       role: "help",
       submenu: [

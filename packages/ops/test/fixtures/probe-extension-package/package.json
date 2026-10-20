@@ -1,0 +1,7 @@
+{
+  "name": "probe-extension",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Storyletter's internal test extension as a package: the probe manifest and its view, for Add Extension... and the view host's tests. Never published, documented, or shipped.",
+  "files": ["probe.extension.json", "view"]
+}

@@ -22,6 +22,8 @@ export interface WindowsIpcDeps extends Pick<MainContext, "session" | "editor" |
   allowBoardClose(): void;
   /** The editor has flushed its pending edits (windows.ts `createEditorFlush`). */
   editorFlushed(): void;
+  /** Reset View's rescue of the view extensions' windows, which aren't rows of the table (ipc/views.ts). */
+  rescueViews(): void;
 }
 
 export interface WindowsIpc {
@@ -156,7 +158,8 @@ export function createWindowsIpc(deps: WindowsIpcDeps): WindowsIpc {
       });
       ipc.handle("fields:close", () => { deps.windows().get("fields")?.close(); });
 
-      ipc.handle("view:resetWindows", () => deps.windows().rescue());
+      // The table's rows, then the views' windows: the store's reset already forgot their bounds too.
+      ipc.handle("view:resetWindows", () => { deps.windows().rescue(); deps.rescueViews(); });
       // The Coverage window's "Coverage drivers..." button: bring the editor
       // forward with the settings dialog open where the drivers are edited.
       ipc.handle("settings:open", (_event, section) => {

@@ -10,7 +10,7 @@ import {
 } from "../mutate/cards.js";
 import { addNamedOutcome, declareProperty, pickStage, pickTagStage, repointTag } from "../mutate/quick-fixes.js";
 import { createPatterScene } from "../patter-scene.js";
-import { setExtensionValue } from "../mutate/extensions.js";
+import { setExtensionValue, setExtensionValues } from "../mutate/extensions.js";
 import { cardCatalogue } from "../read/catalogue.js";
 import { deckGraph } from "../read/canvas.js";
 import type { MainContext } from "../context.js";
@@ -23,6 +23,15 @@ export function registerCards(ipc: Ipc, deps: Pick<MainContext, "session">): voi
   ipc.write("card:save", project(saveCard));
   // A Storylet extension's value on any node: here beside the card's own save, as most are a card's.
   ipc.write("extension:setValue", project(setExtensionValue));
+  // A view's write: several values of its extension as one undo step with its label, or refused whole with why.
+  ipc.write("extension:setValues", (_event, extension, label, edits) => {
+    const open = deps.session();
+    if (!open) return { error: "No project is open.", code: "failed" as const };
+    if (typeof extension !== "string" || typeof label !== "string" || !Array.isArray(edits)) {
+      return { error: "A view's write names its extension, a label, and its edits.", code: "bad-request" as const };
+    }
+    return setExtensionValues(open, extension, label, edits);
+  });
   ipc.write("card:create", project((open, deckId: string, place?: string, zone?: string) =>
     createCard(open, deckId, place, typeof zone === "string" ? zone : undefined)));
   ipc.write("card:duplicate", project(duplicateCard));

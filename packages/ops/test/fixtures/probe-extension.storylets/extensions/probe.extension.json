@@ -42,5 +42,8 @@
       "hand": { "fields": [{ "name": "seat", "type": "enum", "values": ["north", "south"] }] },
       "project": { "fields": [{ "name": "studio", "type": "text" }] }
     }
-  }
+  },
+  "views": [
+    { "id": "inspect", "name": "Probe view", "entry": "view/probe-view.js", "element": "probe-view", "hosts": ["storylets"] }
+  ]
 }

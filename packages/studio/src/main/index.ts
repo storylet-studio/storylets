@@ -34,6 +34,7 @@ import { reopenOnActivate, startLifecycle } from "./lifecycle.js";
 import { createEditorFlush, createEditorWindow, defineWindows } from "./windows.js";
 import { createCoverage } from "./ipc/coverage.js";
 import { createWindowsIpc } from "./ipc/windows.js";
+import { createViewHost } from "./ipc/views.js";
 import { registerAll } from "./ipc/index.js";
 import { electronIpc } from "./ipc/registrar.js";
 import type { OpenResult } from "../shared/api.js";
@@ -123,8 +124,11 @@ const lifecycle = startLifecycle({
   mayLeaveProject: (act) => exchange.mayLeaveProject(act),
   sweep: sweepOrphanAssets,
 });
+// The project's view extensions: Add Extension..., their installs, and a window per view (ipc/views.ts).
+const views = createViewHost(ctx);
 const tools = createWindowsIpc({
   ...ctx, coverage, allowBoardClose: () => lifecycle.allowBoardClose(), editorFlushed: () => flush.flushed(),
+  rescueViews: () => views.rescue(),
 });
 
 // --- the menu, and the window's title -------------------------------------------
@@ -137,7 +141,16 @@ const menu = (): void => {
   const server = exchange.standing();
   refreshMenu(window, store.get(), live.isOn(), menuState(
     server.remote, server.keyed, server.standing?.edits ?? 0, server.head,
-  ), shownPatter = patterPaired(), { open: session !== undefined, deckFocused: session !== undefined && deckFocused });
+  ), shownPatter = patterPaired(), {
+    open: session !== undefined, deckFocused: session !== undefined && deckFocused,
+    views: {
+      items: views.offered().map((v) => ({
+        extension: v.extension, extensionName: v.extensionName, view: v.view, name: v.name,
+        ...(v.choice.installed === null ? { why: v.choice.why ?? `${v.extensionName} isn't installed on this machine.` } : {}),
+      })),
+      isView: (win) => views.isView(win),
+    },
+  });
   exchange.retitle(server.remote, server.standing);
 };
 
@@ -145,6 +158,8 @@ const menu = (): void => {
  *  have moved. Compared rather than rebuilt blindly, because a write happens on
  *  every autosave and a menu rebuild does not belong on that path. */
 function noteProjectWritten(): void {
+  // An undone Add Extension... takes its views with it: worked out again, and drawn only when they changed.
+  void views.refresh();
   if (!exchange.countMoved() && patterPaired() === shownPatter) return;
   menu();
 }
@@ -222,6 +237,9 @@ function openAt(path: string): OpenResult | { error: string } {
   const reply = projects.openAt(path);
   session = projects.current();
   deckFocused = false;   // the editor says again once it lands on a deck
+  // A view shows the project it was opened on: they close with it, and the new project's are worked out.
+  views.closeAll();
+  void views.refresh();
   // ...and the menu the shell rebuilt DURING that open described the old project
   // too, because this mirror only becomes true on the line above. Drawn again
   // here, from the project that is actually open.
@@ -244,6 +262,8 @@ function closeProject(): void {
   deckFocused = false;
   dropShardCaches();
   for (const w of windows.all()) w.close();
+  views.closeAll();
+  void views.refresh();
   live.stop();
   menu();
 }
@@ -275,7 +295,7 @@ void app.whenReady().then(() => {
       deckFocused = on;
       return true;
     },
-    hosts: [exchange, live, coverage, launch, tools],
+    hosts: [exchange, live, coverage, launch, tools, views],
   });
   // Live Link: every saved edit reaches a connected game. And the unpushed
   // count may have moved with it, which the menu and the title say.

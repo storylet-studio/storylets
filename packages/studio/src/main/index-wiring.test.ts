@@ -124,3 +124,33 @@ describe("Show Scene in Patterpad (the Patterpad review, 2026-10-07)", () => {
     expect(edit).not.toContain("showMessageBox");
   });
 });
+
+describe("view extensions (patterkit design/view-extensions.md)", () => {
+  it("register the view scheme in the asset scheme's one call, since Electron keeps only the last", () => {
+    expect(SOURCE.match(/registerSchemesAsPrivileged\(/g)).toHaveLength(1);
+    const call = body("export function registerAssetScheme");
+    expect(call).toContain("ASSET_SCHEME");
+    expect(call).toContain("viewSchemePrivileges(VIEW_SCHEME)");
+  });
+
+  it("open each view with the shell's preload passed in, since main is bundled and the shell can't find it beside itself", () => {
+    expect(handler("view:open")).toContain("preload: viewPreload()");
+    expect(SOURCE).toContain('resolve("@wildwinter/app-shell/view-preload.cjs")');
+  });
+
+  it("close every view window when the project changes or closes (the shell tells the editor each has gone)", () => {
+    expect(body("function openAt")).toContain("views.closeAll()");
+    expect(body("function closeProject")).toContain("views.closeAll()");
+    expect(body("function closeAll")).toContain("view.close()");
+  });
+
+  it("rescue the view windows on Reset View too", () => {
+    expect(handler("view:resetWindows")).toContain("deps.rescueViews()");
+  });
+
+  it("make Add Extension... one commit, with the package installed first", () => {
+    const add = handler("extension:add");
+    expect(add.indexOf("installExtensionPackage(")).toBeLessThan(add.indexOf("addExtension("));
+    expect(add).toContain("serialised(");
+  });
+});

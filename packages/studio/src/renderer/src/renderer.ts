@@ -81,6 +81,7 @@ import { createProblems } from "./problems.js";
 import { createVcView } from "./vc-view.js";
 import { sweepExtensionFold } from "./extension-rows.js";
 import { createFieldsLink } from "./fields-link.js";
+import { createViewHosting } from "./view-host.js";
 import { createCatalogues } from "./catalogues.js";
 import { createMapPage } from "./map-page.js";
 import { renderStoryCentre } from "./story-page.js";
@@ -136,6 +137,8 @@ const saves = createSaveQueue({
   repaintAfterSave: () => repaintAfterSave(),
   refreshVc: () => void vc.refresh(),
   refreshProject: () => refreshProject(),
+  // A view reads edits as they're typed, so a queued one is a change it's told about.
+  queued: (ids) => views.changed(ids),
 });
 
 const vc = createVcView({
@@ -143,7 +146,7 @@ const vc = createVcView({
   place: () => ({ focus: nav.focus, inspected: nav.inspected }),
   centre: () => shell.centre,
   // A poll that moved a lock moves the Fields window's too.
-  afterLock: (host) => { refreshGameIds(host); fieldsLink.push(); },
+  afterLock: (host) => { refreshGameIds(host); fieldsLink.push(); views.writable(); },
 });
 
 // The Fields window (Pattershot's brief, H1 to H5): a map of records edited as a grid beside the editor,
@@ -155,6 +158,22 @@ const fieldsLink = createFieldsLink({
   lockedBy: (key) => vc.lockedBy(key),
   follow: () => session.state.fieldsFollow,
   redraw: () => renderCentre(),
+});
+
+// The views of the project's extensions (patterkit design/view-extensions.md), each in a window of its own
+// that main hands a port to: this side answers them from the project as the writer sees it, and their writes
+// come back through main as one undo step each, redrawing the page as a Fields edit does.
+const views = createViewHosting({
+  session,
+  saves,
+  selection: () => ({ focus: nav.focus, inspected: nav.inspected, cursor: nav.cursor }),
+  goTo: (at) => nav.goTo(at),
+  focusProject: () => actions.focus({ kind: "project" }),
+  selectCards: (ids) => nav.selectCards(ids),
+  applyResult: (r) => applyResult(r),
+  redraw: () => renderCentre(),
+  undoRedo: (which) => void commands.undoRedo(which, true),
+  lockedBy: (key) => vc.lockedBy(key),
 });
 
 const comments = createComments({
@@ -364,6 +383,7 @@ function applyResult(result: OpenResult): void {
   // through here.
   setPlayRung(result.project.play);
   problems.take(result.problems);
+  views.changed("all");
 }
 
 /** Take a mutation's answer whole: report it, or apply it. True when it
@@ -541,6 +561,7 @@ function renderCentre(): void {
   // while its node does).
   sweepExtensionFold();
   fieldsLink.push();
+  views.selectionMoved();
 }
 
 /** A canvas's element goes with the centre's children, but not its window

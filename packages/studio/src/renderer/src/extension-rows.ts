@@ -64,6 +64,20 @@ export function shownValue(extension: ExtensionDto, nodeId: string, field: strin
   return pending.has(key) ? pending.get(key) : extension.values[nodeId]?.[field];
 }
 
+/** A node's values for one extension as the author last made them: the saved entry with every value typed but
+ *  not yet written laid over it (a cleared one gone). Undefined when it has none. */
+export function shownEntry(extension: ExtensionDto, nodeId: string): Record<string, unknown> | undefined {
+  let entry: Record<string, unknown> | undefined = extension.values[nodeId];
+  const prefix = pendingKey(extension.id, nodeId, "");
+  for (const [key, value] of pending) {
+    if (!key.startsWith(prefix)) continue;
+    entry = { ...(entry ?? {}) };
+    const field = key.slice(prefix.length);
+    if (value === undefined) delete entry[field]; else entry[field] = value;
+  }
+  return entry !== undefined && Object.keys(entry).length > 0 ? entry : undefined;
+}
+
 /** The extensions that declare fields for this kind of node, in the project's order. */
 export function extensionsFor(project: ProjectDto | undefined, kind: string): ExtensionDto[] {
   return (project?.extensions ?? []).filter((e) => (e.targets[kind]?.fields.length ?? 0) > 0);

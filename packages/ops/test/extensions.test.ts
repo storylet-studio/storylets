@@ -16,12 +16,12 @@ import { fileURLToPath } from "node:url";
 import { canonicalStringify, compileProject, parseSource, projectHash } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
-import { unresolvedOf, withoutMark } from "@wildwinter/toolkit/extensions";
+import { parseManifest, unresolvedOf, withoutMark } from "@wildwinter/toolkit/extensions";
 import { loadProject } from "../src/load.js";
 import { runValidate } from "../src/validate.js";
 import { runFormat } from "../src/format.js";
 import { planShardMerge, runMerge } from "../src/merge.js";
-import { planExtensionValue, projectManifests, readProjectManifest } from "../src/extensions.js";
+import { planExtensionValue, planExtensionValues, planTakeExtension, projectManifests, readProjectManifest } from "../src/extensions.js";
 import { runPack } from "../src/pack.js";
 import { runExport } from "../src/export.js";
 
@@ -452,5 +452,76 @@ describe("setting one value", () => {
       expect(planExtensionValue(dir, loadProject(dir).source!, "probe", "b_harbour", "theme", undefined)!.content).toBeNull();
       expect(planExtensionValue(dir, source, "probe", "c_gone", "note", "x")).toBeUndefined();
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe("setting several values at once (a view's write)", () => {
+  it("writes each shard it touches once, every edit to it applied in order, across boxes and the project", () => {
+    const loaded = loadProject(fixture);
+    const writes = planExtensionValues(fixture, loaded.source!, "probe", [
+      { node: "c_tide", field: "note", value: "High water." },
+      { node: "proj_probe", field: "studio", value: "WW" },
+      { node: "c_bell", field: "note" },
+      { node: "c_tide", field: "note", value: "Low water." },
+    ]);
+    if ("gone" in writes) throw new Error("planned nothing");
+    expect(writes.map((w) => w.path)).toEqual([join(fixture, BOX_SHARD), join(fixture, "probe.storyletextension")]);
+    const box = parseSource(writes[0]!.content!) as { entries: Entries };
+    expect(box.entries["card"]!["c_tide"]).toEqual({ note: "Low water." });
+    expect(box.entries["card"]!["c_bell"]!["note"]).toBeUndefined();
+    expect(box.entries["card"]!["c_bell"]!["tone"]).toBe("tense");
+    expect((parseSource(writes[1]!.content!) as { entries: Entries }).entries["project"]!["proj_probe"]!["studio"]).toBe("WW");
+  });
+
+  it("plans nothing, and names the node, when one of them has gone", () => {
+    const loaded = loadProject(fixture);
+    expect(planExtensionValues(fixture, loaded.source!, "probe", [
+      { node: "c_tide", field: "note", value: "x" }, { node: "c_gone", field: "note", value: "y" },
+    ])).toEqual({ gone: "c_gone" });
+  });
+});
+
+describe("taking an extension's manifest (Add Extension...)", () => {
+  const manifestText = (version: string): string =>
+    readFileSync(join(fixture, "extensions/probe.extension.json"), "utf8").replace(/"version": "1\.1\.0"/, `"version": "${version}"`);
+
+  it("into a project that doesn't take it: the manifest as given, and the pin", () => {
+    const dir = scratch();
+    try {
+      const project = read(dir, "probe.storyletproj") as { extensions?: Record<string, unknown> };
+      delete project.extensions;
+      write(dir, "probe.storyletproj", project);
+      rmSync(join(dir, "extensions"), { recursive: true });
+      const text = manifestText("1.1.0");
+      const take = planTakeExtension(dir, loadProject(dir).source!, parseManifest(text), text);
+      expect(take.was).toBeUndefined();
+      expect(take.writes.get(join(dir, "extensions/probe.extension.json"))).toBe(text);
+      const pinned = parseSource(take.writes.get(join(dir, "probe.storyletproj"))!) as { extensions: Record<string, unknown> };
+      expect(pinned.extensions).toEqual({ probe: { version: "1.1.0" } });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("at a new version: format's upgrade for that extension only, renamed stages and the pin, settings kept", () => {
+    const dir = scratch();
+    try {
+      const project = read(dir, "probe.storyletproj") as { extensions: { probe: { version: string } } };
+      project.extensions.probe.version = "1.0.0";
+      write(dir, "probe.storyletproj", project);
+      writeFileSync(join(dir, "extensions/probe.extension.json"), manifestText("1.0.0"));
+      const text = manifestText("1.2.0");
+      const take = planTakeExtension(dir, loadProject(dir).source!, parseManifest(text), text);
+      expect(take.was).toBe("1.0.0");
+      expect(take.report[0]).toBe("took the Storylet extension \"probe\" at version 1.2.0 (was 1.0.0)");
+      const pinned = parseSource(take.writes.get(join(dir, "probe.storyletproj"))!) as typeof project;
+      expect(pinned.extensions.probe).toEqual({ version: "1.2.0", settings: { moodField: "mood" } });
+      const box = parseSource(take.writes.get(join(dir, BOX_SHARD))!) as { entries: Entries };
+      expect(box.entries["card"]!["c_bell"]!["act"]).toBe("setup");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("at the version it already takes: the manifest alone", () => {
+    const text = manifestText("1.1.0");
+    const take = planTakeExtension(fixture, loadProject(fixture).source!, parseManifest(text), text);
+    expect([...take.writes.keys()]).toEqual([join(fixture, "extensions/probe.extension.json")]);
   });
 });

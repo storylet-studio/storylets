@@ -9,7 +9,7 @@
 
 import type { SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId } from "@storylet-studio/model";
-import { manifestProblems, resolvedClaims } from "@wildwinter/toolkit/extensions";
+import { manifestProblems, resolvedClaims, settingValues, viewsFor } from "@wildwinter/toolkit/extensions";
 import type { Manifest } from "@wildwinter/toolkit/extensions";
 import type { ExtensionDto, ExtensionFieldDto, ExtensionTargetDto } from "../shared/api.js";
 
@@ -38,7 +38,11 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
         }
       }
     }
-    out.push({ id, name: manifest.name, version: manifest.version, targets, values });
+    const views = viewsFor(manifest, "storylets").map((v) => ({ id: v.id, name: v.name }));
+    out.push({
+      id, name: manifest.name, version: manifest.version, targets, values, settings: settingValues(manifest, pin?.settings),
+      ...(views.length > 0 ? { views } : {}), ...(manifest.reads !== undefined ? { reads: [...manifest.reads] } : {}),
+    });
   }
   return out.length > 0 ? out : undefined;
 }
@@ -46,9 +50,10 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
 /** What references and map keys choose from, and what a problem names: every box, deck, card, outcome, tag,
  *  tag group, hand and hand template, by the name an author knows it by (a tag and an outcome with their
  *  group's or card's name in front, as problems name them), and the box whose extension shards hold its
- *  values, which is the version control a lock on them is read from. */
-export function extensionNodeChoices(source: SourceProject): Record<string, { id: string; label: string; box?: string }[]> {
-  const out: Record<string, { id: string; label: string; box?: string }[]> = {
+ *  values, which is the version control a lock on them is read from, and the node holding it (a view walks the
+ *  project by it). */
+export function extensionNodeChoices(source: SourceProject): Record<string, { id: string; label: string; box?: string; parent?: string }[]> {
+  const out: Record<string, { id: string; label: string; box?: string; parent?: string }[]> = {
     box: [], deck: [], card: [], outcome: [], tag: [], tagGroup: [], hand: [], handTemplate: [],
   };
   // Each with the box whose shards hold its values (the map's group is the project's own: no box).
@@ -57,21 +62,21 @@ export function extensionNodeChoices(source: SourceProject): Record<string, { id
     ...(source.map?.group ? [{ g: source.map.group, box: {} }] : []),
   ];
   for (const { g, box } of groups) {
-    out["tagGroup"]!.push({ id: g.id, label: effectiveGameId(g), ...box });
-    for (const t of g.tags ?? []) out["tag"]!.push({ id: t.id, label: `${effectiveGameId(g)}/${effectiveGameId(t)}`, ...box });
+    out["tagGroup"]!.push({ id: g.id, label: effectiveGameId(g), ...box, ...("box" in box ? { parent: box.box } : {}) });
+    for (const t of g.tags ?? []) out["tag"]!.push({ id: t.id, label: `${effectiveGameId(g)}/${effectiveGameId(t)}`, ...box, parent: g.id });
   }
   for (const box of source.boxes) {
     const b = box.box.box.id;
     out["box"]!.push({ id: b, label: effectiveGameId(box.box.box), box: b });
     // Not choices a reference can make (the toolkit's references name box, deck, card, outcome and tag), but
     // names a problem about one of them is worded with.
-    for (const h of box.hands.hands ?? []) out["hand"]!.push({ id: h.id, label: effectiveGameId(h), box: b });
-    for (const t of box.hands.templates ?? []) out["handTemplate"]!.push({ id: t.id, label: effectiveGameId(t), box: b });
+    for (const h of box.hands.hands ?? []) out["hand"]!.push({ id: h.id, label: effectiveGameId(h), box: b, parent: b });
+    for (const t of box.hands.templates ?? []) out["handTemplate"]!.push({ id: t.id, label: effectiveGameId(t), box: b, parent: b });
     for (const deck of box.decks) {
-      out["deck"]!.push({ id: deck.shard.deck.id, label: effectiveGameId(deck.shard.deck), box: b });
+      out["deck"]!.push({ id: deck.shard.deck.id, label: effectiveGameId(deck.shard.deck), box: b, parent: b });
       for (const card of deck.shard.cards ?? []) {
-        out["card"]!.push({ id: card.id, label: effectiveGameId(card), box: b });
-        for (const o of card.outcomes ?? []) out["outcome"]!.push({ id: o.id, label: `${effectiveGameId(card)}/${effectiveGameId(o)}`, box: b });
+        out["card"]!.push({ id: card.id, label: effectiveGameId(card), box: b, parent: deck.shard.deck.id });
+        for (const o of card.outcomes ?? []) out["outcome"]!.push({ id: o.id, label: `${effectiveGameId(card)}/${effectiveGameId(o)}`, box: b, parent: card.id });
       }
     }
   }

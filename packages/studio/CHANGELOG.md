@@ -10,6 +10,25 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Add Extension…** (File, beside Project Settings) takes an extension's package, its folder or a `.tgz` made by
+  `npm pack`, into the project in one step you can undo: the extension's manifest goes into the project and the
+  project takes that version, keeping its settings. A newer version of an extension the project already takes is
+  taken as `storyletengine format` takes one, renamed stages and all. Its views are installed on this machine at
+  the same time. A package with faults in its manifest, or with nothing for Storyletter, is turned down with why.
+- **An extension's views.** An extension can bring views of its own (a performance sheet, say), and the
+  project's views are listed by name in the Window menu. Each opens in a window of its own beside the editor,
+  pinned to it and remembering where you put it, as the tool windows do (Reset View brings it back). A view
+  shows what you've typed, before it's saved, follows what you select, and each change it makes is one step
+  to undo, from the view (Cmd+Z there) or the editor. A change it can't make is turned down whole: data
+  somebody else holds, a project you may only read, something that has gone, or a value the extension doesn't
+  take. Views close with the project.
+- **Install <Name> on This Machine…** (Window) for a project that takes an extension whose views aren't on this
+  machine yet: choose its package and its views are installed, leaving the project as it is. A view whose
+  installed version differs from the project's but shares its major version still opens, and its window's title
+  says so.
+
 ## [0.25.0] - 2026-10-20
 
 ### Added

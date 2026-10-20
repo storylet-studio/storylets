@@ -35,6 +35,10 @@ export interface SaveQueueContext {
   refreshVc: () => void;
   /** Re-read the project after a quiet rebuild. */
   refreshProject: () => Promise<void>;
+  /** An edit was queued on these nodes: a card's, or an extension value's. The open views are told, since
+   *  they read pending edits as the writer sees them (view-host.ts). Structural edits aren't told: a view
+   *  reading while one waits flushes it first. */
+  queued?: (ids: string[]) => void;
 }
 
 export type SaveQueue = ReturnType<typeof createSaveQueue>;
@@ -116,7 +120,13 @@ export function createSaveQueue(ctx: SaveQueueContext) {
     queueCard(deckId: string, cardId: string, edit: CardEdit): void {
       pendingCards.set(cardId, { deckId, cardId, edit });
       saver.touch();
+      ctx.queued?.([cardId]);
     },
+    /** A card's edit still waiting to be written, for a reader that shows what the author typed (a view). */
+    pendingCard(cardId: string): CardEdit | undefined { return pendingCards.get(cardId)?.edit; },
+    /** A structural edit (a box, a deck's settings, a hand, ...) is waiting: what a view reads isn't on the
+     *  project until it lands. Extension values aren't counted: they're read as typed (`shownEntry`). */
+    get structuralPending(): boolean { return [...pendingStructs.keys()].some((k) => !k.startsWith("ext:")); },
     queueStruct,
     saveBox(boxId: string, edit: BoxEdit): void { queueStruct(`box:${boxId}:${fieldsKey(edit)}`, () => studio.saveBox(boxId, edit)); },
     saveDeckConfig(deckId: string, edit: DeckEdit): void { queueStruct(`deck:${deckId}:${fieldsKey(edit)}`, () => studio.renameDeck(deckId, edit)); },
@@ -130,6 +140,7 @@ export function createSaveQueue(ctx: SaveQueueContext) {
         landed?.();
         return result;
       });
+      ctx.queued?.([nodeId]);
     },
     /** A quality's stage renamed, carrying every value naming it. Queued
      *  before the declaration list's own save, which re-queues behind it. */

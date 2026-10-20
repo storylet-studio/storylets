@@ -66,3 +66,19 @@ describe("Edit > Undo and Redo", () => {
     expect(main.webContents.send).toHaveBeenCalledWith("menu", { cmd: "undo" });
   });
 });
+
+describe("Edit > Undo and Redo in a view's window (view extensions)", () => {
+  it("run the project's undo in the editor, never a field's typing there", () => {
+    const main = fakeWindow();
+    const view = fakeWindow();
+    refreshMenu(main as never, STATE, false, undefined, false, {
+      open: true, deckFocused: false, views: { items: [], isView: (w) => w === (view as unknown) },
+    });
+    vi.clearAllMocks();
+    state.focused = view;
+    click("Undo");
+    click("Redo");
+    expect(main.webContents.send.mock.calls).toEqual([["menu", { cmd: "undo", project: true }], ["menu", { cmd: "redo", project: true }]]);
+    expect(view.webContents.undo).not.toHaveBeenCalled();
+  });
+});

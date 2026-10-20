@@ -585,8 +585,10 @@ export interface ProjectDto {
   /** The nodes an extension's references and map keys choose from, and its problems name, by kind (`box`,
    *  `deck`, `card`, `outcome`, `tag`, `tagGroup`, `hand`, `handTemplate`), each with the name an author knows
    *  it by, and the box whose extension shards hold its values (absent for a node of the project's own, whose
-   *  values are in the root's). Present only with `extensions`. */
-  extensionNodes?: Record<string, { id: string; label: string; box?: string }[]>;
+   *  values are in the root's), and the node that contains it (a card's deck, an outcome's card, a tag's group, a
+   *  deck's box; absent for a box and the map's group, whose parent is the project). Present only with
+   *  `extensions`. */
+  extensionNodes?: Record<string, { id: string; label: string; box?: string; parent?: string }[]>;
   /** The project's own node id, which its extension values are keyed by. Present only with `extensions`. */
   projectNode?: string;
 }
@@ -604,6 +606,12 @@ export interface ExtensionDto {
   targets: Record<string, ExtensionTargetDto>;
   /** By node id: the node's values, raw. */
   values: Record<string, Record<string, unknown>>;
+  /** The project's settings for it, by name, defaults filled in (a view is told them). */
+  settings?: Record<string, string>;
+  /** The views it offers Storyletter, by id and name. Absent when it has none. */
+  views?: { id: string; name: string }[];
+  /** The other extensions whose data its views read. */
+  reads?: string[];
 }
 
 export interface ExtensionTargetDto {
@@ -1690,8 +1698,9 @@ export type MenuCommand =
   | { cmd: "replace" }
   | { cmd: "search-property" }
   | { cmd: "search-field" }
-  | { cmd: "undo" }
-  | { cmd: "redo" }
+  /** `project`: from a view window, so the project's history, never a field's typing in the editor. */
+  | { cmd: "undo"; project?: boolean }
+  | { cmd: "redo"; project?: boolean }
   // Edit > Select All in the editor: scoped to the canvas or the field (Patterpad's rule).
   | { cmd: "select-all" }
   | { cmd: "table" }
@@ -1735,7 +1744,11 @@ export type MenuCommand =
   | { cmd: "theme"; theme: ThemeChoice }
   | { cmd: "nav-back" }
   | { cmd: "nav-forward" }
-  | { cmd: "close-project" };
+  | { cmd: "close-project" }
+  // View extensions: File > Add Extension..., and the Window menu's views and their installs.
+  | { cmd: "add-extension" }
+  | { cmd: "install-extension"; extension: string }
+  | { cmd: "open-view"; extension: string; view: string };
 
 /** The surface the preload bridge exposes as `window.studio`. */
 export interface StudioApi {
@@ -1857,6 +1870,10 @@ export interface StudioApi {
   /** Set one Storylet extension field on one node (any kind, by its id), or clear it (`value` undefined).
    *  Written to the extension's shard for the node's box, or the project's; one undo step per node. */
   setExtensionValue(extension: string, nodeId: string, field: string, value: unknown): Promise<OpenResult | { error: string }>;
+  /** Several values of one extension, on any nodes, as ONE undo step with the label (a view's write): every
+   *  value checked as the Fields rows check it, and refused whole, with why, when one is wrong, a node has
+   *  gone, somebody else holds a shard it would change, or the project may not be written. */
+  setExtensionValues(extension: string, label: string, edits: ExtensionEditDto[]): Promise<ExtensionWriteResult>;
   /** A new card in `deckId`; the result carries its id. Made AT a hand
    *  (`place`, a hand id: the hand page's "+ New card here"), or filed to a
    *  project map zone (`zone`, its tag id), or neither. */
@@ -2217,6 +2234,16 @@ export interface StudioApi {
   /** Fields window: close itself (Esc, or the close button). */
   closeFields(): Promise<void>;
 
+  // --- view extensions (patterkit design/view-extensions.md) -----------------------
+  /** File > Add Extension...: pick an extension's package (a folder or an npm pack .tgz), take its manifest
+   *  into the project and pin it as one undo step, and install its views on this machine. Null: cancelled. */
+  addExtension(): Promise<OpenResult | { error: string } | null>;
+  /** Install <Name> on This Machine...: pick the package of an extension the project takes, and install its
+   *  views here; the project is left alone. Null: cancelled. */
+  installExtension(extension: string): Promise<{ installed: string } | { error: string } | null>;
+  /** Open (or bring forward) one of the project's views in its own window. */
+  openView(extension: string, view: string): Promise<{ error: string } | undefined>;
+
   /** Coverage window: float over the editor (Board + Find's pin). */
   setCoveragePinned(on: boolean): Promise<void>;
   /** Coverage window: remember the card table's order. */
@@ -2384,6 +2411,17 @@ export interface FieldsWinState {
 /** One edit from the Fields window: a node's extension field, the whole map (undefined clears it). */
 export interface FieldsEdit { nodeId: string; extension: string; field: string; value: unknown }
 
+// --- view extensions (patterkit design/view-extensions.md) --------------------------------------------
+
+/** One value a view writes: a node's field of the view's own extension, cleared when `value` is absent. */
+export interface ExtensionEditDto { node: string; field: string; value?: unknown }
+
+/** Why a view's write was refused, as the view protocol says it (app-shell `ViewRefusal`'s codes). */
+export type ExtensionWriteRefusal = "held" | "read-only" | "gone" | "bad-request" | "failed";
+
+/** A view's write: the fresh project, or the refusal and why. */
+export type ExtensionWriteResult = OpenResult | { error: string; code: ExtensionWriteRefusal };
+
 // --- the channels -------------------------------------------------------------
 //
 // Every name that crosses the bridge, in one place both ends are written
@@ -2455,6 +2493,10 @@ export const INVOKE_CHANNELS = {
   "tag-group:delete": "deleteTagGroup",
   "card:save": "saveCard",
   "extension:setValue": "setExtensionValue",
+  "extension:setValues": "setExtensionValues",
+  "extension:add": "addExtension",
+  "extension:install": "installExtension",
+  "view:open": "openView",
   "card:create": "createCard",
   "card:duplicate": "duplicateCard",
   "card:move": "moveCard",
