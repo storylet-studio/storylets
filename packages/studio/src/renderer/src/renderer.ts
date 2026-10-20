@@ -79,6 +79,7 @@ import { createSaveQueue } from "./save-queue.js";
 import { createComments } from "./comments.js";
 import { createProblems } from "./problems.js";
 import { createVcView } from "./vc-view.js";
+import { sweepExtensionFold } from "./extension-rows.js";
 import { createCatalogues } from "./catalogues.js";
 import { createMapPage } from "./map-page.js";
 import { renderStoryCentre } from "./story-page.js";
@@ -522,6 +523,9 @@ function renderCentre(): void {
   else releaseCanvases();
   if (restore) restore(); else shell.centre.scrollTop = 0;
   vc.apply();
+  // The fold forgets the rows it kept for nodes this draw didn't show (a value cleared while folded stays only
+  // while its node does).
+  sweepExtensionFold();
 }
 
 /** A canvas's element goes with the centre's children, but not its window

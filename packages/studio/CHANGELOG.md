@@ -23,6 +23,15 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **An extension's fields show only what an item sets.** On a card's Fields tab, an outcome, a tag group, a tag,
+  and an extension's own tab on a box, deck, hand template or hand, each extension's section now shows just the
+  fields set there, with its name counting them ("Probe (3 set)"). Click the name to see every field; it stays
+  open as you move between items until you close it. A value you clear keeps its row until you leave the item.
+  An extension's tab counts the same fields its section does. Project Settings still shows every field. Patterpad
+  folds its extensions the same way.
+
+### Changed
+
 - **One Live Link server for the family.** Storyletter's Live Link now runs on the same server as Patterpad's,
   from the shared editor shell, with Storyletter's own handling of boards and traces plugged in (family parity
   item 14). Nothing changes in how it behaves.

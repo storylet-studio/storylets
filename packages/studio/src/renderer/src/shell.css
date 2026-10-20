@@ -1018,3 +1018,10 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
    `.create-details`, the same rule in both apps. */
 .create-details { display: flex; flex-direction: column; gap: 6px; }
 .kit-gallery .create-details select { width: 100%; max-width: none; }
+
+/* An extension's section, folded to the fields a node sets (app-shell's extensionFold): the caption is the
+   disclosure, worded and weighted as every section caption. */
+.shell-fold-cap.ext-heading { font: 600 12.5px/1.2 var(--font-ui); color: var(--muted); }
+.shell-fold-cap.ext-heading:hover { color: var(--ink); }
+.ext-section > .shell-fold-body { display: flex; flex-direction: column; gap: 6px; }
+.ext-section > .shell-fold-body:empty { display: none; }

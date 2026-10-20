@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderBoxTabBody, renderCardWorkspace } from "./inspector.js";
-import { adapterOf, extensionTabs, knownTab } from "./extension-rows.js";
+import { adapterOf, extensionFields, extensionSection, extensionTabs, knownTab, sweepExtensionFold } from "./extension-rows.js";
 import { problemTarget } from "./problems.js";
 import { setPlayRung } from "./play-ladder.js";
 import { resetDocTabMemory, setDocTab } from "./doc-tab-memory.js";
@@ -66,7 +66,7 @@ describe("a card's Fields tab", () => {
 
   it("shows the box's fields, then the extension's under its name, grouped as the manifest says", () => {
     const centre = fieldsTab(host());
-    expect(centre.querySelector(".ext-heading")?.textContent).toBe("Probe");
+    expect(centre.querySelector(".ext-heading")?.textContent).toBe("Probe (3 set)");
     expect(centre.querySelector(".ext-group")?.textContent).toBe("Sound");
     const captions = [...centre.querySelectorAll(".shell-fieldrow-label")].map((c) => c.textContent);
     expect(captions.slice(0, 4)).toEqual(["Mood", "Note", "act", "Cue"]);
@@ -90,11 +90,11 @@ describe("a card's Fields tab", () => {
   it("saves an extension value through the host, by node and field", () => {
     const save = vi.fn();
     const centre = fieldsTab(host(save));
-    const note = [...centre.querySelectorAll<HTMLInputElement>(".ext-fields input")][0]!;
+    const note = [...centre.querySelectorAll<HTMLInputElement>(".ext-section input")][0]!;
     note.value = "Ring it once.";
     note.dispatchEvent(new Event("input", { bubbles: true }));
     expect(save).toHaveBeenLastCalledWith("probe", "c_bell", "note", "Ring it once.", expect.any(Function));
-    const sound = [...centre.querySelectorAll<HTMLInputElement>(".ext-fields input")][1]!;
+    const sound = [...centre.querySelectorAll<HTMLInputElement>(".ext-section input")][1]!;
     sound.value = "gong";
     sound.dispatchEvent(new Event("input", { bubbles: true }));
     expect(save).toHaveBeenLastCalledWith("probe", "c_bell", "cue", { sound: "gong" }, expect.any(Function));
@@ -109,7 +109,7 @@ describe("an outcome's block", () => {
     if (!centre.querySelector(".outcome-body")) centre.querySelector<HTMLButtonElement>("button.outcome-row")!.click();
     const body = centre.querySelector(".outcome-body")!;
     expect(body.textContent).toContain("Probe");
-    expect([...body.querySelectorAll<HTMLInputElement>(".ext-fields input")][0]!.value).toBe("The bell rings.");
+    expect([...body.querySelectorAll<HTMLInputElement>(".ext-section input")][0]!.value).toBe("The bell rings.");
   });
 });
 
@@ -119,7 +119,7 @@ describe("a tab named for the extension", () => {
     expect(extensionTabs(project, "deck", deck.id)).toEqual([]);
     const centre = document.createElement("div");
     renderBoxTabBody(centre, box, "ext:probe", host());
-    expect(centre.querySelector<HTMLInputElement>(".ext-fields input")!.value).toBe("salt");
+    expect(centre.querySelector<HTMLInputElement>(".ext-section input")!.value).toBe("salt");
   });
 
   it("a remembered tab for an extension the page does not have falls back", () => {
@@ -166,5 +166,79 @@ describe("a pick", () => {
     const options = [...row.querySelectorAll("option")].map((o) => o.textContent);
     expect(options).toEqual(expect.arrayContaining(["all", "bell", "Quay"]));
     expect(row.querySelector<HTMLElement>(".shell-fieldrow-problem")?.hidden ?? true).toBe(true);
+  });
+});
+
+describe("the fold", () => {
+  const spare: ExtensionDto = {
+    id: "spare", name: "Spare", version: "1.0.0",
+    targets: {
+      card: { fields: [
+        { name: "line", type: "text", label: "Line" },
+        { name: "weight", type: "number", label: "Weight", default: 1 },
+        { name: "loud", type: "boolean", label: "Loud" },
+        { name: "cue", type: "record", label: "Cue", group: "Sound", fields: [{ name: "sound", type: "text", label: "Sound" }] },
+      ], claims: [] },
+      deck: { fields: [{ name: "pile", type: "number", label: "Pile" }], claims: [] },
+      project: { fields: [{ name: "studio", type: "text", label: "Studio" }], claims: [] },
+    },
+    // A value at its default, false, and a record of defaults are all unset (F1).
+    values: { c_bell: { line: "Hush.", weight: 1, loud: false, cue: { sound: "" } }, c_tide: {}, k_rumours: { pile: 0 } },
+  };
+  const withSpare = { ...project, extensions: [spare], extensionNodes: { card: [{ id: "c_bell", label: "bell" }, { id: "c_tide", label: "tide" }] } } as unknown as ProjectDto;
+  const xhost = { project: () => withSpare, save: vi.fn() };
+  const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(".shell-fieldrow-label")].map((c) => c.textContent ?? "");
+  const caption = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(".shell-fold-cap")!;
+
+  it("shows only the fields a node sets, and counts them in the caption (F1, F2)", () => {
+    const sec = extensionSection(xhost, spare, "card", "c_bell");
+    expect(caption(sec).textContent).toBe("Spare (1 set)");
+    expect(caption(sec).getAttribute("aria-expanded")).toBe("false");
+    expect(labels(sec)).toEqual(["Line"]);
+    // No group heading above a group with nothing shown.
+    expect(sec.querySelector(".ext-group")).toBeNull();
+    // Nothing set: the caption alone.
+    const bare = extensionSection(xhost, spare, "card", "c_tide");
+    expect(caption(bare).textContent).toBe("Spare");
+    expect(labels(bare)).toEqual([]);
+  });
+
+  it("opens to every field, and stays open from node to node (F3, F4)", () => {
+    const sec = extensionSection(xhost, spare, "card", "c_bell");
+    caption(sec).click();
+    try {
+      expect(caption(sec).getAttribute("aria-expanded")).toBe("true");
+      expect(labels(sec)).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
+      expect(sec.querySelector(".ext-group")?.textContent).toBe("Sound");
+      expect(labels(extensionSection(xhost, spare, "card", "c_tide"))).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
+    } finally { caption(sec).click(); }
+    expect(labels(extensionSection(xhost, spare, "card", "c_tide"))).toEqual([]);
+  });
+
+  it("keeps a value cleared while folded until the author leaves the node (F5)", () => {
+    sweepExtensionFold(); sweepExtensionFold();
+    extensionSection(xhost, spare, "card", "c_bell");
+    sweepExtensionFold();
+    const cleared = { ...withSpare, extensions: [{ ...spare, values: { ...spare.values, c_bell: { weight: 1 } } }] } as unknown as ProjectDto;
+    const chost = { project: () => cleared, save: vi.fn() };
+    // Redrawn on the same node: Line stays, now empty.
+    expect(labels(extensionSection(chost, cleared.extensions![0]!, "card", "c_bell"))).toEqual(["Line"]);
+    sweepExtensionFold();
+    // Another node drawn, then back: only what is set.
+    extensionSection(chost, cleared.extensions![0]!, "card", "c_tide");
+    sweepExtensionFold();
+    expect(labels(extensionSection(chost, cleared.extensions![0]!, "card", "c_bell"))).toEqual([]);
+  });
+
+  it("folds an extension's own tab too, and the tab counts what the caption counts", () => {
+    const deckSpare = { ...project, extensions: [spare] } as unknown as ProjectDto;
+    expect(extensionTabs(deckSpare, "deck", deck.id)).toEqual([{ key: "ext:spare", label: "Spare", count: 0 }]);
+    expect(extensionTabs({ ...deckSpare, extensions: [{ ...spare, values: { k_rumours: { pile: 3 } } }] } as unknown as ProjectDto, "deck", deck.id)[0]!.count).toBe(1);
+  });
+
+  it("leaves Project Settings unfolded: every field", () => {
+    const rows = extensionFields(xhost, spare, "card", "c_tide");
+    expect(rows.querySelector(".shell-fold-cap")).toBeNull();
+    expect(labels(rows)).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
   });
 });

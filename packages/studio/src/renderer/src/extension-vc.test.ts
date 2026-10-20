@@ -25,7 +25,7 @@ const box: BoxDto = {
 const extension = (id: string, name: string, field: string): ExtensionDto => ({
   id, name, version: "1.0.0",
   targets: {
-    card: { fields: [{ name: field, type: "text", label: field }], claims: [] },
+    card: { fields: [{ name: field, type: "text", label: field }, { name: "spare", type: "text", label: "Spare" }], claims: [] },
     project: { fields: [{ name: "studio", type: "text", label: "Studio" }], claims: [] },
   },
   values: { c_bell: { [field]: "set" } },
@@ -51,7 +51,7 @@ const fieldsTab = (): HTMLElement => {
   renderCardWorkspace(centre, box, deck, card, [], host());
   return centre;
 };
-const group = (root: HTMLElement, id: string): HTMLElement => root.querySelector<HTMLElement>(`.ext-fields[data-extension="${id}"]`)!;
+const group = (root: HTMLElement, id: string): HTMLElement => root.querySelector<HTMLElement>(`[data-ext-vc][data-extension="${id}"]`)!;
 const controls = (root: HTMLElement): HTMLInputElement[] => [...root.querySelectorAll<HTMLInputElement>("input, select, textarea")];
 const held: VcStatusDto["extensions"] = { b_harbour: { probe: { writable: false, lockedBy: ["bo@bo-ws"] } } };
 
@@ -72,9 +72,26 @@ describe("a held extension shard", () => {
     // The other extension and the box's own fields stay editable.
     expect(controls(group(centre, "cues")).every((c) => !c.disabled)).toBe(true);
     expect(group(centre, "cues").querySelector(".ext-lock")).toBeNull();
-    const own = controls(centre).filter((c) => !c.closest(".ext-fields"));
+    const own = controls(centre).filter((c) => !c.closest(".ext-section"));
     expect(own.length).toBeGreaterThan(0);
     expect(own.every((c) => !c.disabled)).toBe(true);
+  });
+
+  it("says so under the folded section's caption, leaves the caption live, and locks the rows opening it draws", () => {
+    const centre = fieldsTab();
+    applyExtensionLocks(centre, extensionStates(held));
+    const locked = group(centre, "probe");
+    expect(locked.children[1]?.classList.contains("ext-lock")).toBe(true);
+    const caption = locked.querySelector<HTMLButtonElement>(".shell-fold-cap")!;
+    expect(caption.disabled).toBe(false);
+    // The card sets one of Probe's two fields, so the other shows only once the fold opens.
+    expect(controls(locked).length).toBe(1);
+    caption.click();
+    try {
+      expect(controls(locked).length).toBe(2);
+      expect(controls(locked).every((c) => c.disabled)).toBe(true);
+      expect(locked.querySelector(".ext-lock")).not.toBeNull();
+    } finally { caption.click(); }
   });
 
   it("hands the rows back when the holder lets go, and says it only once while held", () => {

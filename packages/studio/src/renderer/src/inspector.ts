@@ -38,7 +38,7 @@ import type { PropListOptions } from "./prop-list.js";
 import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
 import {
-  claimOn, extensionCount, extensionFields, extensionGroups, extensionTabBody, extensionTabs, extensionsFor, knownTab,
+  claimOn, extensionCount, extensionGroups, extensionSection, extensionTabBody, extensionTabs, extensionsFor, knownTab,
 } from "./extension-rows.js";
 import type { ExtensionHost } from "./extension-rows.js";
 
@@ -492,7 +492,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       comments: { on: card.id, count: h.openThreads(card.id), open: (a) => h.showComments(card.id, edit.title ?? card.gameId, a) },
     }));
     const setN = edit.fields.filter((f) => f.value.trim() !== "").length
-      + extensionsFor(extHost(h).project(), "card").reduce((n, x) => n + extensionCount(x, card.id), 0);
+      + extensionsFor(extHost(h).project(), "card").reduce((n, x) => n + extensionCount(x, "card", card.id), 0);
     view.append(docTabs([
       { key: "dealing", label: "Dealing" },
       { key: "outcomes", label: "Outcomes", count: edit.outcomes.length },
@@ -1236,7 +1236,7 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   // once the outcome exists: a new one has no id to key them by until it is saved.
   if (o.id) {
     for (const extension of extensionsFor(extHost(h).project(), "outcome")) {
-      body.append(bare(extension.name, "for the extension", extensionFields(extHost(h), extension, "outcome", o.id)));
+      body.append(extensionSection(extHost(h), extension, "outcome", o.id));
     }
   }
 
@@ -1938,7 +1938,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       // added on this page has no id until it is saved, and so no values yet.
       if (v.id !== undefined) {
         for (const extension of extensionsFor(extHost(h).project(), "tag")) {
-          block.append(bare(extension.name, "for the extension", extensionFields(extHost(h), extension, "tag", v.id)));
+          block.append(extensionSection(extHost(h), extension, "tag", v.id));
         }
       }
       return block;
@@ -1973,7 +1973,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
         stages: stagesOf(h, (name) => ({ kind: "property", scope: "hand", box: box.id, holder: detail.id, name })) }), ...soloPointer, ...nudge));
     // The group's own Storylet extension values, after its properties: what the group is, before its tags.
     for (const extension of extensionsFor(extHost(h).project(), "tagGroup")) {
-      view.append(section(extension.name, "for the extension", extensionFields(extHost(h), extension, "tagGroup", detail.id)));
+      view.append(extensionSection(extHost(h), extension, "tagGroup", detail.id, { panel: true }));
     }
     view.append(section("Tags", "declared, not freeform", ...valBody, add));
 

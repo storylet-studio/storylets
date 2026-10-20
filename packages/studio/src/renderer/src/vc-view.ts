@@ -109,8 +109,12 @@ export function applyExtensionLocks(root: ParentNode, states: ReadonlyMap<string
       const text = extensionLockMessage(group.dataset["extName"] ?? "This extension", by);
       if (said?.textContent === text) return;
       said?.remove();
-      group.prepend(el("p", { className: "ext-lock" },
-        el("span", { className: "vc-lock-glyph" }, iconNode("locked")), el("span", { text })));
+      const line = el("p", { className: "ext-lock" },
+        el("span", { className: "vc-lock-glyph" }, iconNode("locked")), el("span", { text }));
+      // Under a folded section's caption (extension-rows.ts `extensionSection`), where opening the fold, which
+      // redraws only the rows, leaves it; else at the top.
+      const caption = group.querySelector(":scope > .shell-fold-cap");
+      if (caption) caption.after(line); else group.prepend(line);
     } else {
       said?.remove();
       if (!group.parentElement?.closest(".vc-readonly")) lockControls(group, false);
