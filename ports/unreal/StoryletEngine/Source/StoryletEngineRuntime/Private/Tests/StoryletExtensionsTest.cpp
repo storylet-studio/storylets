@@ -3,8 +3,8 @@
 // two extension cases are the behaviour gate, replayed by the clang TestHost
 // over the same core; this test exercises the crossing: values riding a dealt
 // card, an outcome and a box view as JSON text, the defaults filled in through
-// the bundle asset, the nodes no view carries read by address, the
-// extension's settings, a scalar read
+// the bundle asset, the nodes no view carries read by address (the bundle
+// keeps an old one's extension settings, which loading ignores), a scalar read
 // back as a Storylet value, and a quality field's ladder handed to the stage
 // functions. Runs via -ExecCmds="Automation RunTests StoryletEngine".
 
@@ -147,17 +147,6 @@ bool FStoryletExtensionsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("the market tag's default colour"),
 		EntryJson(Bundle->GetEffectiveExtensionValues(TEXT("tag"), TEXT("probe"), Bundle->ExtensionsOf(TEXT("tag"), TEXT("box/market"))), TEXT("colour")),
 		FString(TEXT("\"grey\"")));
-
-	// The extension's settings, as the project resolved them.
-	{
-		const TMap<FString, FString> Settings = Bundle->ExtensionSettings(TEXT("probe"));
-		TestEqual(TEXT("both settings"), Settings.Num(), 2);
-		const FString* Mood = Settings.Find(TEXT("moodField"));
-		TestEqual(TEXT("moodField"), Mood ? *Mood : FString(TEXT("<absent>")), FString(TEXT("temper")));
-		const FString* Sound = Settings.Find(TEXT("soundField"));
-		TestEqual(TEXT("soundField"), Sound ? *Sound : FString(TEXT("<absent>")), FString(TEXT("sound")));
-		TestEqual(TEXT("an extension the bundle lacks has no settings"), Bundle->ExtensionSettings(TEXT("other")).Num(), 0);
-	}
 
 	// A scalar read back as a Storylet value; a record is not one.
 	{

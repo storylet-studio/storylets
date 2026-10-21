@@ -327,9 +327,6 @@ export function viewAdapter(ctx: ViewHostContext, extension?: string): ViewAdapt
       }
       return { readOnly: false };
     },
-    settings(extension) {
-      return { ...(project()?.extensions?.find((x) => x.id === extension)?.settings ?? {}) };
-    },
     key(combo) {
       if (combo === "Mod+Z") ctx.undoRedo("undo");
       else if (combo === "Mod+Shift+Z" || combo === "Mod+Y") ctx.undoRedo("redo");

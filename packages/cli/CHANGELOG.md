@@ -20,6 +20,13 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Removed
+
+- **Claims and settings for Storylet extensions.** An extension can no longer claim a card or outcome field a
+  box declares, and has no settings to name one with. `validate` warns about a manifest that still declares
+  `settings` or a target's `claims`, and once per extension about a project that still holds settings for it,
+  and ignores them; the bundle no longer carries an extension's settings.
+
 ## [0.18.0] - 2026-10-20
 
 ### Added

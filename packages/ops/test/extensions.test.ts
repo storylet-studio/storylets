@@ -91,8 +91,7 @@ describe("the probe project", () => {
 
     const section = bundle!.extensions!["probe"]!;
     expect(section.version).toBe("1.1.0");
-    // Every setting, resolved: the project's value, else the setting's default.
-    expect(section.settings).toEqual({ moodField: "mood" });
+    expect(Object.keys(section).sort()).toEqual(["fields", "project", "version"]);
     expect(section.project).toEqual({ studio: "Wildwinter" });
     expect(Object.keys(section.fields).sort()).toEqual(["box", "card", "deck", "hand", "handTemplate", "outcome", "project", "tag", "tagGroup"]);
     const cardDecls = section.fields["card"]!;
@@ -244,71 +243,29 @@ describe("validation, driven by the manifest", () => {
       "extensions/probe.extension.json: manifest targets.storylets.card.fields[2].max: the range runs from 20 down to 10");
   });
 
-  it("errors on a claimed field a box declares with another type, naming the box", () => {
+  it("warns once about a pin that still has settings, and ignores them", () => {
     const issues = issuesAfter((dir) => {
-      const box = read(dir, "harbour/box.storyletbox") as { box: { fields: { name: string; type: string; default?: unknown; values?: string[] }[] } };
-      box.box.fields = [{ name: "mood", type: "text", default: "" }];
-      write(dir, "harbour/box.storyletbox", box);
-      const deck = read(dir, "harbour/decks/rumours.storyletdeck") as { cards: { fields?: Record<string, unknown> }[] };
-      deck.cards[0]!.fields = { mood: "tense" };
-      write(dir, "harbour/decks/rumours.storyletdeck", deck);
-    });
-    expect(messages(issues, "error")).toContain(
-      "harbour/box.storyletbox: the Storylet extension \"probe\" claims the card field \"mood\" as enum, but box \"harbour\" declares it as text");
-  });
-
-  it("checks a claimed field's values against the claim, and follows the project's setting for its name", () => {
-    const issues = issuesAfter((dir) => {
-      const box = read(dir, "harbour/box.storyletbox") as { box: { fields: unknown[] } };
-      box.box.fields = [{ name: "temper", type: "enum", values: ["calm", "tense", "wild"], default: "calm" }];
-      write(dir, "harbour/box.storyletbox", box);
-      const deck = read(dir, "harbour/decks/rumours.storyletdeck") as { cards: { fields?: Record<string, unknown> }[] };
-      deck.cards[0]!.fields = { temper: "wild" };
-      write(dir, "harbour/decks/rumours.storyletdeck", deck);
-      const project = read(dir, "probe.storyletproj") as { extensions: { probe: { settings: Record<string, string> } } };
-      project.extensions.probe.settings["moodField"] = "temper";
-      write(dir, "probe.storyletproj", project);
-    });
-    expect(messages(issues, "error")).toContain(
-      "harbour/decks/rumours.storyletdeck: field \"temper\", as the Storylet extension \"probe\" claims it: the value is \"wild\", which is not one of its values");
-  });
-
-  it("warns about a claim on a field no box declares", () => {
-    const issues = issuesAfter((dir) => {
-      const project = read(dir, "probe.storyletproj") as { extensions: { probe: { settings: Record<string, string> } } };
-      project.extensions.probe.settings["moodField"] = "temper";
+      const project = read(dir, "probe.storyletproj") as { extensions: { probe: Record<string, unknown> } };
+      project.extensions.probe["settings"] = { moodField: "temper", soundField: "sound" };
       write(dir, "probe.storyletproj", project);
     });
     expect(messages(issues, "error")).toEqual([]);
-    expect(messages(issues, "warning")).toContain(
-      "probe.storyletproj: the Storylet extension \"probe\" claims the card field \"temper\", which no box declares; set the extension's \"moodField\" setting to the field's name, or declare it");
+    expect(messages(issues, "warning").filter((m) => m.includes("settings"))).toEqual([
+      "probe.storyletproj: the project's pin for \"probe\" has settings, which extensions no longer have; they're ignored"]);
   });
 
-  it("checks a claim that leaves out its values against the box's own (toolkit 0.2.1)", () => {
+  it("warns about a manifest that still has settings or claims, and ignores them", () => {
     const issues = issuesAfter((dir) => {
       const m = JSON.parse(readFileSync(join(dir, "extensions/probe.extension.json"), "utf8"));
-      delete m.targets.storylets.card.claims[0].values;
-      m.targets.storylets.card.claims[0].valueHelp = { calm: "Unhurried.", wild: "A value the box does not have." };
+      m.settings = [{ name: "moodField", default: "mood" }];
+      m.targets.storylets.card.claims = [{ setting: "moodField", type: "enum", values: ["calm", "tense"] }];
       writeFileSync(join(dir, "extensions/probe.extension.json"), JSON.stringify(m, null, 2));
-      const deck = read(dir, "harbour/decks/rumours.storyletdeck") as { cards: { fields?: Record<string, unknown> }[] };
-      deck.cards[0]!.fields = { mood: "wild" };
-      write(dir, "harbour/decks/rumours.storyletdeck", deck);
     });
-    expect(messages(issues).filter((m) => m.includes("manifest"))).toEqual([]);
-    expect(messages(issues, "error")).toContain(
-      "harbour/decks/rumours.storyletdeck: field \"mood\", as the Storylet extension \"probe\" claims it: the value is \"wild\", which is not one of its values");
-  });
-
-  it("errors when two extensions claim one field, naming both", () => {
-    const issues = issuesAfter((dir) => {
-      const m = JSON.parse(readFileSync(join(dir, "extensions/probe.extension.json"), "utf8"));
-      m.id = "rival";
-      writeFileSync(join(dir, "extensions/rival.extension.json"), JSON.stringify(m, null, 2));
-      const project = read(dir, "probe.storyletproj") as { extensions: Record<string, unknown> };
-      project.extensions["rival"] = { version: "1.1.0" };
-      write(dir, "probe.storyletproj", project);
-    });
-    expect(messages(issues, "error")).toEqual(["probe.storyletproj: extensions \"probe\" and \"rival\" both claim the card field \"mood\""]);
+    expect(messages(issues, "error")).toEqual([]);
+    const removed = issues.filter((i) => i.detail === "removed-key").map((i) => i.message);
+    expect(removed).toHaveLength(2);
+    expect(removed.some((m) => m.includes("targets.storylets.card.claims"))).toBe(true);
+    expect(removed.some((m) => m.startsWith("manifest settings"))).toBe(true);
   });
 });
 
@@ -501,7 +458,7 @@ describe("taking an extension's manifest (Add Extension...)", () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("at a new version: format's upgrade for that extension only, renamed stages and the pin, settings kept", () => {
+  it("at a new version: format's upgrade for that extension only, renamed stages and the pin", () => {
     const dir = scratch();
     try {
       const project = read(dir, "probe.storyletproj") as { extensions: { probe: { version: string } } };
@@ -513,7 +470,7 @@ describe("taking an extension's manifest (Add Extension...)", () => {
       expect(take.was).toBe("1.0.0");
       expect(take.report[0]).toBe("took the Storylet extension \"probe\" at version 1.2.0 (was 1.0.0)");
       const pinned = parseSource(take.writes.get(join(dir, "probe.storyletproj"))!) as typeof project;
-      expect(pinned.extensions.probe).toEqual({ version: "1.2.0", settings: { moodField: "mood" } });
+      expect(pinned.extensions.probe).toEqual({ version: "1.2.0" });
       const box = parseSource(take.writes.get(join(dir, BOX_SHARD))!) as { entries: Entries };
       expect(box.entries["card"]!["c_bell"]!["act"]).toBe("setup");
     } finally { rmSync(dir, { recursive: true, force: true }); }

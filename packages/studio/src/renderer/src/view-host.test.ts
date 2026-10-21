@@ -220,11 +220,11 @@ describe("hostView over the adapter, end to end", () => {
     return { e, view: viewEnd(port1) };
   }
 
-  it("welcomes the view with the host, its extension and settings, and answers a node with its own data only", async () => {
+  it("welcomes the view with the host and its extension, and answers a node with its own data only", async () => {
     const { view } = connect();
     expect(await view.hello()).toEqual({
       t: "welcome", api: VIEW_API, host: "storylets", extension: { id: "probe", version: "1.1.0", pinned: "1.1.0" }, view: "inspect",
-      settings: { moodField: "mood" }, theme: { scheme: "light", tokens: { "--ink": "#222" } }, writable: { readOnly: false },
+      theme: { scheme: "light", tokens: { "--ink": "#222" } }, writable: { readOnly: false },
     });
     const reply = await view.ask("node", { id: "c_bell", children: true });
     const node = (reply as { value: ViewNode }).value;

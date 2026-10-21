@@ -3,7 +3,7 @@
 // patter-storylet-extensions.md, "Tier 1: fields" and "Where fields go"): an
 // extension's own fields for a node, drawn by the shell's value rows (every type
 // an extension declares, records, maps and lists included), in a group headed by
-// the extension's name, and its claims on a box's own fields.
+// the extension's name.
 //
 // Where each kind's group goes is the page's business, by the placement rules
 // (design/studio-editing-structure.md section 2): a card's after the box's own
@@ -81,15 +81,6 @@ export function shownEntry(extension: ExtensionDto, nodeId: string): Record<stri
 /** The extensions that declare fields for this kind of node, in the project's order. */
 export function extensionsFor(project: ProjectDto | undefined, kind: string): ExtensionDto[] {
   return (project?.extensions ?? []).filter((e) => (e.targets[kind]?.fields.length ?? 0) > 0);
-}
-
-/** The extension claiming a box's own field of this kind, when one does: its control and help for it. */
-export function claimOn(project: ProjectDto | undefined, kind: "card" | "outcome", field: string): { extension: ExtensionDto; decl: ExtensionFieldDto } | undefined {
-  for (const extension of project?.extensions ?? []) {
-    const claim = extension.targets[kind]?.claims.find((c) => c.field === field);
-    if (claim) return { extension, decl: claim.decl };
-  }
-  return undefined;
 }
 
 /** How many of a node's extension fields are set, for a tab's count: the fold's rule (`isSet`, a value that is

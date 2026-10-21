@@ -924,9 +924,6 @@ export interface BundleExtension {
   fields: Record<string, ExtensionFieldDecl[]>;
   /** The project node's values, raw, when it has any. */
   project?: Record<string, unknown>;
-  /** Every setting the manifest declares, resolved: the project's value, else the setting's default (the host
-   *  field each claim presents, say). Absent when the manifest declares no settings. */
-  settings?: Record<string, string>;
 }
 
 /**
@@ -1372,12 +1369,10 @@ export interface ExtensionShard {
 
 /**
  * The extensions a project takes (the project opts in, ruled 2026-10-18), by id:
- * the version it is pinned to and its settings (the host fields its claims
- * present, by setting name). The manifest itself sits in `extensions/`.
+ * the version it is pinned to. The manifest itself sits in `extensions/`.
  */
 export interface ProjectExtension {
   version: string;
-  settings?: Record<string, string>;
 }
 
 /**

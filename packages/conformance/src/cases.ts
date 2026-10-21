@@ -819,7 +819,9 @@ export const fixtures: Fixtures = {
             tagGroup: [{ name: "shown", type: "boolean", default: false }],
           },
           project: { studio: "Wildwinter" },
-          settings: { moodField: "temper", soundField: "sound" },
+          // A bundle from before extension settings were removed (2026-10-20) may still carry them: every
+          // loader ignores them.
+          ...{ settings: { moodField: "temper", soundField: "sound" } },
         },
       },
       nodeExtensions: {
@@ -895,10 +897,6 @@ export const fixtures: Fixtures = {
         { op: "assertNodeExtensions", kind: "tag", address: "box/market", effective: { extension: "probe" }, expect: { colour: "grey" } },
         { op: "assertNodeExtensions", kind: "card", address: "default", expect: { probe: { act: "setup", weight: 1 } } },
         { op: "assertNodeExtensions", kind: "outcome", address: "full/take", expect: { probe: { line: "Taken." } } },
-        // The settings, as the project resolved them: which host field each claim presents.
-        { op: "assertExtensionSettings", extension: "probe", expect: { moodField: "temper", soundField: "sound" } },
-        { op: "assertExtensionSettings", extension: "other", expect: {} },
-        { op: "assertExtensionSettings", extension: "absent", expect: {} },
         // Values ride along: what is dealt, and in what order, is unchanged.
         { op: "assertOutcomeOrder", card: "c_full", from: "h_q", expect: ["take", "leave"] },
       ] },

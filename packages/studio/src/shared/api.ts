@@ -595,8 +595,8 @@ export interface ProjectDto {
 
 /**
  * One Storylet extension as the editor draws it: its declarations for each node kind it targets (a field's
- * label, help, group and type, as the manifest writes them), its claims on host fields resolved to the
- * field names the project's settings give, and every node's values, by node id (ids are project-unique).
+ * label, help, group and type, as the manifest writes them), and every node's values, by node id (ids are
+ * project-unique).
  */
 export interface ExtensionDto {
   id: string;
@@ -606,8 +606,6 @@ export interface ExtensionDto {
   targets: Record<string, ExtensionTargetDto>;
   /** By node id: the node's values, raw. */
   values: Record<string, Record<string, unknown>>;
-  /** The project's settings for it, by name, defaults filled in (a view is told them). */
-  settings?: Record<string, string>;
   /** The views it offers Storyletter, by id and name. Absent when it has none. */
   views?: { id: string; name: string }[];
   /** The other extensions whose data its views read. */
@@ -617,8 +615,6 @@ export interface ExtensionDto {
 export interface ExtensionTargetDto {
   /** The extension's own fields, in the manifest's order. Shaped as `@wildwinter/app-shell/value-rows`' ValueDecl. */
   fields: ExtensionFieldDto[];
-  /** Host fields this extension presents with its own control and help, by the field's name in this project. */
-  claims: { field: string; decl: ExtensionFieldDto }[];
 }
 
 /** An extension field's declaration, as the manifest writes it (ValueDecl-shaped). */

@@ -964,12 +964,6 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				if not _same_json(got_boxes, op["expect"]):
 					failures.append("%s: expected %s, got %s" % [at, _show_json(op["expect"]), _show_json(got_boxes)])
 
-			"assertExtensionSettings":
-				# One extension's resolved settings, read off the bundle by the helper.
-				var got_settings := StoryletEngine.extension_settings(bundle, str(op["extension"]))
-				if not _same_json(got_settings, op["expect"]):
-					failures.append("%s: expected %s, got %s" % [at, _show_json(op["expect"]), _show_json(got_settings)])
-
 			"assertNodeExtensions":
 				# A node no view carries, read off the bundle by the helper.
 				var node_raw := StoryletEngine.extensions_of(bundle, str(op["kind"]), str(op.get("address", "")))

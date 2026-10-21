@@ -188,7 +188,7 @@ export interface ExtensionTake {
 
 /**
  * Take an extension's manifest into the project (Add Extension...): the manifest written where the project
- * keeps manifests, as its text was given, and the project pinned to its version, its settings kept. A project
+ * keeps manifests, as its text was given, and the project pinned to its version. A project
  * that already takes the extension at another version takes the new one as `storyletengine format` does
  * (`planExtensionUpgrades`: renamed stages renamed, then the pin), for this extension only; at the same
  * version only the manifest is written.

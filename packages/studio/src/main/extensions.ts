@@ -1,15 +1,14 @@
 // ---------------------------------------------------------------------------
 // Storylet extensions, as the editor is told them (patterkit design/proposals/
 // patter-storylet-extensions.md, "Tier 1: fields"): each extension the project
-// takes and has a sound manifest for, its declarations by node kind, its claims
-// on host fields resolved through the project's settings, and every node's
-// values. An extension whose manifest is missing or broken is left out: its data
+// takes and has a sound manifest for, its declarations by node kind, and every
+// node's values. An extension whose manifest is missing or broken is left out: its data
 // is untouched, and validation says why.
 // ---------------------------------------------------------------------------
 
 import type { SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId } from "@storylet-studio/model";
-import { manifestProblems, resolvedClaims, settingValues, viewsFor } from "@wildwinter/toolkit/extensions";
+import { manifestProblems, viewsFor } from "@wildwinter/toolkit/extensions";
 import type { Manifest } from "@wildwinter/toolkit/extensions";
 import type { ExtensionDto, ExtensionFieldDto, ExtensionTargetDto } from "../shared/api.js";
 
@@ -17,17 +16,13 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
   const taken = source.project.extensions;
   if (taken === undefined || Object.keys(taken).length === 0) return undefined;
   const out: ExtensionDto[] = [];
-  for (const [id, pin] of Object.entries(taken)) {
+  for (const id of Object.keys(taken)) {
     const file = (source.manifests ?? []).find((m) => m.id === id);
     if (file === undefined || manifestProblems(file.manifest).some((p) => p.severity === "error")) continue;
     const manifest = file.manifest as Manifest;
-    const claims = resolvedClaims(manifest, "storylets", pin?.settings);
     const targets: Record<string, ExtensionTargetDto> = {};
     for (const [kind, target] of Object.entries(manifest.targets.storylets ?? {})) {
-      targets[kind] = {
-        fields: (target.fields ?? []) as unknown as ExtensionFieldDto[],
-        claims: claims.filter((c) => c.kind === kind).map((c) => ({ field: c.field, decl: { ...c.claim, name: c.field } as unknown as ExtensionFieldDto })),
-      };
+      targets[kind] = { fields: (target.fields ?? []) as unknown as ExtensionFieldDto[] };
     }
     const values: Record<string, Record<string, unknown>> = {};
     for (const shard of [...(source.extensions ?? []), ...source.boxes.flatMap((b) => b.extensions ?? [])]) {
@@ -40,7 +35,7 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
     }
     const views = viewsFor(manifest, "storylets").map((v) => ({ id: v.id, name: v.name }));
     out.push({
-      id, name: manifest.name, version: manifest.version, targets, values, settings: settingValues(manifest, pin?.settings),
+      id, name: manifest.name, version: manifest.version, targets, values,
       ...(views.length > 0 ? { views } : {}), ...(manifest.reads !== undefined ? { reads: [...manifest.reads] } : {}),
     });
   }

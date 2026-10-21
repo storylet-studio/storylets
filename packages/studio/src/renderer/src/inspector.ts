@@ -19,7 +19,6 @@ import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { isAnywhere, placeGroupsOf, whereModel, whereWarning } from "./where.js";
 import { NEVER_LABEL, anywhereLine, gateLabel, movingNote, tierCount, tierLabel } from "./hand-tiers.js";
 import { soloSharePointer } from "./solo-pointer.js";
-import type { ExtensionFieldDto } from "../../shared/api.js";
 import type { ShareScope } from "./zone-share.js";
 // The DERIVED address, computed for placeholders and previews. From the model
 // rather than the shell: this is the same rule the compiler and the CLI use, and
@@ -38,7 +37,7 @@ import type { PropListOptions } from "./prop-list.js";
 import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
 import {
-  claimOn, extensionCount, extensionGroups, extensionSection, extensionTabBody, extensionTabs, extensionsFor, knownTab,
+  extensionCount, extensionGroups, extensionSection, extensionTabBody, extensionTabs, extensionsFor, knownTab,
 } from "./extension-rows.js";
 import type { ExtensionHost } from "./extension-rows.js";
 
@@ -842,7 +841,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     };
     const fieldBody = box.fields.map((decl) =>
       fieldRow(decl, edit.fields.find((f) => f.name === decl.name)?.value ?? "",
-        (v) => setField(decl.name, v), commit, claimOn(extHost(h).project(), "card", decl.name)?.decl));
+        (v) => setField(decl.name, v), commit));
     return [el("div", { className: "doc-panel" }, ...fieldBody, ...extensionBody)];
   }
 
@@ -862,18 +861,9 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
  * (design/outcome-fields-brief.md), and a copy of this would have drifted the
  * first time a type gained a control.
  */
-function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void, claim?: ExtensionFieldDto): HTMLElement {
-  // A field a Storylet extension claims keeps its own type and value, and is shown with the extension's label,
-  // help and values: the extension's control without moving the data (the proposal's "Claims on host fields").
-  const shown: FieldDeclDto = claim === undefined ? decl : {
-    ...decl,
-    ...(claim.help !== undefined ? { purpose: claim.help } : {}),
-    ...(claim.values !== undefined && decl.values === undefined ? { values: claim.values } : {}),
-    ...(claim.valueHelp !== undefined ? { valueHelp: claim.valueHelp } : {}),
-  };
+function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void): HTMLElement {
   return shellFieldRow({
-    decl: shown, value: fieldValueFromText(decl.type, current),
-    ...(claim?.label !== undefined ? { label: claim.label } : {}),
+    decl, value: fieldValueFromText(decl.type, current),
     onCommit: (v) => { set(fieldValueToText(v)); commit(); },
     className: "doc-row doc-row-top", labelClassName: "doc-row-label", controlClassName: "insp-input insp-mono",
   }).el;
@@ -1229,7 +1219,7 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
     };
     const rows = outcomeFields.map((decl) =>
       fieldRow(decl, o.fields?.find((f) => f.name === decl.name)?.value ?? "",
-        (v) => setField(decl.name, v), save, claimOn(extHost(h).project(), "outcome", decl.name)?.decl));
+        (v) => setField(decl.name, v), save));
     body.append(bare("Fields", "what this outcome hands the game", ...rows));
   }
   // A Storylet extension's values for the outcome, beside its own fields, under the extension's name. Only

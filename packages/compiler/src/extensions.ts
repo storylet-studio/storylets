@@ -6,20 +6,18 @@
 // meaning. Everything about the shape is `@wildwinter/toolkit/extensions`' (the
 // manifest's checks, the value checks, what a bundle carries of a declaration
 // and of a value); what is this format's is where the data sits (one shard per
-// extension per box, and one at the root), which nodes there are, and how a
-// claim meets the fields a box declares.
+// extension per box, and one at the root), and which nodes there are.
 //
 // Pure, and a function of the source alone, so the content hash can ask it
 // for the compiled data without compiling the rest.
 // ---------------------------------------------------------------------------
 
-import { EXTENSIONS_DIR, MANIFEST_EXTENSION, isTextFieldType } from "@storylet-studio/model";
-import type { BundleExtension, ExtensionFieldDecl, FieldDecl, NodeExtensions } from "@storylet-studio/model";
+import { EXTENSIONS_DIR, MANIFEST_EXTENSION } from "@storylet-studio/model";
+import type { BundleExtension, ExtensionFieldDecl, NodeExtensions } from "@storylet-studio/model";
 import {
-  HOSTS, claimClashes, compileEntry, compiledTarget, effectiveClaim, entryProblems, manifestProblems, orphanedEntries,
-  pickClashes, pickLists, resolvedClaims, settingValues, targetOf, valueProblems,
+  HOSTS, compileEntry, compiledTarget, entryProblems, manifestProblems, orphanedEntries, pickClashes, pickLists, targetOf,
 } from "@wildwinter/toolkit/extensions";
-import type { Manifest, Problem, ResolvedClaim, TypeDecl, ValueContext } from "@wildwinter/toolkit/extensions";
+import type { Manifest, Problem, TypeDecl, ValueContext } from "@wildwinter/toolkit/extensions";
 import type { Issue, SourceExtension, SourceProject } from "./project.js";
 
 /** What the pass hands the bundle. */
@@ -74,7 +72,6 @@ const issueOf = (path: string, p: Problem, prefix = "", field?: string, extensio
 interface Taken {
   readonly id: string;
   readonly version: string;
-  readonly settings: Readonly<Record<string, unknown>>;
   /** The manifest, when the project has a sound one. */
   readonly manifest?: Manifest;
 }
@@ -113,38 +110,26 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
   for (const [id, entry] of Object.entries(taken)) {
     const m = manifests.get(id);
     const version = typeof entry?.version === "string" ? entry.version : "";
-    const settings = (entry?.settings ?? {}) as Record<string, unknown>;
+    // A pin from before extension settings were removed (2026-10-20) may still carry them: said once, then ignored.
+    if (entry !== null && typeof entry === "object" && Object.prototype.hasOwnProperty.call(entry, "settings")) {
+      issues.push({ extension: id, severity: "warning", path: projectPath, field: "extensions",
+        message: `the project's pin for "${id}" has settings, which extensions no longer have; they're ignored` });
+    }
     if (m === undefined) {
       issues.push({ extension: id, severity: "warning", path: projectPath, field: "extensions",
         message: `the project takes the Storylet extension "${id}", but has no manifest for it at ${EXTENSIONS_DIR}/${id}${MANIFEST_EXTENSION}; its data is left as it is, and not compiled` });
-      takenList.push({ id, version, settings });
+      takenList.push({ id, version });
       continue;
     }
-    if (!m.sound) { takenList.push({ id, version, settings }); continue; }
+    if (!m.sound) { takenList.push({ id, version }); continue; }
     const manifest = m.manifest as Manifest;
     if (version !== manifest.version) {
       issues.push({ extension: id, severity: "warning", path: projectPath, field: "extensions",
         message: `the project takes "${id}" ${version === "" ? "with no version" : `at version ${version}`}, but its manifest is version ${manifest.version}; run \`storyletengine format\` to take it (renamed stages are renamed in the data as it does)` });
     }
-    const known = new Set((manifest.settings ?? []).map((s) => s.name));
-    for (const [name, value] of Object.entries(settings)) {
-      if (!known.has(name)) {
-        issues.push({ extension: id, severity: "warning", path: projectPath, field: "extensions",
-          message: `"${id}" has no setting "${name}"; it is ignored` });
-      } else if (typeof value !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-        issues.push({ extension: id, severity: "error", path: projectPath, field: "extensions",
-          message: `"${id}"'s setting "${name}" names a field, so it is a field name, not ${JSON.stringify(value)}` });
-      }
-    }
-    takenList.push({ id, version, settings, manifest });
+    takenList.push({ id, version, manifest });
   }
   const sound = new Map(takenList.filter((t) => t.manifest !== undefined).map((t) => [t.id, t.manifest!]));
-  const settingsOf = new Map(takenList.map((t) => [t.id, t.settings]));
-
-  // --- claims on host fields ----------------------------------------------------------
-  const claims: ResolvedClaim[] = takenList.flatMap((t) => (t.manifest ? resolvedClaims(t.manifest, "storylets", t.settings) : []));
-  for (const p of claimClashes(claims)) issues.push({ severity: p.severity, path: projectPath, field: "extensions", message: p.message });
-  issues.push(...claimIssues(source, claims));
 
   // --- the data ---------------------------------------------------------------------------
   const nodes = extensionNodes(source);
@@ -244,13 +229,7 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
       if (target !== undefined) fields[kind] = compiledTarget(target) as unknown as ExtensionFieldDecl[];
     }
     const project = projectValues.get(id);
-    // Every setting, resolved, so a game reads which host field a claim presents as the project chose it.
-    const settings = (manifest.settings ?? []).length > 0 ? settingValues(manifest, settingsOf.get(id)) : undefined;
-    bundle[id] = {
-      version: manifest.version, fields,
-      ...(project !== undefined ? { project } : {}),
-      ...(settings !== undefined ? { settings } : {}),
-    };
+    bundle[id] = { version: manifest.version, fields, ...(project !== undefined ? { project } : {}) };
   }
   return { issues, compiled: { bundle, nodes: values } };
 }
@@ -265,62 +244,6 @@ function pickDecls(manifest: Manifest): TypeDecl[] {
   };
   for (const target of Object.values(manifest.targets.storylets ?? {})) for (const f of target.fields ?? []) walk(f);
   return out;
-}
-
-/** The family's word for a host field's type: `string` reads as `text`. */
-const familyType = (type: string): string => (isTextFieldType(type) && type !== "multiline" ? "text" : type);
-
-/**
- * Claims against the boxes. A box that declares the claimed field with another
- * type is an error naming the box (ruled 2026-10-18: card and outcome fields are
- * declared per box, so one name can have two types); every value the field
- * holds is checked against the claim's own constraints too.
- */
-function claimIssues(source: SourceProject, claims: readonly ResolvedClaim[]): Issue[] {
-  const issues: Issue[] = [];
-  for (const claim of claims) {
-    if (claim.kind !== "card" && claim.kind !== "outcome") continue;
-    const outcome = claim.kind === "outcome";
-    // A claim on a field no box declares presents nothing: most often the
-    // project's setting names a field that was renamed. A warning, as Patter
-    // gives for a claim on game data its project does not declare. Per claim,
-    // not per box: a box without the field is ordinary, as boxes differ.
-    const declaredSomewhere = source.boxes.some((box) =>
-      ((outcome ? box.box.box.outcomeFields : box.box.box.fields) ?? []).some((d) => d.name === claim.field));
-    if (!declaredSomewhere) {
-      issues.push({ extension: claim.extension, severity: "warning", path: source.path, field: "extensions",
-        message: `the Storylet extension "${claim.extension}" claims the ${claim.kind} field "${claim.field}", which no box declares; set the extension's "${claim.claim.setting}" setting to the field's name, or declare it` });
-      continue;
-    }
-    for (const box of source.boxes) {
-      const decls: readonly FieldDecl[] = (outcome ? box.box.box.outcomeFields : box.box.box.fields) ?? [];
-      const decl = decls.find((d) => d.name === claim.field);
-      if (decl === undefined) continue;
-      const boxPath = `${box.path}/box.storyletbox`;
-      const boxName = box.box.box.gameId ?? box.box.box.id;
-      if (familyType(decl.type) !== familyType(claim.claim.type)) {
-        issues.push({ extension: claim.extension, severity: "error", path: boxPath, where: boxName, field: outcome ? "outcomeFields" : "fields",
-          message: `the Storylet extension "${claim.extension}" claims the ${claim.kind} field "${claim.field}" as ${claim.claim.type}, but box "${boxName}" declares it as ${decl.type}` });
-        continue;
-      }
-      for (const deck of box.decks) {
-        for (const card of deck.shard.cards ?? []) {
-          const holders = outcome ? (card.outcomes ?? []).map((o) => ({ where: `${card.gameId ?? card.id}/${o.gameId ?? o.id}`, fields: o.fields }))
-            : [{ where: card.gameId ?? card.id, fields: card.fields }];
-          for (const h of holders) {
-            if (h.fields === undefined || !Object.prototype.hasOwnProperty.call(h.fields, claim.field)) continue;
-            // The claim over the box's own declaration: a claim may leave the values or stages to the box's field.
-            for (const p of valueProblems(effectiveClaim(claim.claim, decl), h.fields[claim.field])) {
-              issues.push({ severity: p.severity, path: deck.path, where: h.where, field: outcome ? "outcomeFields" : "fields",
-                message: `field "${claim.field}", as the Storylet extension "${claim.extension}" claims it: ${p.message}`,
-                extension: claim.extension, detail: p.code });
-            }
-          }
-        }
-      }
-    }
-  }
-  return issues;
 }
 
 /** The compiled data the content hash covers: what the bundle carries, and nothing editor-only. */

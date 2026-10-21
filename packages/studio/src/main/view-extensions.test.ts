@@ -154,7 +154,7 @@ describe("Add Extension...", () => {
     expect((parseSource(read(s, "probe.storyletproj")) as { extensions?: unknown }).extensions).toBeUndefined();
   });
 
-  it("at a new version, takes it as format does: renamed stages, then the pin, settings kept, one step", async () => {
+  it("at a new version, takes it as format does: renamed stages, then the pin, one step", async () => {
     const session = scratch();
     const project = parseSource(read(session, "probe.storyletproj")) as { extensions: { probe: { version: string } } };
     project.extensions.probe.version = "1.0.0";
@@ -167,7 +167,7 @@ describe("Add Extension...", () => {
 
     const text = packageText("1.2.0");
     expect(await addExtension(s, parseManifest(text), text)).not.toHaveProperty("error");
-    expect((parseSource(read(s, "probe.storyletproj")) as typeof project).extensions.probe).toEqual({ version: "1.2.0", settings: { moodField: "mood" } });
+    expect((parseSource(read(s, "probe.storyletproj")) as typeof project).extensions.probe).toEqual({ version: "1.2.0" });
     expect(entries(s, BOX_SHARD)["card"]!["c_bell"]!["act"]).toBe("setup");
     expect(read(s, "extensions/probe.extension.json")).toBe(text);
     await undo(s);

@@ -6,6 +6,13 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Removed
+
+- **Storylet extension settings.** `StoryletEngine.extension_settings(bundle, extension)` goes, with the bundle's `extensions[id].settings`: extensions no
+  longer have settings, which only named the host field a claim presented, and claims are gone too. A bundle
+  that still carries settings loads as before and they're ignored. An extension that wants a value on a card or
+  an outcome declares a field of its own.
+
 ## [0.13.0] - 2026-10-18
 
 ### Added

@@ -1687,19 +1687,6 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         break;
                     }
 
-                    case "assertExtensionSettings":
-                    {
-                        // One extension's resolved settings, read off the bundle
-                        // by the helper.
-                        var settings = FieldHelpers.ExtensionSettings(bundle, op.Value<string>("extension"));
-                        var actual = new OrderedMap<string, object>();
-                        foreach (var pair in settings) actual.Set(pair.Key, pair.Value);
-                        var want = ShowJson(StoryletJson.ToJsonTree(op["expect"]));
-                        var got = ShowJson(actual);
-                        if (want != got) failures.Add($"{at}: expected {want}, got {got}");
-                        break;
-                    }
-
                     case "assertNodeExtensions":
                     {
                         // A node no view carries, read off the bundle by the

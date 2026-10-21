@@ -97,7 +97,7 @@ export async function setExtensionValues(
 
 /**
  * Add Extension...: an extension's manifest, from its package, taken into the project as ONE undo step: the
- * manifest written where the project keeps manifests, the project pinned to its version (settings kept), and,
+ * manifest written where the project keeps manifests, the project pinned to its version, and,
  * for an extension the project took at another version, what `storyletengine format` does on a new version
  * (renamed stages, then the pin). `text` is the manifest file as the package has it.
  */

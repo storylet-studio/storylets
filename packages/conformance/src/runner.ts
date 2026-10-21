@@ -11,7 +11,7 @@ import { deserialiseAst, evaluate } from "@wildwinter/expr";
 import type { EvalContext, ScalarValue } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
-import { Engine, Flow, effectiveFields, extensionDecls, extensionSettings, extensionsOf, fieldDecls, makePrng } from "@storylet-studio/runtime";
+import { Engine, Flow, effectiveFields, extensionDecls, extensionsOf, fieldDecls, makePrng } from "@storylet-studio/runtime";
 import type { DurableSave } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle, FlowSave, LoadProperty, LoadReport } from "@storylet-studio/model";
@@ -533,11 +533,6 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         const views = flowOf(undefined).listBoxes();
         const actual = Object.fromEntries(Object.keys(op.expect).map((g) =>
           [g, views.find((v) => v.gameId === g)?.extensions ?? {}]));
-        if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
-        break;
-      }
-      case "assertExtensionSettings": {
-        const actual = extensionSettings(c.bundle, op.extension);
         if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
         break;
       }

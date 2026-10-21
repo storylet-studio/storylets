@@ -1193,18 +1193,6 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 failures.push_back(at + ": expected " + showJson(expect) + ", got " + showJson(actual));
             }
         }
-        else if (kind == "assertExtensionSettings")
-        {
-            // Read off the bundle, no flow: one extension's resolved settings.
-            JsonValue actual = JsonValue::MakeObj();
-            for (const auto& pair : ExtensionSettings(*running, op.strOr("extension")))
-                actual.set(pair.first, JsonValue::MakeStr(pair.second));
-            const JsonValue& expect = op.at("expect");
-            if (showJson(actual) != showJson(expect))
-            {
-                failures.push_back(at + ": expected " + showJson(expect) + ", got " + showJson(actual));
-            }
-        }
         else if (kind == "assertNodeExtensions")
         {
             // Read off the bundle, no flow: the nodes no view carries.

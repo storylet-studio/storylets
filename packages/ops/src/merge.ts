@@ -253,9 +253,8 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
       // reading; both were found by holding the spec to the model.
     }),
     export: RECORD,
-    // The extensions the project takes: per extension, its pin and each setting
-    // merge on their own, so two people setting different settings both land.
-    extensions: { kind: "map", of: object({ settings: RECORD }) },
+    // The extensions the project takes: per extension, its pin merges on its own.
+    extensions: { kind: "map", of: RECORD },
   }),
   // An extension's data. This is the strategy WITHOUT the manifest (every
   // node's entry as one value), what a merge falls back to when the manifest is

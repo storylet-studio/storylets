@@ -504,15 +504,7 @@ namespace StoryletStudio.StoryletEngine
                     }
                 }
                 if (e["project"] is JObject project) ext.Project = (OrderedMap<string, object>)StoryletJson.ToJsonTree(project);
-                if (e["settings"] is JObject settings)
-                {
-                    ext.Settings = new OrderedMap<string, string>();
-                    foreach (var setting in settings)
-                    {
-                        if (setting.Value == null || setting.Value.Type != JTokenType.String) throw new StoryletError($"extension {pair.Key} setting {setting.Key} is not a string");
-                        ext.Settings.Set(setting.Key, setting.Value.Value<string>());
-                    }
-                }
+                // An old bundle's "settings" (removed 2026-10-20) are ignored.
                 extensions.Set(pair.Key, ext);
             }
             return extensions;

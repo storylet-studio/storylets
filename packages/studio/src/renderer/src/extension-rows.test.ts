@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 // Storylet extensions on Storyletter's pages (tier 1, on the internal test extension "probe"): the card's
-// values after the box's own on Fields, a field the extension claims drawn with its label and help, the
-// outcome's values in its block, a tab named for the extension on a box's page, values saved through the host,
+// values after the box's own on Fields, the outcome's values in its block, a tab named for the extension on a box's page, values saved through the host,
 // and a problem in an extension shard landing on the node it names.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,10 +32,9 @@ const probe: ExtensionDto = {
         { name: "act", type: "quality", stages: ["setup", "turn"], renamedStages: { opening: "setup" } },
         { name: "cue", type: "record", label: "Cue", group: "Sound", fields: [{ name: "sound", type: "text" }, { name: "gain", type: "number" }] },
       ],
-      claims: [{ field: "mood", decl: { name: "mood", type: "enum", values: ["calm", "tense"], label: "Mood", help: "The card's mood, as the probe reads it.", valueHelp: { tense: "Clipped." } } }],
     },
-    outcome: { fields: [{ name: "line", type: "text", label: "Line" }], claims: [] },
-    box: { fields: [{ name: "theme", type: "text", label: "Theme" }], claims: [] },
+    outcome: { fields: [{ name: "line", type: "text", label: "Line" }] },
+    box: { fields: [{ name: "theme", type: "text", label: "Theme" }] },
   },
   values: { c_bell: { note: "Ring it twice.", act: "opening", cue: { sound: "bell" } }, o_ring: { line: "The bell rings." }, b_harbour: { theme: "salt" } },
 };
@@ -69,22 +67,13 @@ describe("a card's Fields tab", () => {
     expect(centre.querySelector(".ext-heading")?.textContent).toBe("Probe (3 set)");
     expect(centre.querySelector(".ext-group")?.textContent).toBe("Sound");
     const captions = [...centre.querySelectorAll(".shell-fieldrow-label")].map((c) => c.textContent);
-    expect(captions.slice(0, 4)).toEqual(["Mood", "Note", "act", "Cue"]);
+    expect(captions.slice(0, 4)).toEqual(["mood", "Note", "act", "Cue"]);
     expect(centre.textContent).toContain("A line for the crew.");
     // The tab counts the extension's values with the box's.
     expect([...centre.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Fields"))?.textContent).toContain("4");
     // A stage the extension has renamed says so, in place of the row's own "not one of the stages".
     const act = [...centre.querySelectorAll(".shell-fieldrow")].find((r) => r.querySelector(".shell-fieldrow-label")?.textContent === "act")!;
     expect(act.querySelector(".shell-fieldrow-problem")?.textContent).toBe("Probe has since renamed this stage “setup”. Pick “setup” to update it.");
-  });
-
-  it("draws a claimed field with the extension's label and help, keeping the box's value", () => {
-    const centre = fieldsTab(host());
-    const mood = [...centre.querySelectorAll(".shell-fieldrow")].find((r) => r.querySelector(".shell-fieldrow-label")?.textContent === "Mood")!;
-    expect(mood.textContent).toContain("The card's mood, as the probe reads it.");
-    expect(mood.querySelector("select")!.value).toBe("tense");
-    // The chosen value's own help, from the claim, under the control.
-    expect(mood.querySelector(".shell-fieldrow-valuehelp")?.textContent).toBe("Clipped.");
   });
 
   it("saves an extension value through the host, by node and field", () => {
@@ -143,8 +132,8 @@ describe("a pick", () => {
   const shot: ExtensionDto = {
     id: "shot", name: "Shot", version: "1.0.0",
     targets: {
-      card: { fields: [{ name: "to", type: "pick", label: "To", from: [{ words: ["all"] }, { to: "card" }, { list: "places" }] }], claims: [] },
-      project: { fields: [{ name: "places", type: "list", of: { type: "text" } }], claims: [] },
+      card: { fields: [{ name: "to", type: "pick", label: "To", from: [{ words: ["all"] }, { to: "card" }, { list: "places" }] }] },
+      project: { fields: [{ name: "places", type: "list", of: { type: "text" } }] },
     },
     values: { proj_probe: { places: ["Quay"] }, c_bell: { to: "Quay" } },
   };
@@ -178,9 +167,9 @@ describe("the fold", () => {
         { name: "weight", type: "number", label: "Weight", default: 1 },
         { name: "loud", type: "boolean", label: "Loud" },
         { name: "cue", type: "record", label: "Cue", group: "Sound", fields: [{ name: "sound", type: "text", label: "Sound" }] },
-      ], claims: [] },
-      deck: { fields: [{ name: "pile", type: "number", label: "Pile" }], claims: [] },
-      project: { fields: [{ name: "studio", type: "text", label: "Studio" }], claims: [] },
+      ] },
+      deck: { fields: [{ name: "pile", type: "number", label: "Pile" }] },
+      project: { fields: [{ name: "studio", type: "text", label: "Studio" }] },
     },
     // A value at its default, false, and a record of defaults are all unset (F1).
     values: { c_bell: { line: "Hush.", weight: 1, loud: false, cue: { sound: "" } }, c_tide: {}, k_rumours: { pile: 0 } },

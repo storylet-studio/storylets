@@ -25,8 +25,8 @@ const box: BoxDto = {
 const extension = (id: string, name: string, field: string): ExtensionDto => ({
   id, name, version: "1.0.0",
   targets: {
-    card: { fields: [{ name: field, type: "text", label: field }, { name: "spare", type: "text", label: "Spare" }], claims: [] },
-    project: { fields: [{ name: "studio", type: "text", label: "Studio" }], claims: [] },
+    card: { fields: [{ name: field, type: "text", label: field }, { name: "spare", type: "text", label: "Spare" }] },
+    project: { fields: [{ name: "studio", type: "text", label: "Studio" }] },
   },
   values: { c_bell: { [field]: "set" } },
 });

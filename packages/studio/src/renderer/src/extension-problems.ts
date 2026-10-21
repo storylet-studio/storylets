@@ -4,12 +4,12 @@
 // (`@wildwinter/app-shell/extension-copy`, Patterpad's first), so the two apps
 // read alike; what is Storyletter's is passed in: how it names a card or a tag,
 // its words for its node kinds, and that a value is changed on the item's page.
-// The project's own checks (the pin, the manifest, the claims) are worded here
+// The project's own checks (the pin and the manifest) are worded here
 // from their shapes, as Patterpad words its own. A shape this does not know
 // stands as the compiler said it.
 // ---------------------------------------------------------------------------
 
-import { entryProblemLine, extensionLine, quoted, valueProblemSentence } from "@wildwinter/app-shell/extension-copy";
+import { entryProblemLine, extensionLine, quoted } from "@wildwinter/app-shell/extension-copy";
 import type { FieldWordsDecl } from "@wildwinter/app-shell/extension-copy";
 import type { Problem, ProjectDto } from "../../shared/api.js";
 
@@ -49,18 +49,7 @@ export function extensionProblemLine(p: Pick<Problem, "message" | "detail" | "ex
   });
   if (entry !== undefined) return entry;
 
-  // A claimed card or outcome field: `field "<f>", as the Storylet extension "<x>" claims it: <what is wrong>`.
-  const claim = /^field "([^"]+)", as the Storylet extension "[^"]+" claims it: (.*)$/.exec(m);
-  if (claim) {
-    const [, f, said] = claim as unknown as [string, string, string];
-    const outcome = p.where?.includes("/") === true;
-    const label = x?.targets[outcome ? "outcome" : "card"]?.claims.find((c) => c.field === f)?.decl.label ?? f;
-    const [card, out] = (p.where ?? "").split("/");
-    const node = outcome ? `the outcome ${quoted(out!)} on ${quoted(card!)}` : `the card ${quoted(card ?? "")}`;
-    return extensionLine(name, valueProblemSentence(p.detail, `"${f}" ${said.replace(/^the value /, "")}`, { extension: name, node, field: label, place: PLACE, kindWord }));
-  }
-
-  // The project's side: its pin, its manifest, and its claims on the boxes' fields.
+  // The project's side: its pin and its manifest.
   const noManifest = /^the project takes the Storylet extension "([^"]+)", but has no manifest for it/.exec(m);
   if (noManifest) return `This project takes the extension ${quoted(noManifest[1]!)}, but its manifest isn't in the extensions folder. Its data is kept, but your game won't get it.`;
   const version = /^the project takes "[^"]+" (?:at version (\S+)|with no version), but its manifest is version ([^;]+);/.exec(m);
@@ -68,10 +57,9 @@ export function extensionProblemLine(p: Pick<Problem, "message" | "detail" | "ex
     return say(version[1] ? `The project takes version ${version[1]}, but the manifest is version ${version[2]}.` : `The project doesn't say which version it takes, and the manifest is version ${version[2]}.`,
       "Run storyletengine format to take the manifest's version.");
   }
-  const clash = /^the Storylet extension "[^"]+" claims the (\w+) field "([^"]+)" as (\w+), but box "([^"]+)" declares it as (\w+)$/.exec(m);
-  if (clash) return say(`It reads the ${kindWord(clash[1]!)} field ${quoted(clash[2]!)} as ${clash[3]}, but the box ${quoted(clash[4]!)} declares it as ${clash[5]}.`, "Change the field's type on that box's Card template tab so they agree.");
-  const undeclared = /^the Storylet extension "[^"]+" claims the (\w+) field "([^"]+)", which no box declares/.exec(m);
-  if (undeclared) return say(`It reads the ${kindWord(undeclared[1]!)} field ${quoted(undeclared[2]!)}, which no box declares.`, "Declare it on a box's Card template tab, or give the extension's setting the field's name.");
+  if (/^the project's pin for "[^"]+" has settings, /.test(m)) {
+    return say("The project still holds settings for this extension, which extensions don't have any more.", "They're ignored.");
+  }
   // A name two of a pick's sources hold: `the Storylet extension "<x>": "<name>" is <sources>, so a value naming it is ambiguous`.
   const pickClash = /^the Storylet extension "[^"]+": "([^"]*)" is (.+), so a value naming it is ambiguous$/.exec(m);
   if (pickClash) {

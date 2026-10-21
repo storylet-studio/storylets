@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "version": 16,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -8232,24 +8232,6 @@
               "line": "Taken."
             }
           }
-        },
-        {
-          "op": "assertExtensionSettings",
-          "extension": "probe",
-          "expect": {
-            "moodField": "temper",
-            "soundField": "sound"
-          }
-        },
-        {
-          "op": "assertExtensionSettings",
-          "extension": "other",
-          "expect": {}
-        },
-        {
-          "op": "assertExtensionSettings",
-          "extension": "absent",
-          "expect": {}
         },
         {
           "op": "assertOutcomeOrder",

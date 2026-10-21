@@ -19,9 +19,9 @@ const shot: ExtensionDto = {
         { name: "look", type: "pick", label: "Look", from: [{ words: ["away"] }, { to: "tag" }, { list: "places" }] },
         { name: "expression", type: "enum", label: "Expression", values: ["", "smile", "frown"] },
       ] } },
-    ], claims: [] },
-    deck: { fields: [{ name: "pile", type: "number" }], claims: [] },
-    project: { fields: [{ name: "places", type: "list", of: { type: "text" } }], claims: [] },
+    ] },
+    deck: { fields: [{ name: "pile", type: "number" }] },
+    project: { fields: [{ name: "places", type: "list", of: { type: "text" } }] },
   },
   values: {
     proj: { places: ["Quay"] },

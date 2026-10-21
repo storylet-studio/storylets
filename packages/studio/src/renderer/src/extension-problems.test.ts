@@ -12,9 +12,8 @@ const project = {
     targets: {
       card: {
         fields: [{ name: "note", type: "text", label: "Note" }, { name: "cue", type: "record", label: "cue", fields: [{ name: "sound", type: "text", label: "sound" }] }],
-        claims: [{ field: "mood", decl: { name: "mood", type: "enum", label: "Mood" } }],
       },
-      project: { fields: [{ name: "places", type: "list", label: "Places", of: { type: "text" } }], claims: [] },
+      project: { fields: [{ name: "places", type: "list", label: "Places", of: { type: "text" } }] },
     },
     values: {},
   }],
@@ -32,13 +31,11 @@ describe("a Storylet extension's problem for the writer", () => {
       .toBe("Probe: There are values for a card that isn't in the project any more. They're kept, but your game won't get them.");
   });
 
-  it("words a claimed field's value, and the project's own checks", () => {
-    expect(line('field "mood", as the Storylet extension "probe" claims it: the value is "wild", which is not one of its values', "not-a-value", "bell"))
-      .toBe("Probe: Mood on the card “bell” is “wild”, which isn't one of its choices. Pick one on its page.");
+  it("words the project's own checks", () => {
     expect(line('the project takes the Storylet extension "probe", but has no manifest for it at extensions/probe.extension.json; its data is left as it is, and not compiled'))
       .toBe("This project takes the extension “probe”, but its manifest isn't in the extensions folder. Its data is kept, but your game won't get it.");
-    expect(line("the Storylet extension \"probe\" claims the card field \"temper\", which no box declares; set the extension's \"moodField\" setting to the field's name, or declare it"))
-      .toBe("Probe: It reads the card field “temper”, which no box declares. Declare it on a box's Card template tab, or give the extension's setting the field's name.");
+    expect(line(`the project's pin for "probe" has settings, which extensions no longer have; they're ignored`))
+      .toBe("Probe: The project still holds settings for this extension, which extensions don't have any more. They're ignored.");
   });
 
   it("words a pick's problems: a value not among its choices, one two sources hold, and the project's clash", () => {

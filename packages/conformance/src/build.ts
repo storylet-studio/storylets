@@ -55,8 +55,11 @@ import type {
  *  `assertBoxExtensions` and `assertNodeExtensions`. Values are any JSON, so
  *  a runner compares them deeply. No earlier expectation changed.
  *  15: an extension's resolved settings (`extensions[id].settings`) and the op `assertExtensionSettings`. No
- *  earlier expectation changed. */
-export const CORPUS_VERSION = 15;
+ *  earlier expectation changed.
+ *  16: extension settings removed (2026-10-20, with claims): the op `assertExtensionSettings` goes, and the
+ *  extensions case's bundle keeps an old bundle's `settings`, which every loader ignores. No other
+ *  expectation changed. */
+export const CORPUS_VERSION = 16;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>

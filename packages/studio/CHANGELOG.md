@@ -14,7 +14,7 @@ here is part of shipping, not a courtesy.
 
 - **Add Extension…** (File, beside Project Settings) takes an extension's package, its folder or a `.tgz` made by
   `npm pack`, into the project in one step you can undo: the extension's manifest goes into the project and the
-  project takes that version, keeping its settings. A newer version of an extension the project already takes is
+  project takes that version. A newer version of an extension the project already takes is
   taken as `storyletengine format` takes one, renamed stages and all. Its views are installed on this machine at
   the same time. A package with faults in its manifest, or with nothing for Storyletter, is turned down with why.
 - **An extension's views.** An extension can bring views of its own (a performance sheet, say), and the
@@ -28,6 +28,14 @@ here is part of shipping, not a courtesy.
   machine yet: choose its package and its views are installed, leaving the project as it is. A view whose
   installed version differs from the project's but shares its major version still opens, and its window's title
   says so.
+
+### Removed
+
+- **An extension's claims on a box's fields, and its settings.** A card or outcome field the box declares is
+  always drawn as the box declares it: an extension can no longer show it with its own label, help and choices.
+  An extension gives a card or an outcome a field of its own instead. A project that still holds settings for an
+  extension is warned once that they're ignored, as is a manifest that still declares settings or claims. A
+  view is no longer told any settings.
 
 ## [0.25.0] - 2026-10-20
 
