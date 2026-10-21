@@ -90,7 +90,7 @@
   --on-accent: #fff;
   --accent-soft: #2d5c861f;
   --danger: #b0402f;
-  --warn: #a9772b;
+  --warn: #866331;   /* dark enough to pass AA as text in Chambray and Linen (was #a9772b, 3.2:1; 2026-10-21) */
   --ok: #3f7d49;
 
   --char-0: #a84a38; --char-1: #ab6626; --char-2: #8f7a1e; --char-3: #6f7c2b;
