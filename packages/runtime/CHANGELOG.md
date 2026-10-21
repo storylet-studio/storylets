@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-21
+
 ### Removed
 
 - **Storylet extension settings.** `extensionSettings(bundle, extension)` goes, with the bundle's `extensions[id].settings`: extensions no
