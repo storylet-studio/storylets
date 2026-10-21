@@ -33,11 +33,11 @@
     "@storylet-studio/with-patter": ">=0.3.0",
     "@wildwinter/expr": "^0.6.0",
     "@wildwinter/scoperegistry": ">=0.9.0 <1.0.0",
-    "@wildwinter/toolkit": "^0.2.6",
+    "@wildwinter/toolkit": "^0.3.0",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@patterkit/play-helpers": "^0.9.4"
+    "@patterkit/play-helpers": "^0.9.6"
   }
 }
