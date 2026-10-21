@@ -20,6 +20,12 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **An extension's requirements.** An extension's manifest can name other extensions it needs (`requires`), and
+  `storyletengine validate` warns of a project that takes one without them, naming what to add. A field can
+  also name one of the extension's views as its editor (`editor`), which validation checks.
+
 ### Removed
 
 - **Claims and settings for Storylet extensions.** An extension can no longer claim a card or outcome field a

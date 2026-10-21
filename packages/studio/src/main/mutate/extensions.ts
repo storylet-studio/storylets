@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { extensionNodes } from "@storylet-studio/compiler";
-import { planExtensionValue, planExtensionValues, planTakeExtension } from "@storylet-studio/ops";
+import { planExtensionValue, planExtensionValues, planTakeExtensions } from "@storylet-studio/ops";
 import { manifestProblems, pickLists, targetOf, valueProblems } from "@wildwinter/toolkit/extensions";
 import type { Manifest, TypeDecl } from "@wildwinter/toolkit/extensions";
 import { extensionLine, quoted, valueProblemSentence } from "@wildwinter/app-shell/extension-copy";
@@ -99,11 +99,14 @@ export async function setExtensionValues(
  * Add Extension...: an extension's manifest, from its package, taken into the project as ONE undo step: the
  * manifest written where the project keeps manifests, the project pinned to its version, and,
  * for an extension the project took at another version, what `storyletengine format` does on a new version
- * (renamed stages, then the pin). `text` is the manifest file as the package has it.
+ * (renamed stages, then the pin). `items` holds the extensions it requires that the project lacks first, then
+ * it, each with its manifest file as the package has it, so undoing never leaves one without the other.
  */
-export async function addExtension(session: ProjectSession, manifest: Manifest, text: string): Promise<Written> {
+export async function addExtension(session: ProjectSession, items: readonly { manifest: Manifest; text: string }[]): Promise<Written> {
   const source = session.loaded.source;
   if (source === undefined) return refuse(session, "the project did not load");
-  const take = planTakeExtension(session.loaded.dir, source, manifest, text);
-  return commit(session, `Add ${manifest.name}`, freshKey("ext"), [...take.writes].map(([path, content]) => ({ path, content })));
+  const take = planTakeExtensions(session.loaded.dir, source, items);
+  const names = items.map((i) => i.manifest.name);
+  const label = `Add ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}`;
+  return commit(session, label, freshKey("ext"), [...take.writes].map(([path, content]) => ({ path, content })));
 }

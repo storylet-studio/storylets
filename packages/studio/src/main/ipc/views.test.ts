@@ -1,7 +1,9 @@
 // The view extensions' main host (ipc/views.ts) with Electron and the shell's view host stood in for, on the
 // internal "probe" project: an undone Add Extension... closes the view it offered, an author's key installs
 // nothing, the views are worked out again only when the project's extensions change and only the latest answer
-// is taken, and two quick asks to open a view open one window.
+// is taken, and two quick asks to open a view open one window. And Add Extension..., the one way in: the views
+// alone for the version the project takes, a newer one offered, an older one never taken, a view's own package
+// only, and what an extension requires asked for and taken with it.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cpSync, mkdtempSync, readFileSync } from "node:fs";
@@ -20,11 +22,21 @@ const shell = vi.hoisted(() => ({
   installs: 0,
   onInstall: null as null | (() => void),
   pick: "",
+  /** The probe package's version, and its requirements; and packages to read before it, in order. */
+  version: "1.1.0",
+  requires: [] as string[],
+  queue: [] as unknown[],
+  /** The native box's answers, in order (0 when none is left). */
+  answers: [] as number[],
+  asked: [] as string[],
 }));
 
 vi.mock("electron", () => ({
   app: { getPath: () => "/user-data", isPackaged: true },
-  dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [shell.pick] }), showMessageBox: async () => ({ response: 0 }) },
+  dialog: {
+    showOpenDialog: async () => ({ canceled: false, filePaths: [shell.pick] }),
+    showMessageBox: async (_w: unknown, o: { message: string }) => { shell.asked.push(o.message); return { response: shell.answers.shift() ?? 0 }; },
+  },
 }));
 vi.mock("@wildwinter/app-shell/tool-window", () => ({
   pinToolWindow: () => undefined, rescueToolWindow: () => undefined, savedWindowRect: () => ({ width: 1, height: 1 }),
@@ -46,10 +58,14 @@ vi.mock("@wildwinter/app-shell/view-host", () => ({
     shell.opened.push(w);
     return w;
   },
-  readExtensionPackage: async () => ({
-    ok: true, manifest: parseManifest(readFileSync(join(packageDir, "probe.extension.json"), "utf8")), problems: [],
-    files: new Map([["probe.extension.json", readFileSync(join(packageDir, "probe.extension.json"))]]),
-  }),
+  readExtensionPackage: async () => {
+    if (shell.queue.length > 0) return shell.queue.shift();
+    const m = JSON.parse(readFileSync(join(packageDir, "probe.extension.json"), "utf8"));
+    m.version = shell.version;
+    if (shell.requires.length) m.requires = shell.requires;
+    const text = JSON.stringify(m, null, 2);
+    return { ok: true, manifest: parseManifest(text), problems: [], files: new Map([["probe.extension.json", new TextEncoder().encode(text)]]) };
+  },
   installExtensionPackage: async () => { shell.installs++; shell.onInstall?.(); return { ok: true, installed: { version: "1.1.0" } }; },
 }));
 
@@ -67,7 +83,7 @@ function host() {
   if ("error" in opened) throw new Error(opened.error);
   let session: typeof opened.session | undefined = opened.session;
   const menu = vi.fn();
-  const editor = { isDestroyed: () => false };
+  const editor = { isDestroyed: () => false, webContents: { send: vi.fn() } };
   const views = createViewHost({
     session: () => session, editor: () => editor as never, menu,
     store: () => ({ window: () => ({ bounds: () => undefined, remember: () => undefined, pinned: () => true, setPinned: () => undefined }) }) as never,
@@ -90,6 +106,11 @@ beforeEach(() => {
   shell.installs = 0;
   shell.onInstall = null;
   shell.pick = packageDir;
+  shell.version = "1.1.0";
+  shell.requires = [];
+  shell.queue = [];
+  shell.answers = [];
+  shell.asked = [];
 });
 
 describe("the views' windows", () => {
@@ -142,15 +163,82 @@ describe("Add Extension...", () => {
     writeRemote(session.loaded.dir, {
       schema: "storylets/server-provenance@0", server: "http://venue", installation: "i", version: "1", revision: 1, role: "author",
     } as never);
+    shell.version = "1.2.0"; // newer than the project's 1.1.0, and updated: a change to the project
     expect(await call("extension:add")).toEqual({ error: expect.stringContaining("so nothing was added") });
     expect(shell.installs).toBe(0);
   });
 
   it("says the views were installed when the commit can't land after the install (the project changed meanwhile)", async () => {
     const { call, closeProject } = host();
+    shell.version = "1.2.0";
     shell.onInstall = closeProject;
     const r = await call("extension:add") as { error?: string };
     expect(shell.installs).toBe(1);
     expect(r.error).toBe("The project changed meanwhile, so it wasn't added. Probe's views were installed on this machine.");
+  });
+
+  it("installs the views alone for the version the project takes, and changes nothing", async () => {
+    const { session, call } = host();
+    const before = readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8");
+    expect(await call("extension:add")).toEqual({ installed: "1.1.0", name: "Probe" });
+    expect(shell.installs).toBe(1);
+    expect(shell.asked).toEqual([]);
+    expect(readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8")).toBe(before);
+  });
+
+  it("offers a newer version, and installs only when the author says not now", async () => {
+    const { session, call } = host();
+    shell.version = "1.2.0";
+    shell.answers = [1];
+    expect(await call("extension:add")).toEqual({ installed: "1.2.0", name: "Probe" });
+    expect(shell.asked).toEqual(["Update Probe in this project?"]);
+    shell.answers = [0];
+    const r = await call("extension:add") as { project?: { extensions?: { id: string; version: string }[] } };
+    expect(r.project?.extensions?.find((x) => x.id === "probe")?.version).toBe("1.2.0");
+    expect(readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8")).toContain("1.2.0");
+  });
+
+  it("never takes an older version back, and says the project keeps its own", async () => {
+    const { call } = host();
+    shell.version = "1.0.0";
+    expect(await call("extension:add")).toEqual({ installed: "1.0.0", name: "Probe", note: expect.stringContaining("so it keeps 1.1.0") });
+  });
+
+  it("takes only its own extension's package for a view not installed here", async () => {
+    const { call } = host();
+    expect(await call("extension:add", "lights")).toEqual({ error: expect.stringContaining("not lights, so nothing was installed") });
+    expect(shell.installs).toBe(0);
+  });
+
+  it("asks for what a newer version requires, and takes nothing when the author cancels", async () => {
+    const { session, call } = host();
+    const before = readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8");
+    shell.version = "1.2.0";
+    shell.requires = ["stage"];
+    shell.answers = [0, 1]; // update, then cancel the requirement
+    expect(await call("extension:add")).toBeNull();
+    expect(shell.asked).toEqual(["Update Probe in this project?", "Probe needs \u201cstage\u201d"]);
+    expect(shell.installs).toBe(0);
+    expect(readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8")).toBe(before);
+  });
+
+  it("takes what an extension requires with it, as one step", async () => {
+    const { session, call } = host();
+    shell.version = "1.2.0";
+    shell.requires = ["stage"];
+    shell.answers = [0, 0];
+    const stage = JSON.stringify({ schema: "wildwinter/extension@0", id: "stage", name: "Stage", version: "0.5.0", targets: { storylets: { card: { fields: [{ name: "mark", type: "text" }] } } } }, null, 2);
+    const probeFirst = async () => {
+      // The probe's package first, then Stage's.
+      const m = JSON.parse(readFileSync(join(packageDir, "probe.extension.json"), "utf8"));
+      m.version = "1.2.0"; m.requires = ["stage"];
+      const text = JSON.stringify(m, null, 2);
+      return { ok: true, manifest: parseManifest(text), problems: [], files: new Map([["probe.extension.json", new TextEncoder().encode(text)]]) };
+    };
+    shell.queue = [await probeFirst(), { ok: true, manifest: parseManifest(stage), problems: [], files: new Map([["stage.extension.json", new TextEncoder().encode(stage)]]) }];
+    const r = await call("extension:add") as { project?: { extensions?: { id: string; version: string }[] } };
+    expect(r.project?.extensions?.map((x) => `${x.id}@${x.version}`).sort()).toEqual(["probe@1.2.0", "stage@0.5.0"]);
+    expect(shell.installs).toBe(1); // Stage has no views to install
+    expect(readFileSync(join(session.loaded.dir, "extensions/stage.extension.json"), "utf8")).toBe(stage);
   });
 });

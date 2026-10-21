@@ -83,8 +83,8 @@ export function packageRefusal(pkg: Pick<ExtensionPackage, "manifest" | "problem
 }
 
 /**
- * Why Install <Name> on This Machine... won't take a package for `extension`, or undefined when it will: it's
- * another extension's, or its manifest has faults.
+ * Why Add Extension..., opened for a view "(not installed)..." of `extension`, won't take a package, or undefined
+ * when it will: it's another extension's, or its manifest has faults.
  */
 export function installRefusal(pkg: Pick<ExtensionPackage, "manifest" | "problems">, extension: string, name: string): string | undefined {
   if (pkg.manifest.id !== extension) {

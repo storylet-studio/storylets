@@ -327,6 +327,7 @@ export function viewAdapter(ctx: ViewHostContext, extension?: string): ViewAdapt
       }
       return { readOnly: false };
     },
+    missing: (ext) => project()?.extensions?.find((x) => x.id === ext)?.missing ?? [],
     key(combo) {
       if (combo === "Mod+Z") ctx.undoRedo("undo");
       else if (combo === "Mod+Shift+Z" || combo === "Mod+Y") ctx.undoRedo("redo");
@@ -373,7 +374,8 @@ export function createViewHosting(ctx: ViewHostContext): ViewHosting {
   if (typeof matchMedia === "function") matchMedia("(prefers-color-scheme: dark)").addEventListener("change", theme);
 
   return {
-    changed: (nodes) => views.changed(nodes),
+    // An extension taken or undone may meet a view's requirement, or take it away.
+    changed: (nodes) => { views.changed(nodes); views.missing(); },
     selectionMoved() {
       if (views.size === 0) return;
       const key = JSON.stringify(selectionOf(ctx));

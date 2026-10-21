@@ -142,6 +142,16 @@ describe("the adapter's nodes", () => {
   });
 });
 
+describe("missing requirements", () => {
+  it("says which extensions the view's manifest requires that the project doesn't take, from the project's facts", () => {
+    const e = editor();
+    expect(e.adapter.missing?.("probe")).toEqual([]);
+    e.session.project = { ...e.session.project!, extensions: e.session.project!.extensions!.map((x) => ({ ...x, missing: ["stage"] })) };
+    expect(e.adapter.missing?.("probe")).toEqual(["stage"]);
+    expect(e.adapter.missing?.("nope")).toEqual([]);
+  });
+});
+
 describe("the selection, and selecting", () => {
   it("is innermost first: a card, its deck, its box; the project alone on its own page; empty elsewhere", () => {
     const e = editor();
@@ -224,7 +234,7 @@ describe("hostView over the adapter, end to end", () => {
     const { view } = connect();
     expect(await view.hello()).toEqual({
       t: "welcome", api: VIEW_API, host: "storylets", extension: { id: "probe", version: "1.1.0", pinned: "1.1.0" }, view: "inspect",
-      theme: { scheme: "light", tokens: { "--ink": "#222" } }, writable: { readOnly: false },
+      theme: { scheme: "light", tokens: { "--ink": "#222" } }, writable: { readOnly: false }, missing: [],
     });
     const reply = await view.ask("node", { id: "c_bell", children: true });
     const node = (reply as { value: ViewNode }).value;

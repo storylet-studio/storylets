@@ -156,16 +156,16 @@ describe("view extensions (patterkit design/view-extensions.md)", () => {
     expect(item(submenu(await menuOn("darwin", { open: false, deckFocused: false }), "File"), "Add Extension…")?.enabled).toBe(false);
   });
 
-  it("lists the project's views by name in the Window menu, one not installed greyed with why, and its Install once", async () => {
+  it("lists the project's views by name in the Window menu, one not installed marked so with why, opening Add Extension", async () => {
     const window = submenu(await menuOn("darwin", { open: true, deckFocused: false, views } as never), "Window");
     expect(shape(window)).toEqual([
       "role:minimize", "role:zoom", "-",
-      "Probe view", "Performance sheet", "Pattershot isn't installed on this machine.", "Install Pattershot on This Machine…",
-      "Timeline", "Pattershot isn't installed on this machine.",
+      "Probe view", "Performance sheet (not installed)…", "Pattershot isn't installed on this machine.",
+      "Timeline (not installed)…", "Pattershot isn't installed on this machine.",
       "-", "role:front",
     ]);
     expect(item(window, "Probe view")?.enabled).not.toBe(false);
-    expect(item(window, "Performance sheet")?.enabled).toBe(false);
+    expect(item(window, "Performance sheet (not installed)…")?.enabled).not.toBe(false);
   });
 
   it("is the platform's Window menu alone when the project has no views", async () => {

@@ -81,6 +81,7 @@ import { createProblems } from "./problems.js";
 import { createVcView } from "./vc-view.js";
 import { sweepExtensionFold } from "./extension-rows.js";
 import { createFieldsLink } from "./fields-link.js";
+import { withoutViewEdited } from "./fields-state.js";
 import { createViewHosting } from "./view-host.js";
 import { createCatalogues } from "./catalogues.js";
 import { createMapPage } from "./map-page.js";
@@ -151,9 +152,14 @@ const vc = createVcView({
 
 // The Fields window (Pattershot's brief, H1 to H5): a map of records edited as a grid beside the editor,
 // following the selection. This side owns the document: it says what to show, and saves the window's edits.
+/** The views that open on this machine, by `extension/view`, as main last worked them out. */
+let installedViews = new Set<string>();
+const viewInstalled = (extension: string, view: string): boolean => installedViews.has(`${extension}/${view}`);
+
 const fieldsLink = createFieldsLink({
   studio,
-  host: { project: () => session.project, save: saves.saveExtension },
+  // A map a view edits here is the view's, not the window's (Y5).
+  host: { project: () => withoutViewEdited(session.project, viewInstalled), save: saves.saveExtension },
   selection: () => ({ focus: nav.focus, inspected: nav.inspected, cursor: nav.cursor }),
   lockedBy: (key) => vc.lockedBy(key),
   follow: () => session.state.fieldsFollow,
@@ -281,6 +287,14 @@ const made = createActions({
   openSettings: (section) => projectSettingsPanel.open(section),
   focusNewTitle: () => focusNewTitle(),
   openFields: (kind, id) => fieldsLink.openOn(kind, id),
+  viewInstalled,
+  openView: (extension, view) => { void studio.openView(extension, view).then((r) => { if (r && "error" in r) flashError(r.error); }); },
+});
+// A field's Edit goes to its view, or to the Fields window, by what's installed here.
+studio.onViewOffers((offers) => {
+  installedViews = new Set(offers.filter((o) => o.installed).map((o) => `${o.extension}/${o.view}`));
+  renderCentre();
+  fieldsLink.push();
 });
 const { actions, host: inspectorHost } = made;
 

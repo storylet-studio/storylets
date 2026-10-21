@@ -52,6 +52,9 @@ export interface ActionsContext {
   focusNewTitle: () => void;
   /** A map of records' Edit button: the Fields window on that node (fields-link.ts). */
   openFields: (kind: string, nodeId: string) => void;
+  /** Whether a view opens on this machine, and opening it: a field naming it as its editor opens it (Y5). */
+  viewInstalled: (extension: string, view: string) => boolean;
+  openView: (extension: string, view: string) => void;
 }
 
 export type Actions = ReturnType<typeof createActions>;
@@ -436,7 +439,10 @@ export function createActions(ctx: ActionsContext) {
     handCards: (boxId, handId) => studio.handCards(boxId, handId),
     deckCatalogue: (deckId) => studio.cardCatalogue(deckId),
     openHand: actions.openHand,
-    extensions: { project: () => ctx.session.project, save: saves.saveExtension, openFields: ctx.openFields },
+    extensions: {
+      project: () => ctx.session.project, save: saves.saveExtension, openFields: ctx.openFields,
+      viewInstalled: ctx.viewInstalled, openView: ctx.openView,
+    },
     // From a hand's Cards tab, sideways: the card's parent is its deck, and the
     // way back to the place it was opened from is offered beside the way up
     // (structure rule 12), as the map does for a pin.

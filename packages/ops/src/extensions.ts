@@ -187,6 +187,31 @@ export interface ExtensionTake {
 }
 
 /**
+ * Take several manifests into the project as one change (Add Extension... with the extensions one requires):
+ * each as `planTakeExtension` takes it, over the project as the ones before it leave it, so the last writes of
+ * a file win and every pin is in the project file. `was` is the last one's (the one asked for).
+ */
+export function planTakeExtensions(dir: string, source: SourceProject, items: readonly { manifest: Manifest; text: string }[]): ExtensionTake {
+  const writes = new Map<string, string>();
+  const report: string[] = [];
+  let was: string | undefined;
+  let src = source;
+  for (const { manifest, text } of items) {
+    const take = planTakeExtension(dir, src, manifest, text);
+    for (const [path, content] of take.writes) writes.set(path, content);
+    report.push(...take.report);
+    was = take.was;
+    const rel = `${EXTENSIONS_DIR}/${manifest.id}${MANIFEST_EXTENSION}`;
+    src = {
+      ...src,
+      project: { ...src.project, extensions: { ...(src.project.extensions ?? {}), [manifest.id]: { ...(src.project.extensions?.[manifest.id] ?? {}), version: manifest.version } } },
+      manifests: [...(src.manifests ?? []).filter((m) => m.id !== manifest.id), { path: rel, id: manifest.id, manifest }],
+    };
+  }
+  return { writes, ...(was !== undefined ? { was } : {}), report };
+}
+
+/**
  * Take an extension's manifest into the project (Add Extension...): the manifest written where the project
  * keeps manifests, as its text was given, and the project pinned to its version. A project
  * that already takes the extension at another version takes the new one as `storyletengine format` does

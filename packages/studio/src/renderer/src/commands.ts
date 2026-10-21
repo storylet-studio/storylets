@@ -150,25 +150,22 @@ export function createCommands(ctx: CommandsContext) {
       : `Opening Patterpad at ${result.address}. The published Patter bundle has no scene by that name yet.`, "ok");
   }
 
-  /** File > Add Extension...: main asks for the package, takes its manifest into the project as one undo step,
-   *  and installs its views on this machine. */
-  async function addExtension(): Promise<void> {
+  /** File > Add Extension..., or a view "(not installed)..." in the Window menu (`expect`, its extension): main
+   *  asks for the package, installs its views on this machine, and takes an extension the project lacks into it
+   *  as one undo step (with any it requires), or offers a newer version of one it takes. */
+  async function addExtension(expect?: string): Promise<void> {
     await saves.flush();
     const before = new Set((session.project?.extensions ?? []).map((x) => `${x.id}@${x.version}`));
-    const result = await studio.addExtension();
-    if (result === null || !ctx.applied(result) || "error" in result) return;
-    const added = (result.project.extensions ?? []).find((x) => !before.has(`${x.id}@${x.version}`));
-    flash(added ? `Added ${added.name} ${added.version}, and installed it on this machine` : "Installed the extension on this machine", "ok");
-    ctx.render();
-  }
-
-  /** Window > Install <Name> on This Machine...: the project is left as it is. */
-  async function installExtension(extension: string): Promise<void> {
-    const result = await studio.installExtension(extension);
+    const result = await studio.addExtension(expect);
     if (result === null) return;
-    if ("error" in result) { flashError(result.error); return; }
-    const name = session.project?.extensions?.find((x) => x.id === extension)?.name ?? extension;
-    flash(`Installed ${name} ${result.installed} on this machine`, "ok");
+    if ("installed" in result) {
+      flash(`Installed ${result.name} ${result.installed} on this machine${result.note ? `. ${result.note}` : ""}`, "ok");
+      return;
+    }
+    if (!ctx.applied(result) || "error" in result) return;
+    const added = (result.project.extensions ?? []).filter((x) => !before.has(`${x.id}@${x.version}`));
+    flash(added.length > 0 ? `Added ${added.map((x) => `${x.name} ${x.version}`).join(" and ")}, and installed ${added.length > 1 ? "them" : "it"} on this machine` : "Installed the extension on this machine", "ok");
+    ctx.render();
   }
 
   function onMenu(command: MenuCommand): void {
@@ -244,8 +241,7 @@ export function createCommands(ctx: CommandsContext) {
       case "go-up": if (project) nav.goUp(); break;
       case "close-project": if (project) void ctx.closeProject(); break;
       // View extensions (patterkit design/view-extensions.md): what is typed lands before the project changes.
-      case "add-extension": if (project) void addExtension(); break;
-      case "install-extension": void installExtension(command.extension); break;
+      case "add-extension": if (project) void addExtension(command.extension); break;
       case "open-view": if (project) void studio.openView(command.extension, command.view).then((r) => { if (r) flashError(r.error); }); break;
       // Help > Open an Example: main asks before leaving an open project, then for a folder.
       case "open-example": void ctx.adopt(studio.openExample(command.file)); break;

@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // View extensions over the bridge (patterkit design/view-extensions.md, app-shell
-// README v0.58): File > Add Extension..., Install <Name> on This Machine..., and
-// each view's window. A view opens in a sandboxed tool window of its own (the
+// README v0.58 and v0.60): File > Add Extension..., the one way in (it takes an
+// extension into the project, or installs the views of one the project takes and
+// offers a newer version), and each view's window. A view opens in a sandboxed tool window of its own (the
 // shell's `openViewWindow`), one per view, pinned to the editor and remembering
 // its bounds as the tool windows do; main hands it and the editor a port pair
 // and stays out of the path. Every view window closes when the project does.
@@ -13,9 +14,10 @@ import { createRequire } from "node:module";
 import {
   chooseInstalled, installExtensionPackage, installedExtensions, openViewWindow, readExtensionPackage,
 } from "@wildwinter/app-shell/view-host";
+import { planPackageAdd } from "@wildwinter/app-shell/view-package";
 import type { ExtensionPackage, ViewWindow } from "@wildwinter/app-shell/view-host";
 import { pinToolWindow, rescueToolWindow, savedWindowRect } from "@wildwinter/app-shell/tool-window";
-import { MANIFEST_FILE_SUFFIX } from "@wildwinter/toolkit/extensions";
+import { MANIFEST_FILE_SUFFIX, missingRequirements, viewsFor } from "@wildwinter/toolkit/extensions";
 import { join } from "node:path";
 import { manifestPath } from "@storylet-studio/ops";
 import { addExtension } from "../mutate/extensions.js";
@@ -24,6 +26,7 @@ import { serialised } from "../mutate/write-path.js";
 import { VIEW_SCHEME, installRefusal, offeredViews, packageRefusal, viewWindowKey, viewsDir } from "../view-extensions.js";
 import type { OfferedView } from "../view-extensions.js";
 import { watchInDev } from "../windows.js";
+import { push } from "./push.js";
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 
@@ -87,6 +90,45 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
     if (now === drawn) return;
     drawn = now;
     deps.menu();
+    // The editor draws a field's Edit for the view that edits it only while that view opens here.
+    const editor = deps.editor();
+    if (editor && !editor.isDestroyed()) {
+      push(editor.webContents, "views:offers", offered.map((v) => ({ extension: v.extension, view: v.view, installed: v.choice.installed !== null })));
+    }
+  }
+
+  /** Ask the author a question in a native box; the button chosen, by index (the last is Cancel). */
+  async function ask(message: string, detail: string, buttons: string[]): Promise<number> {
+    const editor = deps.editor()!;
+    const r = await dialog.showMessageBox(editor, { type: "question", message, detail, buttons, defaultId: 0, cancelId: buttons.length - 1 });
+    return r.response;
+  }
+
+  /** The packages of the extensions `pkg` requires that the project lacks, chosen one by one, in order; or why
+   *  not (`null`: the author cancelled). */
+  async function requirementsFor(pkg: ExtensionPackage, missing: readonly string[], taken: readonly string[]): Promise<ExtensionPackage[] | { error: string } | null> {
+    const name = pkg.manifest.name;
+    const out: ExtensionPackage[] = [];
+    for (const id of missing) {
+      const go = await ask(`${name} needs \u201c${id}\u201d`,
+        `${name} works only in a project that also takes the extension \u201c${id}\u201d, which this one doesn't. Choose its package to add both, as one step you can undo.`,
+        [`Choose \u201c${id}\u201d Package\u2026`, "Cancel"]);
+      if (go !== 0) return null;
+      const path = await pickPackage(`Add \u201c${id}\u201d`, `Choose the package of \u201c${id}\u201d, which ${name} needs: its folder, or a .tgz file made by npm pack.`);
+      if (path === null) return null;
+      const req = await packageAt(path);
+      if ("error" in req) return req;
+      if (req.manifest.id !== id) return { error: `That package is ${req.manifest.name ?? req.manifest.id}, not \u201c${id}\u201d, so ${name} wasn't added.` };
+      const refused = packageRefusal(req);
+      if (refused !== undefined) return { error: refused };
+      // One level: what the requirement needs in turn must be in the project, or among what's being added.
+      const further = missingRequirements(req.manifest, [...taken, pkg.manifest.id, ...missing]);
+      if (further.length > 0) {
+        return { error: `${req.manifest.name} needs ${further.map((f) => `\u201c${f}\u201d`).join(" and ")} too, which this project doesn't take. Add ${further.length > 1 ? "them" : "it"} first, then ${name}.` };
+      }
+      out.push(req);
+    }
+    return out;
   }
 
   /**
@@ -138,46 +180,62 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
     },
     isView: (win) => win !== null && win !== undefined && [...open.values()].some((v) => v.window === win),
     register(ipc) {
-      // Add Extension...: the manifest into the project and the pin, as one undo step, and the views installed.
-      // Installed first: an install that fails leaves the project as it was, where a project that took the
-      // extension with nothing installed would offer views that can't open.
-      ipc.handle("extension:add", async () => {
+      // Add Extension...: the one way in. An extension the project doesn't take goes in (its manifest and pin, as
+      // one undo step, with any it requires that the project lacks); for one it takes, a newer package is offered
+      // and an older one never taken; either way its views install on this machine. With `expect` (a view "(not
+      // installed)..." in the Window menu), only that extension's package will do. Installed first: an install
+      // that fails leaves the project as it was, where a project that took the extension with nothing installed
+      // would offer views that can't open.
+      ipc.handle("extension:add", async (_event, expect) => {
         const session = deps.session();
         if (!session) return { error: "Open a project first." };
-        const path = await pickPackage("Add an extension", "Choose the extension's package: its folder, or a .tgz file made by npm pack.");
+        const pins = session.loaded.source?.project.extensions ?? {};
+        const wanted = typeof expect === "string" ? offered.find((v) => v.extension === expect) : undefined;
+        const wantedName = wanted?.extensionName ?? (typeof expect === "string" ? expect : "");
+        const path = typeof expect === "string"
+          ? await pickPackage(`Install ${wantedName}`, `Choose ${wantedName}'s package: its folder, or a .tgz file made by npm pack.`)
+          : await pickPackage("Add an extension", "Choose the extension's package: its folder, or a .tgz file made by npm pack.");
         if (path === null) return null;
         const pkg = await packageAt(path);
         if ("error" in pkg) return pkg;
-        const refused = packageRefusal(pkg);
+        const refused = typeof expect === "string" ? installRefusal(pkg, expect, wantedName) : packageRefusal(pkg);
         if (refused !== undefined) return { error: refused };
-        // A project that may not take it (an author's key: the project file is the designer's) installs nothing.
-        const dir0 = session.loaded.dir;
-        const role = refuseWrite(readRemote(dir0)?.role, [join(dir0, session.loaded.source?.path ?? ""), manifestPath(dir0, pkg.manifest.id)]);
-        if (role !== undefined) return { error: `This project came from a server with an author's key, and adding an extension is the designer's to do, so nothing was added.` };
-        const installed = await installExtensionPackage(pkg, dir());
-        if (!installed.ok) return { error: installed.why };
-        const text = new TextDecoder().decode(pkg.files.get(`${pkg.manifest.id}${MANIFEST_FILE_SUFFIX}`)!);
-        const result = await serialised(() => (deps.session() === session ? addExtension(session, pkg.manifest, text) : { error: "The project changed meanwhile, so it wasn't added." }));
+        const name = pkg.manifest.name;
+        const taken = Object.keys(pins);
+        const plan = planPackageAdd(pkg.manifest, Object.entries(pins).map(([id, pin]) => ({ id, ...(pin.version !== undefined ? { pin: pin.version } : {}) })));
+        let take = plan.project === "take";
+        if (plan.project === "update") {
+          take = await ask(`Update ${name} in this project?`,
+            `This project takes ${name}${plan.pinned ? ` ${plan.pinned}` : ""}, and this package is ${plan.version}. Updating takes it into the project as one step you can undo. Its views are installed on this machine either way.`,
+            [`Update to ${plan.version}`, "Not Now"]) === 0;
+        }
+        // What it requires and the project lacks goes in with it, in the same step, or nothing does.
+        let required: ExtensionPackage[] = [];
+        if (take && plan.missing.length > 0) {
+          const got = await requirementsFor(pkg, plan.missing, taken);
+          if (got === null || "error" in got) return got;
+          required = got;
+        }
+        if (take) {
+          // A project that may not take it (an author's key: the project file is the designer's) installs nothing.
+          const dir0 = session.loaded.dir;
+          const role = refuseWrite(readRemote(dir0)?.role, [join(dir0, session.loaded.source?.path ?? ""), ...[...required, pkg].map((p) => manifestPath(dir0, p.manifest.id))]);
+          if (role !== undefined) return { error: `This project came from a server with an author's key, and adding an extension is the designer's to do, so nothing was added.` };
+        }
+        for (const p of [...required.filter((r) => viewsFor(r.manifest, "storylets").length > 0), pkg]) {
+          const installed = await installExtensionPackage(p, dir());
+          if (!installed.ok) return { error: installed.why };
+        }
+        if (!take) {
+          await refresh(true);
+          return { installed: pkg.manifest.version, name, ...(plan.note ? { note: plan.note } : {}) };
+        }
+        const items = [...required, pkg].map((p) => ({ manifest: p.manifest, text: new TextDecoder().decode(p.files.get(`${p.manifest.id}${MANIFEST_FILE_SUFFIX}`)!) }));
+        const result = await serialised(() => (deps.session() === session ? addExtension(session, items) : { error: "The project changed meanwhile, so it wasn't added." }));
         await refresh(true);
         // Installed all the same: say so, since the views are now on this machine for the next try.
-        if ("error" in result) return { error: `${result.error} ${pkg.manifest.name}'s views were installed on this machine.` };
+        if ("error" in result) return { error: `${result.error} ${name}'s views were installed on this machine.` };
         return result;
-      });
-
-      // Install <Name> on This Machine...: a project that takes the extension, on a machine without its views.
-      ipc.handle("extension:install", async (_event, extension) => {
-        const view = offered.find((v) => v.extension === extension);
-        const name = view?.extensionName ?? extension;
-        const path = await pickPackage(`Install ${name} on this machine`, `Choose ${name}'s package: its folder, or a .tgz file made by npm pack.`);
-        if (path === null) return null;
-        const pkg = await packageAt(path);
-        if ("error" in pkg) return pkg;
-        const refused = installRefusal(pkg, extension, name);
-        if (refused !== undefined) return { error: refused };
-        const installed = await installExtensionPackage(pkg, dir());
-        if (!installed.ok) return { error: installed.why };
-        await refresh(true);
-        return { installed: installed.installed.version };
       });
 
       // One window per view: asked again, the open one comes forward.

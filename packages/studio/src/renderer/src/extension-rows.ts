@@ -43,6 +43,11 @@ export interface ExtensionHost {
   /** Open (or bring forward) the Fields window on a node, where a map of records is edited as a grid
    *  (Pattershot's brief, H1). Absent: such a map is drawn in place, as any other field. */
   openFields?(kind: string, nodeId: string): void;
+  /** Whether a view of an extension opens on this machine; with `openView`, a field naming it as its `editor`
+   *  opens it from Edit instead of the Fields window (Y5). */
+  viewInstalled?(extension: string, view: string): boolean;
+  /** Open (or bring forward) a view of an extension; it follows the page's node. */
+  openView?(extension: string, view: string): void;
 }
 
 const rows = valueRows();
@@ -129,7 +134,10 @@ function extensionParts(host: ExtensionHost, extension: ExtensionDto, kind: stri
   const adapter = adapterOf(host, extension);
   const row = (decl: ExtensionFieldDto): HTMLElement => {
     if (host.openFields && isRecordMap(decl as unknown as ValueDecl)) {
-      return recordMapSummaryRow(decl, entry?.[decl.name], adapter, () => host.openFields!(kind, nodeId));
+      const view = decl.editor !== undefined ? extension.views?.find((v) => v.id === decl.editor) : undefined;
+      const here = view !== undefined && host.openView !== undefined && host.viewInstalled?.(extension.id, view.id) === true;
+      return recordMapSummaryRow(decl, entry?.[decl.name], adapter, () => host.openFields!(kind, nodeId),
+        view ? { name: view.name, ...(here ? { open: () => host.openView!(extension.id, view.id) } : {}) } : null, extension.name);
     }
     const value = entry?.[decl.name];
     // A stage the extension has since renamed says so, in place of the row's "not one of the stages".
@@ -154,7 +162,10 @@ function extensionParts(host: ExtensionHost, extension: ExtensionDto, kind: stri
  * a grid. With no keys, the Edit button alone. A problem inside it is said here too, so the page still shows
  * it's there. The Edit button stays live on a locked shard: it only opens the window, which is then read-only.
  */
-function recordMapSummaryRow(decl: ExtensionFieldDto, value: unknown, adapter: ValueAdapter, open: () => void): HTMLElement {
+function recordMapSummaryRow(decl: ExtensionFieldDto, value: unknown, adapter: ValueAdapter, open: () => void,
+  /** A view of the extension's that edits the field (Y5): opening when `open` is given (installed here), else
+   *  named in the tip as what would open once it is. */
+  editor: { name: string; open?: () => void } | null, extensionName: string): HTMLElement {
   const row = el("div", "shell-fieldrow doc-row doc-row-top ext-summary");
   const label = el("span", "shell-fieldrow-label doc-row-label", decl.label ?? decl.name);
   const body = el("div", "shell-fieldrow-body");
@@ -162,8 +173,11 @@ function recordMapSummaryRow(decl: ExtensionFieldDto, value: unknown, adapter: V
   if (lines.length) body.append(el("div", "ext-summary-lines", ...lines.map((l) => el("div", "ext-summary-line", l))));
   const edit = el("button", "btn ext-edit", "Edit");
   edit.type = "button";
-  edit.dataset["tip"] = `Edit ${decl.label ?? decl.name} in the Fields window`;
-  edit.addEventListener("click", open);
+  const what = decl.label ?? decl.name;
+  edit.dataset["tip"] = editor?.open ? `Edit ${what} in the ${editor.name}`
+    : editor ? `Edit ${what} in the Fields window. The ${editor.name} opens here instead once ${extensionName} is installed on this machine (File > Add Extension...).`
+      : `Edit ${what} in the Fields window`;
+  edit.addEventListener("click", editor?.open ?? open);
   body.append(edit);
   const exists = (kind: string, id: string): boolean => adapter.nodes(kind).some((n) => n.id === id) || adapter.label?.(kind, id) !== undefined;
   const inner = value === undefined ? [] : valueProblems(decl as unknown as TypeDecl, value, {

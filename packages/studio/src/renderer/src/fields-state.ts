@@ -9,6 +9,9 @@
 // Which item: with Follow selection on, the one an Edit button named until the
 // selection moves on, else the deepest selected item whose kind has a map of
 // records, else the deepest selected item; off, the item it was on.
+//
+// A map whose field names one of its extension's views as its `editor` is that view's, once the view is
+// installed here (Y5), so the window leaves it out (`withoutViewEdited`): one editor per field, not two.
 // ---------------------------------------------------------------------------
 
 import { isRecordMap } from "@wildwinter/app-shell/value-rows";
@@ -61,6 +64,20 @@ export function recordMapFields(extensions: readonly ExtensionDto[], kind: strin
 }
 
 /** The item the window follows to: the deepest selected one whose kind has a map of records, else the deepest. */
+/** The project with every field a view edits here taken out of its extensions: a field whose `editor` names one
+ *  of the extension's views that `installed` says opens on this machine. */
+export function withoutViewEdited(project: ProjectDto | undefined, installed: (extension: string, view: string) => boolean): ProjectDto | undefined {
+  if (!project?.extensions) return project;
+  let changed = false;
+  const extensions = project.extensions.map((x) => {
+    const edited = (f: ExtensionFieldDto): boolean => f.editor !== undefined && (x.views ?? []).some((v) => v.id === f.editor) && installed(x.id, f.editor);
+    if (!Object.values(x.targets).some((t) => t.fields.some(edited))) return x;
+    changed = true;
+    return { ...x, targets: Object.fromEntries(Object.entries(x.targets).map(([kind, t]) => [kind, { ...t, fields: t.fields.filter((f) => !edited(f)) }])) };
+  });
+  return changed ? { ...project, extensions } : project;
+}
+
 export function followTarget(nodes: readonly FieldsNode[], extensions: readonly ExtensionDto[]): FieldsNode | null {
   return nodes.find((n) => recordMapFields(extensions, n.kind).length > 0) ?? nodes[0] ?? null;
 }

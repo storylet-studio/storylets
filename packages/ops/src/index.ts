@@ -58,7 +58,7 @@ export {
 } from "./merge.js";
 // A project's Storylet extensions as files: the manifest a merge reads from the working tree
 export {
-  extensionShardPath, manifestPath, planExtensionUpgrades, planExtensionValue, planExtensionValues, planTakeExtension, projectManifests, readProjectManifest, soundManifest,
+  extensionShardPath, manifestPath, planExtensionUpgrades, planExtensionValue, planExtensionValues, planTakeExtension, planTakeExtensions, projectManifests, readProjectManifest, soundManifest,
 } from "./extensions.js";
 export type { ExtensionTake, ExtensionUpgrade, ExtensionValueEdit } from "./extensions.js";
 export type { ShardMergeInput, ShardMergeStep } from "./merge.js";

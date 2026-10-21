@@ -14,9 +14,12 @@ here is part of shipping, not a courtesy.
 
 - **Add Extension…** (File, beside Project Settings) takes an extension's package, its folder or a `.tgz` made by
   `npm pack`, into the project in one step you can undo: the extension's manifest goes into the project and the
-  project takes that version. A newer version of an extension the project already takes is
-  taken as `storyletengine format` takes one, renamed stages and all. Its views are installed on this machine at
-  the same time. A package with faults in its manifest, or with nothing for Storyletter, is turned down with why.
+  project takes that version. Its views are installed on this machine at the same time. It's the one way in,
+  whoever you are: for an extension the project already takes, it installs the views here, and offers to update
+  the project when the package is newer (taken as `storyletengine format` takes one, renamed stages and all). An
+  older package never takes the project back. An extension that needs another the project doesn't take asks for
+  that one's package too, and adds both in one step. A package with faults in its manifest, or with nothing for
+  Storyletter, is turned down with why.
 - **An extension's views.** An extension can bring views of its own (a performance sheet, say), and the
   project's views are listed by name in the Window menu. Each opens in a window of its own beside the editor,
   pinned to it and remembering where you put it, as the tool windows do (Reset View brings it back). A view
@@ -24,10 +27,15 @@ here is part of shipping, not a courtesy.
   to undo, from the view (Cmd+Z there) or the editor. A change it can't make is turned down whole: data
   somebody else holds, a project you may only read, something that has gone, or a value the extension doesn't
   take. Views close with the project.
-- **Install <Name> on This Machine…** (Window) for a project that takes an extension whose views aren't on this
-  machine yet: choose its package and its views are installed, leaving the project as it is. A view whose
-  installed version differs from the project's but shares its major version still opens, and its window's title
-  says so.
+- **Views not installed here.** On a machine without an extension's views, the Window menu lists each as
+  "(not installed)…" with why, and choosing it opens Add Extension for that extension's package, which installs
+  its views and leaves the project as it is. A view whose installed version differs from the project's but
+  shares its major version still opens, and its window's title says so.
+- **A view as a field's editor.** An extension can name one of its views as the editor of a field holding a
+  list of records by name. Its Edit button then opens that view, and the Fields window leaves the field out;
+  until the view is installed here, Edit opens the Fields window as before.
+- **Missing extensions said.** An extension that needs another the project doesn't take is warned of with the
+  project's problems, and its views are told, so they can say so.
 
 ### Removed
 

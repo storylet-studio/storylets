@@ -142,7 +142,7 @@ describe("Add Extension...", () => {
     const s = bare.session;
 
     const text = packageText();
-    const result = await addExtension(s, parseManifest(text), text);
+    const result = await addExtension(s, [{ manifest: parseManifest(text), text }]);
     expect(result).not.toHaveProperty("error");
     expect(read(s, "extensions/probe.extension.json")).toBe(text);
     expect((parseSource(read(s, "probe.storyletproj")) as { extensions: unknown }).extensions).toEqual({ probe: { version: "1.1.0" } });
@@ -166,7 +166,7 @@ describe("Add Extension...", () => {
     expect(entries(s, BOX_SHARD)["card"]!["c_bell"]!["act"]).toBe("opening");
 
     const text = packageText("1.2.0");
-    expect(await addExtension(s, parseManifest(text), text)).not.toHaveProperty("error");
+    expect(await addExtension(s, [{ manifest: parseManifest(text), text }])).not.toHaveProperty("error");
     expect((parseSource(read(s, "probe.storyletproj")) as typeof project).extensions.probe).toEqual({ version: "1.2.0" });
     expect(entries(s, BOX_SHARD)["card"]!["c_bell"]!["act"]).toBe("setup");
     expect(read(s, "extensions/probe.extension.json")).toBe(text);

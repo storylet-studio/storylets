@@ -4,7 +4,7 @@
 // and the edits it sends back landing through the page's own save.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fieldsHint, fieldsNodeLabel, fieldsState, followTarget, recordMapFields, selectedNodes } from "./fields-state.js";
+import { fieldsHint, fieldsNodeLabel, fieldsState, followTarget, recordMapFields, selectedNodes, withoutViewEdited } from "./fields-state.js";
 import { createFieldsLink } from "./fields-link.js";
 import { extensionSection, sweepExtensionFold } from "./extension-rows.js";
 import type { ExtensionHost } from "./extension-rows.js";
@@ -103,6 +103,36 @@ describe("on the page", () => {
     expect(open).toHaveBeenCalledWith("card", "c_bell");
     // No grid in the page.
     expect(sec.querySelector(".shell-recordgrid-table")).toBeNull();
+  });
+
+  it("a map naming a view as its editor opens it once installed here, else the window, saying so (Y5)", () => {
+    const sheet: ExtensionDto = {
+      ...shot, views: [{ id: "sheet", name: "Performance sheet" }],
+      targets: { ...shot.targets, card: { fields: shot.targets["card"]!.fields.map((f) => (f.name === "performance" ? { ...f, editor: "sheet" } : f)) } },
+    };
+    const fields = vi.fn();
+    const view = vi.fn();
+    const edit = (installed: boolean): HTMLButtonElement => {
+      sweepExtensionFold(); sweepExtensionFold();
+      const sec = extensionSection({ ...host(), project: () => ({ ...project, extensions: [sheet] }), openFields: fields, openView: view, viewInstalled: () => installed }, sheet, "card", "c_bell");
+      return sec.querySelector<HTMLButtonElement>(".ext-edit")!;
+    };
+    const there = edit(true);
+    expect(there.dataset["tip"]).toBe("Edit Performance in the Performance sheet");
+    there.click();
+    expect(view).toHaveBeenCalledWith("shot", "sheet");
+    const absent = edit(false);
+    expect(absent.dataset["tip"]).toBe("Edit Performance in the Fields window. The Performance sheet opens here instead once Shot is installed on this machine (File > Add Extension...).");
+    absent.click();
+    expect(fields).toHaveBeenCalledWith("card", "c_bell");
+    expect(view).toHaveBeenCalledTimes(1);
+
+    // The Fields window leaves the map out while the view opens here, and only then.
+    const p = { ...project, extensions: [sheet] } as ProjectDto;
+    const names = (q: ProjectDto | undefined) => q!.extensions![0]!.targets["card"]!.fields.map((f) => f.name);
+    expect(names(withoutViewEdited(p, () => true))).toEqual(["note"]);
+    expect(names(withoutViewEdited(p, () => false))).toEqual(["note", "performance"]);
+    expect(withoutViewEdited(project, () => true)).toBe(project);
   });
 
   it("no keys: the Edit button alone", () => {

@@ -610,7 +610,12 @@ export interface ExtensionDto {
   views?: { id: string; name: string }[];
   /** The other extensions whose data its views read. */
   reads?: string[];
+  /** The extensions its manifest requires that the project doesn't take, by id. Absent when none. */
+  missing?: string[];
 }
+
+/** A view the open project offers, as the editor needs it: whether it opens on this machine. */
+export interface ViewOfferDto { extension: string; view: string; installed: boolean }
 
 export interface ExtensionTargetDto {
   /** The extension's own fields, in the manifest's order. Shaped as `@wildwinter/app-shell/value-rows`' ValueDecl. */
@@ -638,6 +643,8 @@ export interface ExtensionFieldDto {
   max?: number;
   required?: boolean;
   editorOnly?: boolean;
+  /** One of the extension's views, by id, that edits this field (a map of records) in place of the grid. */
+  editor?: string;
   /** A sentence per enum value, flag or stage: the chosen one's is shown under the control. */
   valueHelp?: Record<string, string>;
   /** A quality's renames: every name a stage has had, to the stage it is now. */
@@ -1741,9 +1748,9 @@ export type MenuCommand =
   | { cmd: "nav-back" }
   | { cmd: "nav-forward" }
   | { cmd: "close-project" }
-  // View extensions: File > Add Extension..., and the Window menu's views and their installs.
-  | { cmd: "add-extension" }
-  | { cmd: "install-extension"; extension: string }
+  // View extensions: File > Add Extension..., or the package of a view "(not installed)..." in the Window menu,
+  // and each view.
+  | { cmd: "add-extension"; extension?: string }
   | { cmd: "open-view"; extension: string; view: string };
 
 /** The surface the preload bridge exposes as `window.studio`. */
@@ -2231,12 +2238,16 @@ export interface StudioApi {
   closeFields(): Promise<void>;
 
   // --- view extensions (patterkit design/view-extensions.md) -----------------------
-  /** File > Add Extension...: pick an extension's package (a folder or an npm pack .tgz), take its manifest
-   *  into the project and pin it as one undo step, and install its views on this machine. Null: cancelled. */
-  addExtension(): Promise<OpenResult | { error: string } | null>;
-  /** Install <Name> on This Machine...: pick the package of an extension the project takes, and install its
-   *  views here; the project is left alone. Null: cancelled. */
-  installExtension(extension: string): Promise<{ installed: string } | { error: string } | null>;
+  /** File > Add Extension...: pick an extension's package (a folder or an npm pack .tgz) and install its views
+   *  on this machine. An extension the project doesn't take goes in (its manifest and pin, as one undo step, with
+   *  any it requires that the project lacks): the project comes back. One the project takes is offered at a
+   *  newer version, and never taken back to an older one: `installed` when the project stays as it was, with
+   *  `note` when it keeps a newer pin. `expect` (a view "(not installed)..."): only that extension's package
+   *  will do. Null: cancelled. */
+  addExtension(expect?: string): Promise<OpenResult | { installed: string; name: string; note?: string } | { error: string } | null>;
+  /** Each time main works out the project's views again: which are installed here (a field's Edit opens its
+   *  editor view only then). */
+  onViewOffers(handler: (offers: ViewOfferDto[]) => void): void;
   /** Open (or bring forward) one of the project's views in its own window. */
   openView(extension: string, view: string): Promise<{ error: string } | undefined>;
 
@@ -2491,7 +2502,6 @@ export const INVOKE_CHANNELS = {
   "extension:setValue": "setExtensionValue",
   "extension:setValues": "setExtensionValues",
   "extension:add": "addExtension",
-  "extension:install": "installExtension",
   "view:open": "openView",
   "card:create": "createCard",
   "card:duplicate": "duplicateCard",
@@ -2652,6 +2662,7 @@ export const PUSH_CHANNELS = {
   "fields:show": carries<FieldsWinState>(),
   "fields:edit": carries<FieldsEdit>(),
   "fields:follow": carries<boolean>(),
+  "views:offers": carries<ViewOfferDto[]>(),
   "board:askClose": carries<void>(),
   "project:opened": carries<OpenResult | { error: string } | PackOffer>(),
   "liveLink:status": carries<LiveLinkStatus>(),

@@ -21,7 +21,7 @@ import { loadProject } from "../src/load.js";
 import { runValidate } from "../src/validate.js";
 import { runFormat } from "../src/format.js";
 import { planShardMerge, runMerge } from "../src/merge.js";
-import { planExtensionValue, planExtensionValues, planTakeExtension, projectManifests, readProjectManifest } from "../src/extensions.js";
+import { planExtensionValue, planExtensionValues, planTakeExtension, planTakeExtensions, projectManifests, readProjectManifest } from "../src/extensions.js";
 import { runPack } from "../src/pack.js";
 import { runExport } from "../src/export.js";
 
@@ -254,6 +254,17 @@ describe("validation, driven by the manifest", () => {
       "probe.storyletproj: the project's pin for \"probe\" has settings, which extensions no longer have; they're ignored"]);
   });
 
+  it("warns of an extension whose requirement the project doesn't take", () => {
+    const issues = issuesAfter((dir) => {
+      const m = JSON.parse(readFileSync(join(dir, "extensions/probe.extension.json"), "utf8"));
+      m.requires = ["patterstage"];
+      writeFileSync(join(dir, "extensions/probe.extension.json"), JSON.stringify(m, null, 2));
+    });
+    expect(messages(issues, "error")).toEqual([]);
+    expect(messages(issues, "warning").filter((m) => m.includes("requires"))).toEqual([
+      "probe.storyletproj: the project takes \"probe\", which requires the extension \"patterstage\", but doesn't take it; add \"patterstage\" to the project, or Probe won't work in the game"]);
+  });
+
   it("warns about a manifest that still has settings or claims, and ignores them", () => {
     const issues = issuesAfter((dir) => {
       const m = JSON.parse(readFileSync(join(dir, "extensions/probe.extension.json"), "utf8"));
@@ -473,6 +484,28 @@ describe("taking an extension's manifest (Add Extension...)", () => {
       expect(pinned.extensions.probe).toEqual({ version: "1.2.0" });
       const box = parseSource(take.writes.get(join(dir, BOX_SHARD))!) as { entries: Entries };
       expect(box.entries["card"]!["c_bell"]!["act"]).toBe("setup");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("with the extension it requires, as one change: both manifests and both pins", () => {
+    const dir = scratch();
+    try {
+      const project = read(dir, "probe.storyletproj") as { extensions?: Record<string, unknown> };
+      delete project.extensions;
+      write(dir, "probe.storyletproj", project);
+      rmSync(join(dir, "extensions"), { recursive: true });
+      const stageText = JSON.stringify({ schema: "wildwinter/extension@0", id: "stage", name: "Stage", version: "0.5.0", targets: { storylets: { card: { fields: [{ name: "mark", type: "text" }] } } } }, null, 2);
+      const probe = JSON.parse(manifestText("1.1.0"));
+      probe.requires = ["stage"];
+      const probeText = JSON.stringify(probe, null, 2);
+      const take = planTakeExtensions(dir, loadProject(dir).source!, [
+        { manifest: parseManifest(stageText), text: stageText }, { manifest: parseManifest(probeText), text: probeText },
+      ]);
+      expect(take.was).toBeUndefined();
+      expect(take.writes.get(join(dir, "extensions/stage.extension.json"))).toBe(stageText);
+      expect(take.writes.get(join(dir, "extensions/probe.extension.json"))).toBe(probeText);
+      const pinned = parseSource(take.writes.get(join(dir, "probe.storyletproj"))!) as { extensions: Record<string, unknown> };
+      expect(pinned.extensions).toEqual({ stage: { version: "0.5.0" }, probe: { version: "1.1.0" } });
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 

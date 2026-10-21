@@ -16,6 +16,7 @@ import type { MenuCommand, StudioState } from "../shared/api.js";
 import { EXAMPLES } from "../shared/examples.js";
 import { push } from "./ipc/push.js";
 import { manualCheckForUpdates } from "@wildwinter/app-shell/updater";
+import { viewMenuLabel } from "@wildwinter/app-shell/view-package";
 
 /**
  * The Server menu's state, or nothing at all.
@@ -61,23 +62,22 @@ export interface MenuViews {
 
 /**
  * The Window menu's views (patterkit design/view-extensions.md), by name in the project's order, each opening its
- * window. One that can't open here is shown disabled with why under it, and its extension's Install item after
- * (once per extension).
+ * window. One that can't open here is "<name> (not installed)..." with why under it, and opens Add Extension for
+ * its extension's package (app-shell 0.60's one way in).
  */
 export function viewMenuItems(
   items: readonly MenuView[], send: (command: MenuCommand) => () => void,
 ): Electron.MenuItemConstructorOptions[] {
   const out: Electron.MenuItemConstructorOptions[] = [];
-  const offeredInstall = new Set<string>();
   for (const v of items) {
     if (v.why === undefined) {
-      out.push({ label: v.name, click: send({ cmd: "open-view", extension: v.extension, view: v.view }) });
+      out.push({ label: viewMenuLabel(v.name, true), click: send({ cmd: "open-view", extension: v.extension, view: v.view }) });
       continue;
     }
-    out.push({ label: v.name, enabled: false, toolTip: v.why }, { label: v.why, enabled: false });
-    if (offeredInstall.has(v.extension)) continue;
-    offeredInstall.add(v.extension);
-    out.push({ label: `Install ${v.extensionName} on This Machine\u2026`, click: send({ cmd: "install-extension", extension: v.extension }) });
+    out.push(
+      { label: viewMenuLabel(v.name, false), toolTip: v.why, click: send({ cmd: "add-extension", extension: v.extension }) },
+      { label: v.why, enabled: false },
+    );
   }
   return out;
 }

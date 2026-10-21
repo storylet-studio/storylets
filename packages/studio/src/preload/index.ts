@@ -224,8 +224,8 @@ const api: StudioApi = {
   closeFields: () => invoke("fields:close"),
   // View extensions (patterkit design/view-extensions.md).
   setExtensionValues: (extension, label, edits) => invoke("extension:setValues", extension, label, edits),
-  addExtension: () => invoke("extension:add"),
-  installExtension: (extension) => invoke("extension:install", extension),
+  addExtension: (expect?: string) => invoke("extension:add", expect),
+  onViewOffers: (handler) => { listen("views:offers", handler); },
   openView: (extension, view) => invoke("view:open", extension, view),
   exportBundle: (opts) => invoke("bundle:export", opts),
   exportXlsx: () => invoke("xlsx:export"),   // Publish Spreadsheet
