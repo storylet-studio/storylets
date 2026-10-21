@@ -1,5 +1,16 @@
 # @storylet-studio/with-patter
 
+## 0.4.0
+
+### Minor Changes
+
+- cd4230c: Takes Patterplay 0.34.0 or later (`@patterkit/runtime` `>=0.34.0 <1.0.0`), where `extensionSettings` is gone with extension settings.
+
+### Patch Changes
+
+- Updated dependencies [431356a]
+  - @storylet-studio/model@0.13.0
+
 ## 0.3.0
 
 ### Minor Changes

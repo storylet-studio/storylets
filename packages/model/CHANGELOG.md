@@ -1,5 +1,11 @@
 # @storylet-studio/model
 
+## 0.13.0
+
+### Minor Changes
+
+- 431356a: `ProjectExtension.settings` and `BundleExtension.settings` are removed: Storylet extensions no longer have settings, which only named the host field a claim presented, and claims are gone too. A project or bundle that still carries them reads as before, and they're ignored.
+
 ## 0.12.0
 
 ### Minor Changes
