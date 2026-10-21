@@ -16,7 +16,7 @@ import {
 } from "@wildwinter/app-shell/view-host";
 import { planPackageAdd } from "@wildwinter/app-shell/view-package";
 import type { ExtensionPackage, ViewWindow } from "@wildwinter/app-shell/view-host";
-import { pinToolWindow, rescueToolWindow, savedWindowRect } from "@wildwinter/app-shell/tool-window";
+import { rescueToolWindow, savedWindowRect } from "@wildwinter/app-shell/tool-window";
 import { MANIFEST_FILE_SUFFIX, missingRequirements, viewsFor } from "@wildwinter/toolkit/extensions";
 import { join } from "node:path";
 import { manifestPath } from "@storylet-studio/ops";
@@ -175,7 +175,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
       for (const view of open.values()) {
         if (view.window.isDestroyed()) continue;
         rescueToolWindow(view.window, VIEW_DEFAULT);
-        pinToolWindow(view.window, deps.editor(), true);
+        view.setPinned(true); // the window and its head's pin
       }
     },
     isView: (win) => win !== null && win !== undefined && [...open.values()].some((v) => v.window === win),
@@ -271,7 +271,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
         // The versions differ but share a major version: it opens, and its head says so.
         ...(warning !== undefined ? { title: `${view.name} (${warning})` } : {}),
         rect: savedWindowRect(slice.bounds(), VIEW_DEFAULT, VIEW_MIN), min: VIEW_MIN,
-        pinTo: () => deps.editor(), pinned: slice.pinned(), remember: (bounds) => slice.remember(bounds),
+        pinTo: () => deps.editor(), pinned: slice.pinned(), onPin: (on) => slice.setPinned(on), remember: (bounds) => slice.remember(bounds),
         devTools: !app.isPackaged, preload: viewPreload(),
         onClosed: () => { if (open.get(key) === opened) open.delete(key); },
       });
