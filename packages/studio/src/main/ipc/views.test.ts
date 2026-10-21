@@ -35,7 +35,12 @@ vi.mock("electron", () => ({
   app: { getPath: () => "/user-data", isPackaged: true },
   dialog: {
     showOpenDialog: async () => ({ canceled: false, filePaths: [shell.pick] }),
-    showMessageBox: async (_w: unknown, o: { message: string }) => { shell.asked.push(o.message); return { response: shell.answers.shift() ?? 0 }; },
+    showMessageBox: async (_w: unknown, o: { message: string; buttons: string[] }) => {
+      // Off macOS the package picker first asks file or folder: a file, unasked by the tests.
+      if (o.buttons.includes("Package File\u2026")) return { response: 0 };
+      shell.asked.push(o.message);
+      return { response: shell.answers.shift() ?? 0 };
+    },
   },
 }));
 vi.mock("@wildwinter/app-shell/tool-window", () => ({
