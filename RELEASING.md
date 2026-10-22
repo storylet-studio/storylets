@@ -51,16 +51,31 @@ failing, so a break there reaches a human by hand instead of going red.
 
 The pipeline runs three jobs:
 
-- **`notes`** creates the release as a **draft**, with that changelog section as its body.
+- **`notes`** runs the tests, then creates the release as a **draft**, with that changelog
+  section as its body, and hands the draft's id to the other jobs.
 - **`build`** runs the OS matrix, checks the tag matches the app version (a mismatch fails
-  here rather than publishing the wrong thing), then builds, signs, notarises and uploads the
-  installers plus the updater feeds (`latest-mac.yml`, `latest.yml`, `latest-linux.yml`).
-- **`publish`** flips the draft live once every OS has uploaded.
+  here rather than publishing the wrong thing), then builds, signs and notarises with
+  electron-builder's `--publish never`, and uploads the installers, their blockmaps and the
+  updater feeds (`latest-mac.yml`, `latest.yml`, `latest-linux.yml`) to the draft **by its id**.
+- **`publish`** checks the draft holds all ten files, the three feeds among them, and flips it
+  live.
+
+**Why by id.** electron-builder used to publish, finding the draft by listing the releases. On
+0.26.0 (2026-10-22) that list didn't show the notes draft for minutes: the Linux and Windows
+builds each made a draft of their own, the files split across two, and publish made the empty
+notes draft live, so Check for Updates found no feed. Nothing now looks a release up by its tag.
 
 The draft is a staging area, so a half-built release is never visible. If one OS fails, fix it
-and re-run: the draft is still there and electron-builder reuses a draft whose tag matches.
+and re-run the failed jobs: they reuse the first run's draft id, and an upload replaces a file
+of the same name already there.
 When the fix is a commit, move the tag to it (delete it on the remote, tag again, push once)
-rather than spending a version on a release nobody received.
+rather than spending a version on a release nobody received. Delete that run's draft first.
+
+**Rehearsing the pipeline.** A tag with a hyphen, such as `v0.26.1-rehearsal.1`, runs every job
+but `publish`: the ten files land on a draft marked pre-release, which never goes live or takes
+"Latest". Make it on a commit off main that sets the studio's version to match and dates a
+changelog section for it, push only the tag, check the draft, then delete the draft and the
+tag. Used to prove the by-id upload on 2026-10-22.
 
 **The mac job failing at `security set-key-partition-list` with "The user name or passphrase
 you entered is not correct"** is electron-builder, not the secrets (2026-09-13, v0.7.0). Up to
