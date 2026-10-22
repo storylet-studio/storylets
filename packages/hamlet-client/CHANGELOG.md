@@ -7,6 +7,15 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-22
+
+### Changed
+
+- **Patterplay 0.34.0 in every host.** The web client, and the Godot, Unity and Unreal zips, which were on 0.32.0:
+  one Patter version everywhere again. None of Patter's changes since changes how the Hamlet plays.
+- **The Storylet Engine 0.14.0 in all four hosts**, which no longer carries extension settings. The Hamlet takes
+  none, so it plays as it did.
+
 ## [0.8.0] - 2026-10-19
 
 ### Changed

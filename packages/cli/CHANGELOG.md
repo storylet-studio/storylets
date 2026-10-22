@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-22
+
 ### Added
 
 - **An extension's requirements.** An extension's manifest can name other extensions it needs (`requires`), and

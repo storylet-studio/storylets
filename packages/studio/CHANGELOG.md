@@ -10,26 +10,36 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-22
+
 ### Added
 
-- **Add Extension…** (File, beside Project Settings) takes an extension's package, its folder or a `.tgz` made by
-  `npm pack`, into the project in one step you can undo: the extension's manifest goes into the project and the
-  project takes that version. Its views are installed on this machine at the same time. It's the one way in,
-  whoever you are: for an extension the project already takes, it installs the views here, and offers to update
-  the project when the package is newer (taken as `storyletengine format` takes one, renamed stages and all). An
-  older package never takes the project back. An extension that needs another the project doesn't take asks for
-  that one's package too, and adds both in one step. A package with faults in its manifest, or with nothing for
-  Storyletter, is turned down with why.
+- **The Extensions window** (File > Extensions…, beside Project Settings) lists the extensions the project takes
+  and the ones installed on this machine, and is where you manage them:
+  - **Add** takes an extension's package, its folder or a `.tgz` made by `npm pack`, into the project in one step
+    you can undo: the extension's manifest goes into the project and the project takes that version. Its views
+    are installed on this machine at the same time. An extension that needs another the project doesn't take asks
+    for that one's package too, and adds both in one step. A package with faults in its manifest, or with nothing
+    for Storyletter, is turned down with why.
+  - **Update…** takes a newer package of the same extension, telling you first what will happen, as one step you
+    can undo (taken as `storyletengine format` takes one, renamed stages and all). The same version installs its
+    views again. An older version, or another extension's package, is turned down with both named.
+  - **Remove from Project…** asks first, saying how much data the extension holds, and keeps that data: it's one
+    step you can undo. It's turned down while another extension the project takes needs it.
+  - **Install on this machine…** installs the views of an extension the project takes, and leaves the project as
+    it is.
+  - **Uninstall** takes one version of an extension's views off this machine, after asking. Its view windows
+    close, and uninstalling the last version clears what its views remembered.
 - **An extension's views.** An extension can bring views of its own (a performance sheet, say), and the
   project's views are listed by name in the Window menu. Each opens in a window of its own beside the editor,
   pinned to it and remembering where you put it, as the tool windows do (Reset View brings it back). A view
   shows what you've typed, before it's saved, follows what you select, and each change it makes is one step
   to undo, from the view (Cmd+Z there) or the editor. A change it can't make is turned down whole: data
   somebody else holds, a project you may only read, something that has gone, or a value the extension doesn't
-  take. Views close with the project.
+  take. Views close with the project, and what a view remembers is kept when Storyletter restarts.
 - **Views not installed here.** On a machine without an extension's views, the Window menu lists each as
-  "(not installed)…" with why, and choosing it opens Add Extension for that extension's package, which installs
-  its views and leaves the project as it is. A view whose installed version differs from the project's but
+  "(not installed)…" with why, and choosing it opens the Extensions window on that extension, ready to install
+  its views. A view whose installed version differs from the project's but
   shares its major version still opens, and its window's title says so.
 - **A view as a field's editor.** An extension can name one of its views as the editor of a field holding a
   list of records by name. Its Edit button then opens that view, and the Fields window leaves the field out;

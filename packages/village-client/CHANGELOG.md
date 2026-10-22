@@ -9,6 +9,14 @@ the release notes, and refuses a tag with no dated section for it.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
+### Changed
+
+- **The page runs the Storylet Engine 0.14.0**, in place of 0.11.1. The engine's changes since come with it, among
+  them a saved value the project no longer takes put back to its default, every declaration's default carried in
+  the bundle, and extension values; none changes how the Village plays.
+
 ## [0.4.0] - 2026-10-06
 
 ### Changed
