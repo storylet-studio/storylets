@@ -26,6 +26,7 @@ const panel = extensionsPanel({
   install: (extension) => { void studio.extensionsAsk({ do: "install", extension }); },
   remove: (extension) => { void studio.extensionsAsk({ do: "remove", extension }); },
   uninstall: (id, version) => { void studio.uninstallExtension(id, version); },
+  update: (extension) => { void studio.extensionsAsk({ do: "update", extension }); },
 });
 body.append(panel.el);
 const render = (state: ExtensionsWinState): void => panel.render({ ...state, app: "Storyletter" });

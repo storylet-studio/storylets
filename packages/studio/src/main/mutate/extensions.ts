@@ -109,7 +109,9 @@ export async function addExtension(session: ProjectSession, items: readonly { ma
   if (source === undefined) return refuse(session, "the project did not load");
   const take = planTakeExtensions(session.loaded.dir, source, items);
   const names = items.map((i) => i.manifest.name);
-  const label = `Add ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}`;
+  // One the project takes already, at another version, is an update, as Patterpad's step says.
+  const updating = items.length === 1 && source.project.extensions?.[items[0]!.manifest.id] !== undefined;
+  const label = `${updating ? "Update" : "Add"} ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}`;
   return commit(session, label, freshKey("ext"), [...take.writes].map(([path, content]) => ({ path, content })));
 }
 

@@ -181,6 +181,23 @@ export function createCommands(ctx: CommandsContext) {
     ctx.render();
   }
 
+  /** Update... in the Extensions window: main asks for the package and says what will happen. A newer version the
+   *  project takes comes back as the project; one that changed only this machine is said in a flash. */
+  async function updateExtension(id: string): Promise<void> {
+    await saves.flush();
+    const result = await studio.updateExtension(id);
+    if (result === null) return;
+    if ("installed" in result) {
+      flash(result.note ? `${result.name} ${result.installed} is already installed. ${result.note}`
+        : `${result.reinstalled ? "Reinstalled" : "Updated"} ${result.name} ${result.installed} on this machine`, "ok");
+      return;
+    }
+    if (!ctx.applied(result) || "error" in result) return;
+    const now = (result.project.extensions ?? []).find((x) => x.id === id);
+    flash(now ? `Updated ${now.name} to ${now.version}` : "Updated the extension", "ok");
+    ctx.render();
+  }
+
   function onMenu(command: MenuCommand): void {
     const project = session.project;
     switch (command.cmd) {
@@ -257,6 +274,7 @@ export function createCommands(ctx: CommandsContext) {
       case "extensions": void studio.openExtensions(command.extension); break;
       case "add-extension": if (project) void addExtension(command.extension); break;
       case "remove-extension": if (project) void removeExtension(command.extension); break;
+      case "update-extension": if (project) void updateExtension(command.extension); break;
       case "open-view": if (project) void studio.openView(command.extension, command.view).then((r) => { if (r) flashError(r.error); }); break;
       // Help > Open an Example: main asks before leaving an open project, then for a folder.
       case "open-example": void ctx.adopt(studio.openExample(command.file)); break;

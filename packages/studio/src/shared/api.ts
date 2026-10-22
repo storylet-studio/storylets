@@ -1755,6 +1755,7 @@ export type MenuCommand =
   | { cmd: "extensions"; extension?: string }
   | { cmd: "add-extension"; extension?: string }
   | { cmd: "remove-extension"; extension: string }
+  | { cmd: "update-extension"; extension: string }
   | { cmd: "open-view"; extension: string; view: string };
 
 /** What the Extensions window draws (the shell's `extensionsPanel`; patterkit design/extensions-window.md). */
@@ -1767,7 +1768,8 @@ export interface ExtensionsWinState {
 
 /** A click in the Extensions window that is a project step, so the editor runs it, as File > Extensions...
  *  would: Add, Install on this machine (Add for one extension), and Remove from Project. */
-export type ExtensionsAsk = { do: "add" } | { do: "install"; extension: string } | { do: "remove"; extension: string };
+export type ExtensionsAsk =
+  | { do: "add" } | { do: "install"; extension: string } | { do: "remove"; extension: string } | { do: "update"; extension: string };
 
 /** The surface the preload bridge exposes as `window.studio`. */
 export interface StudioApi {
@@ -2266,6 +2268,10 @@ export interface StudioApi {
   /** Remove from Project... (asked for in the Extensions window): refused while another extension needs it, asked
    *  first with how much data it has, then one undo step that keeps the data. Null: cancelled. */
   removeExtension(id: string): Promise<OpenResult | { error: string } | null>;
+  /** Update... (asked for in the Extensions window): the extension's package, then what will happen, asked first.
+   *  The project comes back when it took the new version; `installed` when only this machine changed (`reinstalled`
+   *  for the same version; `note` when there was nothing to do). Null: cancelled. */
+  updateExtension(id: string): Promise<OpenResult | { installed: string; name: string; note?: string; reinstalled?: true } | { error: string } | null>;
   /** Extensions window: its rows, read as it boots. */
   extensionsState(): Promise<ExtensionsWinState>;
   /** Extensions window: its rows again, whenever they change. */
@@ -2538,6 +2544,7 @@ export const INVOKE_CHANNELS = {
   "extensions:open": "openExtensions",
   "extension:remove": "removeExtension",
   "extensions:state": "extensionsState",
+  "extension:update": "updateExtension",
   "extensions:ask": "extensionsAsk",
   "extension:uninstall": "uninstallExtension",
   "extensions:setPin": "setExtensionsPinned",

@@ -68,16 +68,16 @@ const sentence = (p: Problem): string => {
  * sentence), or one that targets nothing in Storyletter. A warning doesn't refuse: the project's own checks
  * show it once the manifest is there.
  */
-export function packageRefusal(pkg: Pick<ExtensionPackage, "manifest" | "problems">): string | undefined {
+export function packageRefusal(pkg: Pick<ExtensionPackage, "manifest" | "problems">, done = "added"): string | undefined {
   const name = typeof pkg.manifest?.name === "string" ? pkg.manifest.name : "This extension";
   const errors = pkg.problems.filter((p) => p.severity === "error");
-  if (errors.length > 0) return `${name}'s manifest has ${errors.length === 1 ? "a fault" : "faults"}, so it wasn't added. ${errors.map(sentence).join(" ")}`;
+  if (errors.length > 0) return `${name}'s manifest has ${errors.length === 1 ? "a fault" : "faults"}, so it wasn't ${done}. ${errors.map(sentence).join(" ")}`;
   const storylets = pkg.manifest.targets?.storylets;
   if (storylets === undefined || Object.keys(storylets).length === 0) {
     const hosts = Object.keys(pkg.manifest.targets ?? {});
     return hosts.includes("patter")
-      ? `${name} is an extension for Patterpad, with nothing for Storyletter, so it wasn't added.`
-      : `${name} has nothing for Storyletter, so it wasn't added.`;
+      ? `${name} is an extension for Patterpad, with nothing for Storyletter, so it wasn't ${done}.`
+      : `${name} has nothing for Storyletter, so it wasn't ${done}.`;
   }
   return undefined;
 }

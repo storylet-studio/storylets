@@ -313,3 +313,47 @@ describe("the Extensions window", () => {
     expect(shell.asked).toEqual(["Uninstall Probe 1.0.0 from this machine?", "Uninstall Probe 1.0.0 from this machine?", "Uninstall Probe 1.1.0 from this machine?"]);
   });
 });
+
+describe("Update...", () => {
+  it("refuses another extension's package and an older version, naming them", async () => {
+    const { call } = host();
+    const other = JSON.parse(readFileSync(join(packageDir, "probe.extension.json"), "utf8"));
+    other.id = "lights"; other.name = "Lights";
+    const text = JSON.stringify(other);
+    shell.queue = [{ ok: true, manifest: parseManifest(text), problems: [], files: new Map([["lights.extension.json", new TextEncoder().encode(text)]]) }];
+    expect(await call("extension:update", "probe")).toEqual({ error: "That package is Lights (\u201clights\u201d), not Probe (\u201cprobe\u201d), so nothing changed." });
+    shell.version = "1.0.0";
+    expect(await call("extension:update", "probe")).toEqual({
+      error: "This project takes Probe 1.1.0, newer than this package's 1.0.0, so nothing changed: an update never goes back to an older version.",
+    });
+    expect(shell.installs).toBe(0);
+    expect(shell.asked).toEqual([]);
+  });
+
+  it("reinstalls the same version, asked first", async () => {
+    const { session, call } = host();
+    const before = readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8");
+    shell.answers = [1, 0];
+    expect(await call("extension:update", "probe")).toBeNull();
+    expect(shell.installs).toBe(0);
+    const r = await call("extension:update", "probe") as Record<string, unknown>;
+    expect(shell.asked).toEqual(["Reinstall Probe 1.1.0?", "Reinstall Probe 1.1.0?"]);
+    expect(shell.installs).toBe(1);
+    // The package's manifest is the project's copy, so only this machine changes.
+    expect(r).toEqual({ installed: "1.1.0", name: "Probe", reinstalled: true });
+    expect(readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8")).toBe(before);
+  });
+
+  it("says what a newer version changes, then takes it as one step and installs it", async () => {
+    const { session, call } = host();
+    shell.version = "1.2.0";
+    shell.answers = [0];
+    const r = await call("extension:update", "probe") as { error?: string };
+    expect(r.error).toBeUndefined();
+    expect(shell.asked).toEqual(["Update Probe from 1.1.0 to 1.2.0?"]);
+    expect(shell.details[0]).toMatch(/The project takes it as one step you can undo, and its views install on this machine\. Values it no longer accepts show among the problems afterwards\.$/);
+    expect(shell.installs).toBe(1);
+    expect(readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8")).toContain('version: "1.2.0"');
+    expect(session.history.undoLabel).toBe("Update Probe");
+  });
+});

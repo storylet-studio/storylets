@@ -228,6 +228,7 @@ const api: StudioApi = {
   // The Extensions window (patterkit design/extensions-window.md).
   openExtensions: (focus?: string) => invoke("extensions:open", focus),
   removeExtension: (id: string) => invoke("extension:remove", id),
+  updateExtension: (id: string) => invoke("extension:update", id),
   extensionsState: () => invoke("extensions:state"),
   onExtensionsState: (handler) => { listen("extensions:show", handler); },
   extensionsAsk: (ask) => invoke("extensions:ask", ask),

@@ -16,7 +16,7 @@ import { createRequire } from "node:module";
 import {
   chooseInstalled, installExtensionPackage, installedExtensions, openViewWindow, readExtensionPackage, uninstallViews,
 } from "@wildwinter/app-shell/view-host";
-import { extensionRows, planPackageAdd, planProjectRemoval } from "@wildwinter/app-shell/view-package";
+import { extensionRows, planPackageAdd, planPackageUpdate, planProjectRemoval, sameAsInstalled } from "@wildwinter/app-shell/view-package";
 import type { TakenExtension } from "@wildwinter/app-shell/view-package";
 import type { ExtensionPackage, ViewWindow } from "@wildwinter/app-shell/view-host";
 import { frontForModal, pinToolWindow, rescueToolWindow, savedWindowRect } from "@wildwinter/app-shell/tool-window";
@@ -33,7 +33,7 @@ import { watchInDev } from "../windows.js";
 import { push } from "./push.js";
 import type { MainContext } from "../context.js";
 import type { ProjectSession } from "../project.js";
-import type { ExtensionsAsk, ExtensionsWinState } from "../../shared/api.js";
+import type { ExtensionsAsk, ExtensionsWinState, OpenResult } from "../../shared/api.js";
 import type { Ipc } from "./registrar.js";
 
 const VIEW_DEFAULT = { width: 760, height: 560 };
@@ -144,6 +144,86 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
     };
   }
 
+  /**
+   * Update... (the Extensions window): the extension's package, then what will happen, asked first. A newer
+   * version is taken into the project as one undo step (when the project takes it) and installed; the same
+   * version is reinstalled (with the project's copy of its manifest, when the package changes it); an older
+   * version, or another extension's package, is refused with both named. Null: cancelled.
+   */
+  async function updateExtension(id: string): Promise<OpenResult | { installed: string; name: string; note?: string; reinstalled?: true } | { error: string } | null> {
+    const session = deps.session();
+    const taken = takenExtensions(session);
+    const installedAll = await installedExtensions(dir());
+    const row = extensionRows(taken, installedAll, "storylets").find((r) => r.id === id);
+    if (!row) return { error: `There's no extension \u201c${id}\u201d here to update.` };
+    const path = await pickPackage(`Update ${row.name}`, `Choose ${row.name}'s package: its folder, or a .tgz file made by npm pack.`);
+    if (path === null) return null;
+    const pkg = await packageAt(path);
+    if ("error" in pkg) return pkg;
+    const mine = taken.find((t) => t.id === id);
+    const installed = installedAll.filter((i) => i.id === id);
+    const plan = planPackageUpdate(row, pkg.manifest, mine?.manifest ?? installed[installed.length - 1]?.manifest, "storylets", taken.map((t) => t.id));
+    if (plan.kind === "refused") return { error: plan.why };
+    const refused = packageRefusal(pkg, "updated");
+    if (refused !== undefined) return { error: refused };
+    const name = pkg.manifest.name;
+    const text = new TextDecoder().decode(pkg.files.get(`${pkg.manifest.id}${MANIFEST_FILE_SUFFIX}`)!);
+    // Its windows close before its files are replaced: a view left open would run on the old ones.
+    const closeViews = (): void => { for (const [key, view] of [...open]) if (key.startsWith(viewWindowKey(id, ""))) { open.delete(key); view.close(); } };
+    const mayWrite = (): string | undefined => {
+      if (!session) return undefined;
+      const dir0 = session.loaded.dir;
+      const role = refuseWrite(readRemote(dir0)?.role, [join(dir0, session.loaded.source?.path ?? ""), manifestPath(dir0, id)]);
+      return role === undefined ? undefined : `This project came from a server with an author's key, and updating an extension is the designer's to do, so nothing was updated.`;
+    };
+
+    if (plan.kind === "same") {
+      const v = plan.version;
+      const there = installed.find((i) => i.version === v);
+      // A rebuilt development version can change the manifest without its version: the project's copy goes too.
+      const differs = mine !== undefined && JSON.stringify(mine.manifest) !== JSON.stringify(pkg.manifest);
+      if (there && !differs && await sameAsInstalled(pkg, there.root)) {
+        return { installed: v, name, note: "Its files are the same as the ones installed here, so there's nothing to do." };
+      }
+      if (differs) { const why = mayWrite(); if (why !== undefined) return { error: why }; }
+      const what = differs
+        ? "Reinstalling replaces its installed files on this machine, and the project's copy of its manifest, which this package changes. You can undo the project's part."
+        : "Reinstalling replaces its installed files on this machine. The project stays as it is.";
+      if (await ask(`Reinstall ${name} ${v}?`, `This package is ${name} ${v}, the version ${mine ? "this project takes" : "installed here"}. ${what} Its open views close.`, [`Reinstall ${v}`, "Cancel"]) !== 0) return null;
+      closeViews();
+      const installedNow = await installExtensionPackage(pkg, dir());
+      if (!installedNow.ok) return { error: installedNow.why };
+      if (!differs || !session) { await refresh(true); return { installed: v, name, reinstalled: true }; }
+      const result = await serialised(() => (deps.session() === session ? addExtension(session, [{ manifest: pkg.manifest, text }]) : { error: "The project changed meanwhile, so its manifest wasn't updated." }));
+      await refresh(true);
+      return result;
+    }
+
+    const lines = plan.changes.length > 0 ? plan.changes : ["No fields or views change."];
+    const how = mine
+      ? "The project takes it as one step you can undo, and its views install on this machine."
+      : "Its views install on this machine. No project changes.";
+    if (mine) { const why = mayWrite(); if (why !== undefined) return { error: why }; }
+    if (await ask(`Update ${name}${plan.from ? ` from ${plan.from}` : ""} to ${plan.to}?`, `${lines.join(" ")} ${how} Values it no longer accepts show among the problems afterwards.`, [`Update to ${plan.to}`, "Cancel"]) !== 0) return null;
+    let required: ExtensionPackage[] = [];
+    if (mine && plan.missing.length > 0) {
+      const got = await requirementsFor(pkg, plan.missing, taken.map((t) => t.id));
+      if (got === null || "error" in got) return got;
+      required = got;
+    }
+    closeViews();
+    for (const p of [...required.filter((r) => viewsFor(r.manifest, "storylets").length > 0), pkg]) {
+      const installedNow = await installExtensionPackage(p, dir());
+      if (!installedNow.ok) return { error: installedNow.why };
+    }
+    if (!mine || !session) { await refresh(true); return { installed: plan.to, name }; }
+    const items = [...required, pkg].map((p) => ({ manifest: p.manifest, text: new TextDecoder().decode(p.files.get(`${p.manifest.id}${MANIFEST_FILE_SUFFIX}`)!) }));
+    const result = await serialised(() => (deps.session() === session ? addExtension(session, items) : { error: "The project changed meanwhile, so it wasn't updated." }));
+    await refresh(true);
+    if ("error" in result) return { error: `${result.error} ${name}'s views were installed on this machine.` };
+    return result;
+  }
+
   /** Send the open Extensions window its rows again: something it lists changed. */
   async function sendExtensions(): Promise<void> {
     const win = deps.windows?.().get("extensions");
@@ -241,6 +321,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
         void sendExtensions();
       });
       ipc.handle("extensions:state", () => extensionsState());
+      ipc.handle("extension:update", async (_event, id) => (typeof id === "string" ? updateExtension(id) : null));
       // Add, Install and Remove are project steps: the editor runs them, as the menu would, so what's typed lands
       // first and the editor redraws over the project as it then is.
       ipc.handle("extensions:ask", (_event, ask: ExtensionsAsk) => {
@@ -249,6 +330,11 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
         if (ask.do === "add") push(editor.webContents, "menu", { cmd: "add-extension" });
         else if (ask.do === "install" && typeof ask.extension === "string") push(editor.webContents, "menu", { cmd: "add-extension", extension: ask.extension });
         else if (ask.do === "remove" && typeof ask.extension === "string") push(editor.webContents, "menu", { cmd: "remove-extension", extension: ask.extension });
+        // Update... is a project step when a project is open; with none, only this machine changes, here.
+        else if (ask.do === "update" && typeof ask.extension === "string") {
+          if (deps.session()) push(editor.webContents, "menu", { cmd: "update-extension", extension: ask.extension });
+          else void updateExtension(ask.extension);
+        }
       });
       ipc.handle("extensions:setPin", (_event, on) => {
         deps.store().window("extensions").setPinned(on === true);
