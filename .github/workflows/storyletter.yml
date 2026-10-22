@@ -27,11 +27,22 @@ permissions:
 
 jobs:
   # Pre-create the release as a DRAFT with the changelog section as its notes; the OS
-  # matrix uploads installers into it (electron-builder reuses a draft whose tag
-  # matches), and `publish` flips it live once every OS has uploaded. The draft is a
-  # staging area so a half-built release is never visible.
+  # matrix uploads installers into it BY ITS ID, and `publish` flips it live once every
+  # OS has uploaded. The draft is a staging area so a half-built release is never visible.
+  #
+  # By id, not by tag: electron-builder finds a draft by listing the releases, and on
+  # 0.26.0 (2026-10-22) that list didn't show the notes draft for minutes. Linux and
+  # Windows each made a draft of their own, the files split across two, and publish made
+  # the empty notes draft live. So electron-builder only builds (--publish never) and the
+  # upload step below puts the files on the draft this job made.
+  #
+  # A tag with a hyphen (v0.26.1-rehearsal.1) is a REHEARSAL: everything runs, the files
+  # land on the draft, and publish is skipped, so it never goes live or takes "Latest".
+  # Delete the draft, the tag and its branch afterwards.
   notes:
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -67,6 +78,7 @@ jobs:
       - run: npm test
         working-directory: storylets
       - name: Create the draft release with the changelog as notes
+        id: draft
         working-directory: storylets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,9 +87,17 @@ jobs:
           awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
             packages/studio/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
           [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" --draft --title "Storyletter $version" \
-              --notes-file "$RUNNER_TEMP/release-notes.md"
+          # A rerun of this job reuses a draft it can see for the tag; failing that it makes one.
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq "[.[] | select(.draft and .tag_name == \"$GITHUB_REF_NAME\")][0].id // empty")
+          if [ -z "$id" ]; then
+            id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$GITHUB_REF_NAME" -f name="Storyletter $version" -F draft=true \
+              -F prerelease=$([[ "$version" == *-* ]] && echo true || echo false) \
+              -F body=@"$RUNNER_TEMP/release-notes.md" --jq .id)
+          fi
+          echo "draft release $id"
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
   build:
     needs: notes
@@ -137,12 +157,10 @@ jobs:
             sudo security add-certificates -k /Library/Keychains/System.keychain /tmp/DeveloperIDG2CA.cer
           fi
           rm /tmp/DeveloperIDG2CA.cer
-      - name: Build, sign + publish
+      - name: Build and sign
         working-directory: storylets
-        run: npm run -w @storylet-studio/studio ${{ matrix.script }} -- --publish always
+        run: npm run -w @storylet-studio/studio ${{ matrix.script }} -- --publish never
         env:
-          # electron-builder's GitHub publisher uploads to the release for this tag.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS signing + notarisation, SCOPED TO THE MAC JOB ONLY. These are not
           # no-ops elsewhere: on Windows electron-builder reads CSC_LINK as an
           # Authenticode certificate and then writes that publisher into
@@ -155,14 +173,46 @@ jobs:
           APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+      # Each installer, its blockmap and the updater feed, onto the notes job's draft by id.
+      # Spaces become dashes, as electron-builder names them on GitHub and as latest*.yml
+      # refers to them. An asset already there (a rerun) is replaced.
+      - name: Upload to the draft release
+        working-directory: storylets/packages/studio/dist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.notes.outputs.release_id }}
+        run: |
+          shopt -s nullglob
+          files=( *.dmg *.zip *.exe *.AppImage *.blockmap latest*.yml )
+          [ ${#files[@]} -gt 0 ] || { echo "nothing to upload"; exit 1; }
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq '.[] | "\(.id) \(.name)"')
+          for f in "${files[@]}"; do
+            [[ "$f" == *__uninstaller* ]] && continue
+            name="${f// /-}"
+            old=$(awk -v n="$name" '$2 == n {print $1}' <<< "$existing")
+            [ -z "$old" ] || gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+            gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
+              -H "Content-Type: application/octet-stream" --input "$f" --jq '"uploaded \(.name) \(.size)"'
+          done
 
   # Every OS uploaded -> publish. Runs only when the whole matrix succeeded, so a
-  # partial release never goes live.
+  # partial release never goes live, and refuses a draft missing any of the ten files
+  # (three latest*.yml feeds among them). A rehearsal tag (with a hyphen) stops before it.
   publish:
-    needs: build
+    needs: [notes, build]
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     steps:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+          RELEASE_ID: ${{ needs.notes.outputs.release_id }}
+        run: |
+          names=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq '.[].name')
+          echo "$names"
+          for want in latest-mac.yml latest.yml latest-linux.yml; do
+            grep -qx "$want" <<< "$names" || { echo "the draft has no $want"; exit 1; }
+          done
+          [ "$(wc -l <<< "$names")" -eq 10 ] || { echo "the draft has $(wc -l <<< "$names") files, not 10"; exit 1; }
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false --jq '"published \(.html_url)"'
