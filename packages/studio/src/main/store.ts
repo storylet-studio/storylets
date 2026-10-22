@@ -124,8 +124,8 @@ const DEFAULTS: StudioSlice = {
 };
 
 /** The helper windows, by the keys the shell stores them under. */
-const BOARD = "board", SEARCH = "search", LINKS = "links", COVERAGE = "coverage", FIELDS = "fields";
-const WINDOWS = [BOARD, SEARCH, LINKS, COVERAGE, FIELDS];
+const BOARD = "board", SEARCH = "search", LINKS = "links", COVERAGE = "coverage", FIELDS = "fields", EXTENSIONS = "extensions";
+const WINDOWS = [BOARD, SEARCH, LINKS, COVERAGE, FIELDS, EXTENSIONS];
 
 /**
  * Fold a pre-shell settings file into the shell's shape, once.
@@ -318,6 +318,7 @@ export class StudioStore {
       searchPinned: win(SEARCH).pinned(),
       linksPinned: win(LINKS).pinned(),
       fieldsPinned: win(FIELDS).pinned(),
+      extensionsPinned: win(EXTENSIONS).pinned(),
       coveragePinned: win(COVERAGE).pinned(),
       ...bounds(BOARD, "boardBounds"),
       ...bounds(SEARCH, "searchBounds"),

@@ -225,6 +225,15 @@ const api: StudioApi = {
   // View extensions (patterkit design/view-extensions.md).
   setExtensionValues: (extension, label, edits) => invoke("extension:setValues", extension, label, edits),
   addExtension: (expect?: string) => invoke("extension:add", expect),
+  // The Extensions window (patterkit design/extensions-window.md).
+  openExtensions: (focus?: string) => invoke("extensions:open", focus),
+  removeExtension: (id: string) => invoke("extension:remove", id),
+  extensionsState: () => invoke("extensions:state"),
+  onExtensionsState: (handler) => { listen("extensions:show", handler); },
+  extensionsAsk: (ask) => invoke("extensions:ask", ask),
+  uninstallExtension: (id: string, version: string) => invoke("extension:uninstall", id, version),
+  setExtensionsPinned: (on: boolean) => invoke("extensions:setPin", on),
+  closeExtensions: () => invoke("extensions:close"),
   onViewOffers: (handler) => { listen("views:offers", handler); },
   openView: (extension, view) => invoke("view:open", extension, view),
   exportBundle: (opts) => invoke("bundle:export", opts),

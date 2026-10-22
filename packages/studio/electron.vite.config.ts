@@ -127,7 +127,7 @@ export default defineConfig({
     build: {
       outDir: "dist-electron/renderer",
       rollupOptions: {
-        // Six windows: the editor shell, the Board, Coverage, Find, Links and Fields.
+        // Seven windows: the editor shell, the Board, Coverage, Find, Links, Fields and Extensions.
         input: {
           index: here("src/renderer/index.html"),
           table: here("src/renderer/table.html"),
@@ -136,6 +136,8 @@ export default defineConfig({
           links: here("src/renderer/links.html"),
           // A map of records edited as a grid, following the selection (Pattershot's brief, H1).
           fields: here("src/renderer/fields.html"),
+          // What the project takes and this machine has installed (patterkit design/extensions-window.md).
+          extensions: here("src/renderer/extensions.html"),
         },
       },
     },

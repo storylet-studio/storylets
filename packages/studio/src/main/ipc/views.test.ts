@@ -3,7 +3,8 @@
 // nothing, the views are worked out again only when the project's extensions change and only the latest answer
 // is taken, and two quick asks to open a view open one window. And Add Extension..., the one way in: the views
 // alone for the version the project takes, a newer one offered, an older one never taken, a view's own package
-// only, and what an extension requires asked for and taken with it.
+// only, and what an extension requires asked for and taken with it. And the Extensions window's Remove from
+// Project (asked first, one step that keeps the data) and Uninstall (one version, asked first).
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cpSync, mkdtempSync, readFileSync } from "node:fs";
@@ -29,6 +30,8 @@ const shell = vi.hoisted(() => ({
   /** The native box's answers, in order (0 when none is left). */
   answers: [] as number[],
   asked: [] as string[],
+  details: [] as string[],
+  uninstalled: [] as string[],
 }));
 
 vi.mock("electron", () => ({
@@ -39,12 +42,14 @@ vi.mock("electron", () => ({
       // Off macOS the package picker first asks file or folder: a file, unasked by the tests.
       if (o.buttons.includes("Package File\u2026")) return { response: 0 };
       shell.asked.push(o.message);
+      shell.details.push((o as { detail?: string }).detail ?? "");
       return { response: shell.answers.shift() ?? 0 };
     },
   },
 }));
 vi.mock("@wildwinter/app-shell/tool-window", () => ({
   pinToolWindow: () => undefined, rescueToolWindow: () => undefined, savedWindowRect: () => ({ width: 1, height: 1 }),
+  frontForModal: () => () => undefined,
 }));
 vi.mock("../windows.js", () => ({ watchInDev: () => undefined }));
 vi.mock("@wildwinter/app-shell/view-host", () => ({
@@ -72,6 +77,11 @@ vi.mock("@wildwinter/app-shell/view-host", () => ({
     return { ok: true, manifest: parseManifest(text), problems: [], files: new Map([["probe.extension.json", new TextEncoder().encode(text)]]) };
   },
   installExtensionPackage: async () => { shell.installs++; shell.onInstall?.(); return { ok: true, installed: { version: "1.1.0" } }; },
+  uninstallViews: async (_dir: string, id: string, version: string) => {
+    shell.uninstalled.push(`${id}@${version}`);
+    shell.installed = (shell.installed as InstalledExtension[]).filter((i) => !(i.id === id && i.version === version));
+    return { cleared: !(shell.installed as InstalledExtension[]).some((i) => i.id === id) };
+  },
 }));
 
 const fixtures = fileURLToPath(new URL("../../../../ops/test/fixtures/", import.meta.url));
@@ -80,6 +90,7 @@ const packageDir = join(fixtures, "probe-extension-package");
 const { createViewHost } = await import("./views.js");
 const { openProject } = await import("../project.js");
 const { writeRemote } = await import("../remote.js");
+const { undo } = await import("../mutate/write-path.js");
 
 function host() {
   const dir = join(mkdtempSync(join(tmpdir(), "studio-view-host-main-")), "copy.storylets");
@@ -116,6 +127,8 @@ beforeEach(() => {
   shell.queue = [];
   shell.answers = [];
   shell.asked = [];
+  shell.details = [];
+  shell.uninstalled = [];
 });
 
 describe("the views' windows", () => {
@@ -245,5 +258,58 @@ describe("Add Extension...", () => {
     expect(r.project?.extensions?.map((x) => `${x.id}@${x.version}`).sort()).toEqual(["probe@1.2.0", "stage@0.5.0"]);
     expect(shell.installs).toBe(1); // Stage has no views to install
     expect(readFileSync(join(session.loaded.dir, "extensions/stage.extension.json"), "utf8")).toBe(stage);
+  });
+});
+
+describe("the Extensions window", () => {
+  it("lists what the project takes and what's installed here", async () => {
+    const { call } = host();
+    shell.installed = [probe(), { ...probe(), version: "1.0.0", root: "/views/probe/1.0.0" }];
+    const state = await call("extensions:state") as { rows: { id: string; inProject: boolean; installed: string[] }[]; hasProject: boolean };
+    expect(state.hasProject).toBe(true);
+    expect(state.rows.map((r) => [r.id, r.inProject, r.installed])).toEqual([["probe", true, ["1.0.0", "1.1.0"]]]);
+  });
+
+  it("asks before removing, saying the data stays, and removes the pin and the manifest as one step that undo takes back", async () => {
+    const { session, call } = host();
+    const dir = session.loaded.dir;
+    const proj = join(dir, "probe.storyletproj"), manifest = join(dir, "extensions/probe.extension.json"), shard = join(dir, "harbour/probe.storyletextension");
+    const before = { proj: readFileSync(proj, "utf8"), manifest: readFileSync(manifest, "utf8"), shard: readFileSync(shard, "utf8") };
+    shell.answers = [1];
+    expect(await call("extension:remove", "probe")).toBeNull();
+    expect(readFileSync(proj, "utf8")).toBe(before.proj);
+    shell.answers = [0];
+    const r = await call("extension:remove", "probe") as { error?: string };
+    expect(r.error).toBeUndefined();
+    expect(shell.asked).toEqual(["Remove Probe from this project?", "Remove Probe from this project?"]);
+    expect(shell.details[0]).toMatch(/^Probe has data in \d+ places? in this project\. It stays, unused, and comes back into use if you add Probe again\. Its views stay installed on this machine\. You can undo this\.$/);
+    expect(readFileSync(proj, "utf8")).not.toMatch(/extensions/); // the only one, so the key goes too
+    expect(() => readFileSync(manifest, "utf8")).toThrow();
+    expect(readFileSync(shard, "utf8")).toBe(before.shard); // the data stays
+    expect(session.history.undoLabel).toBe("Remove Probe");
+    await undo(session);
+    expect(readFileSync(proj, "utf8")).toBe(before.proj);
+    expect(readFileSync(manifest, "utf8")).toBe(before.manifest);
+  });
+
+  it("won't remove an extension the project doesn't take", async () => {
+    const { call } = host();
+    expect(await call("extension:remove", "nope")).toEqual({ error: "This project doesn't take nope." });
+  });
+
+  it("uninstalls one version, asked first, saying whether the views' settings go", async () => {
+    const { call } = host();
+    shell.installed = [probe(), { ...probe(), version: "1.0.0", root: "/views/probe/1.0.0" }];
+    shell.answers = [1, 0, 0];
+    await call("extension:uninstall", "probe", "1.0.0");
+    expect(shell.uninstalled).toEqual([]); // cancelled
+    await call("extension:uninstall", "probe", "1.0.0");
+    expect(shell.uninstalled).toEqual(["probe@1.0.0"]);
+    expect(shell.details[1]).toBe("This project takes Probe. Other projects on this machine that use this version lose its views too. The other installed versions keep their views' settings.");
+    await call("extension:uninstall", "probe", "1.1.0");
+    expect(shell.uninstalled).toEqual(["probe@1.0.0", "probe@1.1.0"]);
+    expect(shell.details[2]).toContain("so its views will show as not installed until you install them again.");
+    expect(shell.details[2]).toContain("and those go too.");
+    expect(shell.asked).toEqual(["Uninstall Probe 1.0.0 from this machine?", "Uninstall Probe 1.0.0 from this machine?", "Uninstall Probe 1.1.0 from this machine?"]);
   });
 });

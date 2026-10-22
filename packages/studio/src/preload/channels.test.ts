@@ -43,11 +43,13 @@ vi.mock("electron", () => ({
 // mock above reaches.
 vi.mock("@wildwinter/app-shell/tool-window", () => ({
   defineToolWindows: () => undefined, pinToolWindow: () => undefined, rescueToolWindow: () => undefined, savedWindowRect: () => undefined,
+  frontForModal: () => () => undefined,
 }));
 // ...and so does the view host (view extensions), for the same reason.
 vi.mock("@wildwinter/app-shell/view-host", () => ({
   chooseInstalled: () => undefined, installExtensionPackage: () => undefined, installedExtensions: () => undefined,
   openViewWindow: () => undefined, readExtensionPackage: () => undefined, viewSchemePrivileges: () => undefined,
+  uninstallViews: () => undefined,
 }));
 
 /** The updater's channels are the shell's, and held by updater-channels.test.ts; the view port's is the shell's

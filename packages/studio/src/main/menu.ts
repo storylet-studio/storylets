@@ -62,8 +62,8 @@ export interface MenuViews {
 
 /**
  * The Window menu's views (patterkit design/view-extensions.md), by name in the project's order, each opening its
- * window. One that can't open here is "<name> (not installed)..." with why under it, and opens Add Extension for
- * its extension's package (app-shell 0.60's one way in).
+ * window. One that can't open here is "<name> (not installed)..." with why under it, and opens the Extensions
+ * window on its extension, where Install on this machine... is (patterkit design/extensions-window.md, D1).
  */
 export function viewMenuItems(
   items: readonly MenuView[], send: (command: MenuCommand) => () => void,
@@ -75,7 +75,7 @@ export function viewMenuItems(
       continue;
     }
     out.push(
-      { label: viewMenuLabel(v.name, false), toolTip: v.why, click: send({ cmd: "add-extension", extension: v.extension }) },
+      { label: viewMenuLabel(v.name, false), toolTip: v.why, click: send({ cmd: "extensions", extension: v.extension }) },
       { label: v.why, enabled: false },
     );
   }
@@ -214,9 +214,10 @@ export function refreshMenu(
         { label: "New Card", accelerator: "Shift+CmdOrCtrl+N", enabled: open && project.deckFocused, click: send({ cmd: "new-card" }) },
         { type: "separator" },
         { ...FILE_MENU.projectSettings, enabled: open, click: send({ cmd: "project-settings" }) },
-        // An extension's package taken into the project, and its views installed here (patterkit
-        // design/view-extensions.md): beside Project Settings, where the extensions the project takes are set.
-        { label: "Add Extension\u2026", enabled: open, click: send({ cmd: "add-extension" }) },
+        // What the project takes and this machine has installed: Add, Remove from Project, and Uninstall per
+        // version (patterkit design/extensions-window.md). Beside Project Settings; open with no project too,
+        // when it lists what's installed and offers only Uninstall.
+        { label: "Extensions\u2026", click: send({ cmd: "extensions" }) },
         // The game's shared scopes folder (patterkit design/shared-scopes.md): creating it is
         // an explicit act, never a side effect, and this is the act. Beside Project Settings
         // because it is about the project's place in the game rather than about any one shard.

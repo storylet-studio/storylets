@@ -7,8 +7,10 @@
 // Extension..., which takes an extension's manifest into the project.
 // ---------------------------------------------------------------------------
 
-import { extensionNodes } from "@storylet-studio/compiler";
-import { planExtensionValue, planExtensionValues, planTakeExtensions } from "@storylet-studio/ops";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { canonicalStringify, extensionNodes } from "@storylet-studio/compiler";
+import { manifestPath, planExtensionValue, planExtensionValues, planTakeExtensions } from "@storylet-studio/ops";
 import { manifestProblems, pickLists, targetOf, valueProblems } from "@wildwinter/toolkit/extensions";
 import type { Manifest, TypeDecl } from "@wildwinter/toolkit/extensions";
 import { extensionLine, quoted, valueProblemSentence } from "@wildwinter/app-shell/extension-copy";
@@ -109,4 +111,43 @@ export async function addExtension(session: ProjectSession, items: readonly { ma
   const names = items.map((i) => i.manifest.name);
   const label = `Add ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}`;
   return commit(session, label, freshKey("ext"), [...take.writes].map(([path, content]) => ({ path, content })));
+}
+
+/** How many nodes carry an extension's data in the project, across every box's shard and the project's: what
+ *  Remove from Project says it keeps (patterkit design/extensions-window.md, D2). */
+export function extensionDataCount(session: ProjectSession, id: string): number {
+  const source = session.loaded.source;
+  if (source === undefined) return 0;
+  const nodes = new Set<string>();
+  for (const { shard } of [...(source.extensions ?? []), ...source.boxes.flatMap((b) => b.extensions ?? [])]) {
+    if (shard.extension !== id) continue;
+    for (const [kind, byNode] of Object.entries(shard.entries ?? {})) for (const node of Object.keys(byNode ?? {})) nodes.add(`${kind}\u0000${node}`);
+  }
+  return nodes.size;
+}
+
+/**
+ * Remove from Project (patterkit design/extensions-window.md, D2): the project stops taking an extension, as ONE
+ * undo step ("Remove Pattershot"): its pin goes from the project file and its manifest from where the project
+ * keeps manifests. Its `.storyletextension` shards stay where they are; validation says the data is left as it
+ * is and not compiled, until the extension is taken again, which undo does too. The caller checks first that no
+ * other extension the project takes requires it.
+ */
+export async function removeExtension(session: ProjectSession, id: string): Promise<Written> {
+  const source = session.loaded.source;
+  if (source === undefined) return refuse(session, "the project did not load");
+  const taken = source.project.extensions ?? {};
+  if (!taken[id]) return { error: `This project doesn't take ${id}.` };
+  // The loader keeps the manifest unchecked: its name only when it has one.
+  const raw = source.manifests?.find((m) => m.id === id)?.manifest as { name?: unknown } | undefined;
+  const name = typeof raw?.name === "string" && raw.name ? raw.name : id;
+  const { [id]: _gone, ...rest } = taken;
+  const { extensions: _was, ...others } = source.project;
+  const next = Object.keys(rest).length > 0 ? { ...others, extensions: rest } : others;
+  const dir = session.loaded.dir;
+  const manifest = manifestPath(dir, id);
+  return commit(session, `Remove ${name}`, freshKey("ext"), [
+    { path: join(dir, source.path), content: canonicalStringify(next) },
+    ...(existsSync(manifest) ? [{ path: manifest, content: null }] : []),
+  ]);
 }

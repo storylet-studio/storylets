@@ -1,0 +1,4 @@
+/* The Extensions window (patterkit design/extensions-window.md): the shell's head bar, then the shell's panel
+   (extensions-window.css). Only the page's frame is here. */
+#extensions { display: flex; flex-direction: column; height: 100%; }
+.xbody { flex: 1 1 auto; overflow: auto; }

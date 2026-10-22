@@ -12,8 +12,8 @@ import type { ProjectSession } from "./project.js";
 import type { StudioStore } from "./store.js";
 import type { OpenResult } from "../shared/api.js";
 
-/** The four tool windows, as rows of the shell's table (windows.ts). */
-export type ToolName = "board" | "find" | "links" | "coverage" | "fields";
+/** The tool windows, as rows of the shell's table (windows.ts). */
+export type ToolName = "board" | "find" | "links" | "coverage" | "fields" | "extensions";
 
 export interface MainContext {
   /** The open project, or none. */

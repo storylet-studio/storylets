@@ -150,7 +150,7 @@ export function createCommands(ctx: CommandsContext) {
       : `Opening Patterpad at ${result.address}. The published Patter bundle has no scene by that name yet.`, "ok");
   }
 
-  /** File > Add Extension..., or a view "(not installed)..." in the Window menu (`expect`, its extension): main
+  /** Add extension... or Install on this machine... in the Extensions window (`expect`, its extension): main
    *  asks for the package, installs its views on this machine, and takes an extension the project lacks into it
    *  as one undo step (with any it requires), or offers a newer version of one it takes. */
   async function addExtension(expect?: string): Promise<void> {
@@ -165,6 +165,19 @@ export function createCommands(ctx: CommandsContext) {
     if (!ctx.applied(result) || "error" in result) return;
     const added = (result.project.extensions ?? []).filter((x) => !before.has(`${x.id}@${x.version}`));
     flash(added.length > 0 ? `Added ${added.map((x) => `${x.name} ${x.version}`).join(" and ")}, and installed ${added.length > 1 ? "them" : "it"} on this machine` : "Installed the extension on this machine", "ok");
+    ctx.render();
+  }
+
+  /** Remove from Project..., asked for in the Extensions window (patterkit design/extensions-window.md): main
+   *  refuses while another extension needs it, asks first, and takes it out of the project as one undo step that
+   *  keeps its data. */
+  async function removeExtension(id: string): Promise<void> {
+    await saves.flush();
+    const name = (session.project?.extensions ?? []).find((x) => x.id === id)?.name ?? id;
+    const result = await studio.removeExtension(id);
+    if (result === null) return;
+    if (!ctx.applied(result) || "error" in result) return;
+    flash(`Removed ${name}`, "ok");
     ctx.render();
   }
 
@@ -241,7 +254,9 @@ export function createCommands(ctx: CommandsContext) {
       case "go-up": if (project) nav.goUp(); break;
       case "close-project": if (project) void ctx.closeProject(); break;
       // View extensions (patterkit design/view-extensions.md): what is typed lands before the project changes.
+      case "extensions": void studio.openExtensions(command.extension); break;
       case "add-extension": if (project) void addExtension(command.extension); break;
+      case "remove-extension": if (project) void removeExtension(command.extension); break;
       case "open-view": if (project) void studio.openView(command.extension, command.view).then((r) => { if (r) flashError(r.error); }); break;
       // Help > Open an Example: main asks before leaving an open project, then for a folder.
       case "open-example": void ctx.adopt(studio.openExample(command.file)); break;

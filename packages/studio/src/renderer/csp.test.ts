@@ -14,6 +14,7 @@ const EXPECTED: Record<string, string> = {
   "coverage.html": familyCsp(),
   "links.html": familyCsp(),
   "fields.html": familyCsp(),
+  "extensions.html": familyCsp(),
   "search.html": familyCsp(),
 };
 

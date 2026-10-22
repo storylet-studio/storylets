@@ -122,7 +122,7 @@ describe("on the page", () => {
     there.click();
     expect(view).toHaveBeenCalledWith("shot", "sheet");
     const absent = edit(false);
-    expect(absent.dataset["tip"]).toBe("Edit Performance in the Fields window. The Performance sheet opens here instead once Shot is installed on this machine (File > Add Extension...).");
+    expect(absent.dataset["tip"]).toBe("Edit Performance in the Fields window. The Performance sheet opens here instead once Shot is installed on this machine (File > Extensions...).");
     absent.click();
     expect(fields).toHaveBeenCalledWith("card", "c_bell");
     expect(view).toHaveBeenCalledTimes(1);

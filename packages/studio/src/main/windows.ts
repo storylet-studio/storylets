@@ -25,6 +25,8 @@ const LINKS_DEFAULT = { width: 900, height: 560 };
 const LINKS_MIN = { width: 520, height: 360 };
 const FIELDS_DEFAULT = { width: 640, height: 420 };
 const FIELDS_MIN = { width: 420, height: 240 };
+const EXTENSIONS_DEFAULT = { width: 560, height: 520 };
+const EXTENSIONS_MIN = { width: 420, height: 300 };
 
 export interface ToolWindowDeps {
   store: StudioStore;
@@ -83,6 +85,9 @@ export function defineWindows(deps: ToolWindowDeps): ToolWindows<ToolName> {
     // show and applies every edit; this side only relays and remembers.
     { name: "fields", title: "Fields", page: "fields.html", def: FIELDS_DEFAULT, min: FIELDS_MIN, ...store.window("fields"),
       clear: () => { deps.forgetFieldsState(); } },
+    // What the project takes and this machine has installed: Add, Remove from Project and Uninstall (patterkit
+    // design/extensions-window.md). Main sends its rows again whenever they change, a new project included.
+    { name: "extensions", title: "Extensions", page: "extensions.html", def: EXTENSIONS_DEFAULT, min: EXTENSIONS_MIN, ...store.window("extensions") },
   ], {
     rendererDir: join(import.meta.dirname, "../renderer"),
     preload: join(import.meta.dirname, "../preload/index.cjs"),

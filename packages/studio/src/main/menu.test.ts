@@ -150,13 +150,14 @@ describe("view extensions (patterkit design/view-extensions.md)", () => {
     isView: () => false,
   };
 
-  it("puts Add Extension... beside Project Settings, greyed with no project", async () => {
+  it("puts Extensions... beside Project Settings, open with no project too", async () => {
     const file = shape(submenu(await menuOn("darwin"), "File"));
-    expect(file[file.indexOf("Project Settings…") + 1]).toBe("Add Extension…");
-    expect(item(submenu(await menuOn("darwin", { open: false, deckFocused: false }), "File"), "Add Extension…")?.enabled).toBe(false);
+    expect(file[file.indexOf("Project Settings…") + 1]).toBe("Extensions…");
+    expect(file).not.toContain("Add Extension…");
+    expect(item(submenu(await menuOn("darwin", { open: false, deckFocused: false }), "File"), "Extensions…")?.enabled).not.toBe(false);
   });
 
-  it("lists the project's views by name in the Window menu, one not installed marked so with why, opening Add Extension", async () => {
+  it("lists the project's views by name in the Window menu, one not installed marked so with why, opening the Extensions window", async () => {
     const window = submenu(await menuOn("darwin", { open: true, deckFocused: false, views } as never), "Window");
     expect(shape(window)).toEqual([
       "role:minimize", "role:zoom", "-",

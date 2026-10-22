@@ -108,6 +108,8 @@ export interface StudioState {
   linksPinned: boolean;
   /** The Fields window's pin. Default true, like its siblings. */
   fieldsPinned: boolean;
+  /** The Extensions window floats over the editor (default true). */
+  extensionsPinned: boolean;
   /** The Fields window follows the editor's selection (Pattershot's brief, H1). On by default: following is
    *  what the window is for; off holds it on one item. */
   fieldsFollow: boolean;
@@ -1748,10 +1750,24 @@ export type MenuCommand =
   | { cmd: "nav-back" }
   | { cmd: "nav-forward" }
   | { cmd: "close-project" }
-  // View extensions: File > Add Extension..., or the package of a view "(not installed)..." in the Window menu,
-  // and each view.
+  // View extensions: File > Extensions... (on one extension: a view "(not installed)..." in the Window menu), Add
+  // and Remove from Project asked for in that window (project steps, so the editor runs them), and each view.
+  | { cmd: "extensions"; extension?: string }
   | { cmd: "add-extension"; extension?: string }
+  | { cmd: "remove-extension"; extension: string }
   | { cmd: "open-view"; extension: string; view: string };
+
+/** What the Extensions window draws (the shell's `extensionsPanel`; patterkit design/extensions-window.md). */
+export interface ExtensionsWinState {
+  rows: import("@wildwinter/app-shell").ExtensionRow[];
+  hasProject: boolean;
+  /** An extension to bring into view (a view's "(not installed)..."). */
+  focus?: string;
+}
+
+/** A click in the Extensions window that is a project step, so the editor runs it, as File > Extensions...
+ *  would: Add, Install on this machine (Add for one extension), and Remove from Project. */
+export type ExtensionsAsk = { do: "add" } | { do: "install"; extension: string } | { do: "remove"; extension: string };
 
 /** The surface the preload bridge exposes as `window.studio`. */
 export interface StudioApi {
@@ -2245,6 +2261,23 @@ export interface StudioApi {
    *  `note` when it keeps a newer pin. `expect` (a view "(not installed)..."): only that extension's package
    *  will do. Null: cancelled. */
   addExtension(expect?: string): Promise<OpenResult | { installed: string; name: string; note?: string } | { error: string } | null>;
+  /** File > Extensions...: open (or bring forward) the Extensions window, on one extension when `focus` names it. */
+  openExtensions(focus?: string): Promise<void>;
+  /** Remove from Project... (asked for in the Extensions window): refused while another extension needs it, asked
+   *  first with how much data it has, then one undo step that keeps the data. Null: cancelled. */
+  removeExtension(id: string): Promise<OpenResult | { error: string } | null>;
+  /** Extensions window: its rows, read as it boots. */
+  extensionsState(): Promise<ExtensionsWinState>;
+  /** Extensions window: its rows again, whenever they change. */
+  onExtensionsState(handler: (state: ExtensionsWinState) => void): void;
+  /** Extensions window: a project step, handed to the editor (where it lands as one undo step). */
+  extensionsAsk(ask: ExtensionsAsk): Promise<void>;
+  /** Extensions window: uninstall one version of an extension's views from this machine, asked first. */
+  uninstallExtension(id: string, version: string): Promise<void>;
+  /** Extensions window: float over the editor. */
+  setExtensionsPinned(on: boolean): Promise<void>;
+  /** Extensions window: close itself (Esc, or the close button). */
+  closeExtensions(): Promise<void>;
   /** Each time main works out the project's views again: which are installed here (a field's Edit opens its
    *  editor view only then). */
   onViewOffers(handler: (offers: ViewOfferDto[]) => void): void;
@@ -2502,6 +2535,13 @@ export const INVOKE_CHANNELS = {
   "extension:setValue": "setExtensionValue",
   "extension:setValues": "setExtensionValues",
   "extension:add": "addExtension",
+  "extensions:open": "openExtensions",
+  "extension:remove": "removeExtension",
+  "extensions:state": "extensionsState",
+  "extensions:ask": "extensionsAsk",
+  "extension:uninstall": "uninstallExtension",
+  "extensions:setPin": "setExtensionsPinned",
+  "extensions:close": "closeExtensions",
   "view:open": "openView",
   "card:create": "createCard",
   "card:duplicate": "duplicateCard",
@@ -2663,6 +2703,7 @@ export const PUSH_CHANNELS = {
   "fields:edit": carries<FieldsEdit>(),
   "fields:follow": carries<boolean>(),
   "views:offers": carries<ViewOfferDto[]>(),
+  "extensions:show": carries<ExtensionsWinState>(),
   "board:askClose": carries<void>(),
   "project:opened": carries<OpenResult | { error: string } | PackOffer>(),
   "liveLink:status": carries<LiveLinkStatus>(),
