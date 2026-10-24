@@ -10,6 +10,11 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Green status text is a touch darker in the light palettes** (Chambray and Linen), so words such as "Saved" and the
+  Live Link status meet the usual contrast guideline for text.
+
 ## [0.26.0] - 2026-10-22
 
 ### Added
