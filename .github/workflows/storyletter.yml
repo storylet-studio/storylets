@@ -215,4 +215,6 @@ jobs:
             grep -qx "$want" <<< "$names" || { echo "the draft has no $want"; exit 1; }
           done
           [ "$(wc -l <<< "$names")" -eq 10 ] || { echo "the draft has $(wc -l <<< "$names") files, not 10"; exit 1; }
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false --jq '"published \(.html_url)"'
+          # Latest said outright, not left to GitHub's default: electron-updater reads that badge (as Patterpad).
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false -f make_latest=true \
+            --jq '"published \(.html_url)"'
