@@ -731,8 +731,6 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    applyExtensionLocks): the sentence at the head of that extension's group
    alone, quieter than a document's notice, since the rest of the page types. */
 .ext-lock { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
-.vc-readonly .vc-off { opacity: 0.55; cursor: default; }
-.vc-readonly input.vc-off, .vc-readonly textarea.vc-off, .vc-readonly select.vc-off { color: var(--muted); background: var(--surface); }
 .vc-readonly .doc-panel:focus-within { background: var(--card); border-color: var(--line-soft); box-shadow: none; }
 
 

@@ -12,6 +12,9 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **A box or card somebody else holds is easier to read.** Its locked fields and buttons keep their text at full
+  strength, so you can read every value; they show they're locked with a dashed edge and a no-entry cursor,
+  and the notice above the document still says who holds it.
 - **Green status text is a touch darker in the light palettes** (Chambray and Linen), so words such as "Saved" and the
   Live Link status meet the usual contrast guideline for text.
 
