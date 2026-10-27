@@ -15,7 +15,7 @@ body {
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--text-md);
   -webkit-user-select: none;
   user-select: none;
   border: 1px solid var(--line-soft);

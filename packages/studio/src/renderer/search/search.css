@@ -16,7 +16,7 @@
 .swin-modes { -webkit-app-region: no-drag; }
 
 .swin-input {
-  font: inherit; font-size: 15px;
+  font: inherit; font-size: var(--text-lg);
   background: none; color: var(--ink);
   border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0;
   padding: 10px 12px;
@@ -33,18 +33,18 @@
 .sr-list { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 1px; }
 .sr-row { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; padding: 7px 10px; border-radius: var(--radius-sm); color: var(--ink); font: inherit; background: none; border: 0; cursor: pointer; }
 .sr-row.active, .sr-row:hover { background: var(--accent-soft); }
-.sr-kind { font: 600 11.5px/1 var(--font-ui); color: var(--accent); min-width: 58px; }
-.sr-label { flex: 1; min-width: 0; font-family: var(--font-read); font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sr-sub { color: var(--muted); font-size: 12px; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+.sr-kind { font: 600 var(--text-xs)/1 var(--font-ui); color: var(--accent); min-width: 58px; }
+.sr-label { flex: 1; min-width: 0; font-family: var(--font-read); font-size: var(--text-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-sub { color: var(--muted); font-size: var(--text-sm); margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
 .sr-none { padding: 10px 12px; }
 
 /* Property: reads or writes, said in a word beside the item. */
-.sr-use { flex: none; font: 600 10px/1 var(--font-ui); letter-spacing: 0.04em; padding: 2px 6px; border-radius: var(--radius-pill); border: 1px solid var(--line-soft); color: var(--muted); }
+.sr-use { flex: none; font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: 0.04em; padding: 2px 6px; border-radius: var(--radius-pill); border: 1px solid var(--line-soft); color: var(--muted); }
 .sr-use.write { color: var(--accent); border-color: var(--accent); }
 
 /* Field: the value beside the item, the field named with it; an inherited
    default in the muted ink, with its word. */
-.sr-value { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--ink); }
+.sr-value { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--ink); }
 .sr-value.default { color: var(--muted); }
 
 /* Replace: before → after (before muted, not struck: the arrow and the ink
@@ -53,9 +53,9 @@
    row that hides the word that changed behind an ellipsis previews nothing. */
 .sr-rrow { cursor: default; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: center; }
 .sr-rrow:hover { background: none; }
-.sr-diff { grid-column: 1; font-family: var(--font-read); font-size: 14.5px; line-height: 1.35; }
+.sr-diff { grid-column: 1; font-family: var(--font-read); font-size: var(--text-lg); line-height: 1.35; }
 .sr-before { color: var(--muted); }
 .sr-arrow { color: var(--muted); display: inline-flex; vertical-align: middle; margin: 0 5px; }
 .sr-after { color: var(--ink); }
 .sr-rrow .sr-sub { grid-column: 1; margin-left: 0; max-width: none; }
-.sr-rone { grid-column: 2; grid-row: 1 / span 2; padding: 2px 8px; font-size: 11.5px; }
+.sr-rone { grid-column: 2; grid-row: 1 / span 2; padding: 2px 8px; font-size: var(--text-xs); }

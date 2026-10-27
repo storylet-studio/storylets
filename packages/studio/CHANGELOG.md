@@ -21,6 +21,13 @@ here is part of shipping, not a courtesy.
   picked Chambray or Linen you're now on Light, and Indigo or Baize are now Dark. Deck and tag colours come from
   the family's shared set, so some shift a little. The interface uses your system's own typeface, with quieter
   corners and shadows, and menus that open straight away; cards on the canvas sit flat, with no shadow.
+- **A tidier document page.** The title sits straight under the back button, with its comment and More buttons
+  at the end of its row; the purpose is one line that grows as you type; and the card, table, and canvas
+  switch sits beside the Cards tab it changes.
+- **The canvas is the page.** A deck's canvas fills the pane with no frame, shows only a faint grid until you
+  drag a card, and no longer prints the deck's name on every card.
+- **A quieter navigator and title.** Rows are listed at an even weight, the open one marked by a soft fill,
+  and the top bar shows just the project's name.
 
 ## [0.26.0] - 2026-10-22
 

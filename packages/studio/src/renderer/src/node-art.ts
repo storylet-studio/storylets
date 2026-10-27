@@ -32,6 +32,9 @@ export interface CardNode extends CanvasItem {
   title: string;
   /** The DECK's title, not its gameId. */
   deck: string;
+  /** Name the deck in the card's foot: on a canvas that holds more than one deck (Links). A deck's own
+   *  canvas leaves it off, since every card would repeat the heading above it. */
+  showDeck?: boolean;
   /** The subject of the view, drawn a shade stronger: the Links canvas's focus
    *  card. NOT selection - this never changes as the pointer moves, so it cannot
    *  drag the items into a repaint (see DrawContext). */
@@ -52,7 +55,7 @@ const TITLE_PX = 14;
 const TITLE_LINE_HEIGHT = 1.25;
 const TITLE_TOP = 11;
 /** The foot's text, and how far into the foot band it sits. */
-const FOOT_PX = 10;
+const FOOT_PX = 10.5;
 const FOOT_TEXT_INSET = 6;
 /** The deck stripe and the coverage band hold these widths on SCREEN, as a
  *  floor: they are identity and finding, and have to survive any zoom. */
@@ -173,15 +176,19 @@ export function drawCardNode(item: CardNode, ctx: DrawContext): Konva.Group {
   if (scale < FOOT_FLOOR) return done();
 
   // With the overlay on, the foot says what the band means. A colour nobody can
-  // name is a decoration; the word is what makes it a report.
+  // name is a decoration; the word is what makes it a report. Otherwise it names
+  // the deck, but only where the canvas holds more than one: on a deck's own
+  // canvas every card would repeat the heading above it. It's a name, so it's
+  // set in the UI face, not mono.
   const foot = item.heat === "cold" ? "never dealt"
     : item.heat === "unplayed" ? "never played"
-    : item.deck;
+    : item.showDeck === true ? item.deck : "";
+  if (foot === "") return done();
   group.add(new Konva.Text({
     x: PAD_L, y: item.height - FOOT_H + FOOT_TEXT_INSET,
     width: item.width - PAD_L - PAD_R,
     text: foot,
-    fontFamily: tokens.fontMono, fontSize: FOOT_PX,
+    fontFamily: tokens.fontUi, fontSize: FOOT_PX,
     fill: heatInk ?? tokens.muted,
     wrap: "none", ellipsis: true,
   }));

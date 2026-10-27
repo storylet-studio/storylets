@@ -5,7 +5,7 @@
    the editor rather than a helper floating over it, laid out as panels (the
    navigator, the hands, the rail) on a ground, so its body is the --bg tier
    the panels stand out from, and it reads at the editor's 14px. */
-body { background: var(--bg); font-size: 14px; }
+body { background: var(--bg); font-size: var(--text-md); }
 #table { height: 100%; display: flex; flex-direction: column; }
 /* Everything under the head, which render() rebuilds; the head stays mounted.
    No box of its own, so the strip and the body sit in #table's column. */
@@ -30,10 +30,10 @@ body { background: var(--bg); font-size: 14px; }
   background: var(--surface);
 }
 .tbargap { flex: 1 1 auto; }
-.swin-head .tname { font-family: var(--font-read); font-size: 13.5px; color: var(--muted); }
+.swin-head .tname { font-family: var(--font-read); font-size: var(--text-md); color: var(--muted); }
 /* The pin is the shared .swin-pin (app-shell tool-window.css). */
-.tbar .seed { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
-.tbar .seedin { width: 68px; font-family: var(--font-mono); font-size: 12.5px; }
+.tbar .seed { font-size: var(--text-sm); color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.tbar .seedin { width: 68px; font-family: var(--font-mono); font-size: var(--text-sm); }
 
 .tbody { flex: 1; display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
 .tmain { padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
@@ -95,12 +95,12 @@ body { background: var(--bg); font-size: 14px; }
   padding: 10px 14px;
   border: 1px solid var(--ok); border-radius: var(--radius-md);
   background: color-mix(in oklab, var(--ok) 12%, transparent);
-  color: var(--ink); font: 13.5px var(--font-ui);
+  color: var(--ink); font: var(--text-md) var(--font-ui);
 }
 .livebanner-msg { flex: 1; }
 .livebanner-go, .livebanner-no { flex: none; }
 /* The observe-only note in the session strip, where seed usually sits. */
-.livenote { font-size: 12.5px; color: var(--muted); font-style: italic; }
+.livenote { font-size: var(--text-sm); color: var(--muted); font-style: italic; }
 
 /* The view switch: the shell's `.seg`, and it sits with the filters because
    "how am I looking at this" belongs beside "what am I looking at". */
@@ -108,17 +108,17 @@ body { background: var(--bg); font-size: 14px; }
    only when a run has more than one flow to choose between. */
 .viewswitch .liveflow { max-width: 12ch; border: 0; background: transparent; color: inherit; font: inherit; padding: 0 6px; }
 .maphere { display: inline-flex; align-items: baseline; gap: 6px; }
-.maphere-of { font: 600 11.5px/1 var(--font-ui); color: var(--muted); }
-.maphere-name { font-family: var(--font-mono); font-size: 13px; }
+.maphere-of { font: 600 var(--text-xs)/1 var(--font-ui); color: var(--muted); }
+.maphere-name { font-family: var(--font-mono); font-size: var(--text-md); }
 
-.filters .arg { width: 150px; font-family: var(--font-mono); font-size: 13px; }
+.filters .arg { width: 150px; font-family: var(--font-mono); font-size: var(--text-md); }
 
 /* --- the turn dial + filter bar ---------------------------------------------- */
 .boardbar { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
 .dial { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .dialnum {
   font-family: var(--font-read);
-  font-size: 30.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  font-size: 30.5px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--ink); border: 0; padding: 0 4px; line-height: 1;
 }
 /* Clocks forward (board-legibility.md piece 4): every box's clock, always
@@ -126,13 +126,13 @@ body { background: var(--bg); font-size: 14px; }
 .clocksdial { flex-direction: column; align-items: stretch; gap: 6px; }
 .clockshead { display: flex; align-items: center; gap: 12px; }
 .clocks { display: flex; flex-direction: column; gap: 2px; padding-left: 2px; }
-.clockrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.clockrow { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-sm); }
 .clockbox { font-family: var(--font-mono); color: var(--muted); min-width: 90px; }
 .clockval { font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
-.mini { font-size: 11.5px; padding: 1px 8px; border-radius: var(--radius-pill); }   /* a `.btn`, pill-shaped and small */
+.mini { font-size: var(--text-xs); padding: 1px 8px; border-radius: var(--radius-pill); }   /* a `.btn`, pill-shaped and small */
 /* A timed box's unit, said once on its row so the numbers beside it read as
    time (design/engine-server.md 4.8). */
-.clockunit { color: var(--muted); font-size: 11.5px; }
+.clockunit { color: var(--muted); font-size: var(--text-xs); }
 .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 
 /* --- the board: hands as places ----------------------------------------------- */
@@ -147,7 +147,7 @@ body { background: var(--bg); font-size: 14px; }
 .hhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; cursor: pointer; }
 /* The header is a button to the keyboard (Enter or Space selects the hand). */
 .hhead:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
-.hname { font-family: var(--font-read); font-weight: 600; font-size: 15px; }
+.hname { font-family: var(--font-read); font-weight: 600; font-size: var(--text-lg); }
 .htags { display: inline-flex; gap: 6px; }
 .hcards { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
 .hcard {
@@ -160,7 +160,7 @@ body { background: var(--bg); font-size: 14px; }
   text-align: left;
   color: var(--ink); font: inherit; cursor: pointer;
 }
-.hcard h4 { font-family: var(--font-read); font-size: 14.5px; font-weight: 600; margin: 0; }
+.hcard h4 { font-family: var(--font-read); font-size: var(--text-lg); font-weight: 600; margin: 0; }
 .hcard.on { border-color: var(--accent); outline: 1px solid var(--accent); }
 .hcard.seen h4 { color: var(--muted); }
 .hcard { position: relative; }
@@ -198,9 +198,9 @@ body { background: var(--bg); font-size: 14px; }
   max-width: 560px;
 }
 .pp-head { display: flex; align-items: baseline; gap: 10px; }
-.pp-head h3 { font-family: var(--font-read); font-size: 17.5px; margin: 0; flex: 1; }
-.pp-hand { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
-.playpanel .beat { font-family: var(--font-read); font-size: 14.5px; line-height: 1.45; margin: 0; }
+.pp-head h3 { font-family: var(--font-read); font-size: var(--text-xl); margin: 0; flex: 1; }
+.pp-hand { font-size: var(--text-sm); color: var(--muted); font-family: var(--font-mono); }
+.playpanel .beat { font-family: var(--font-read); font-size: var(--text-lg); line-height: 1.45; margin: 0; }
 .pp-outcome { border-top: 1px solid var(--line-soft); padding-top: 10px; display: flex; flex-direction: column; gap: 5px; }
 .pp-otitle { font-family: var(--font-read); font-weight: 600; margin: 0; }
 .pp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -213,13 +213,13 @@ body { background: var(--bg); font-size: 14px; }
 /* A card performed by Patter: the scene's transcript, then its choice (the same full-width
    column as outcomes), or the outcome it reached. */
 .pp-scene { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
-.pp-line { font-family: var(--font-read); font-size: 14.5px; line-height: 1.45; margin: 0; }
-.pp-who { font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
-.pp-chose { font-family: var(--font-read); font-size: 14.5px; font-style: italic; color: var(--accent); margin: 0; }
+.pp-line { font-family: var(--font-read); font-size: var(--text-lg); line-height: 1.45; margin: 0; }
+.pp-who { font-family: var(--font-ui); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
+.pp-chose { font-family: var(--font-read); font-size: var(--text-lg); font-style: italic; color: var(--accent); margin: 0; }
 .pp-options { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .playpanel .pp-options > .pp-option { width: 100%; text-align: left; padding: 8px 12px; }
 .pp-options > .pp-option:disabled { opacity: 0.5; cursor: not-allowed; }
-.pp-problem { font-size: 13px; color: var(--danger); margin: 4px 0 0; }
+.pp-problem { font-size: var(--text-md); color: var(--danger); margin: 4px 0 0; }
 
 /* --- snapshots ------------------------------------------------------------------ */
 .snappanel {
@@ -237,7 +237,7 @@ body { background: var(--bg); font-size: 14px; }
 /* --- behind the curtain (the diagnostic fold) --------------------------------- */
 .curtain { margin-top: auto; border-top: 1px solid var(--line-soft); padding-top: 10px; }
 .curtain > summary {
-  cursor: pointer; color: var(--muted); font-size: 12.5px;
+  cursor: pointer; color: var(--muted); font-size: var(--text-sm);
   list-style: none; user-select: none;
 }
 /* The disclosure is the vocabulary's chevron, appended by the builder; the
@@ -253,9 +253,9 @@ body { background: var(--bg); font-size: 14px; }
   gap: 14px;
   flex-wrap: wrap;
 }
-.sr { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); }
-.srlabel { font-family: var(--font-mono); font-size: 11.5px; }
-.srval { width: 58px; font-family: var(--font-mono); font-size: 12px; padding: 2px 6px; }
+.sr { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-sm); color: var(--muted); }
+.srlabel { font-family: var(--font-mono); font-size: var(--text-xs); }
+.srval { width: 58px; font-family: var(--font-mono); font-size: var(--text-sm); padding: 2px 6px; }
 .srval.ro { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); }
 /* A hand's tags: the shell's `.pill`, with the identity dot. */
 .pill i { flex: none; width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
@@ -281,7 +281,7 @@ body { background: var(--bg); font-size: 14px; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 /* --- the State and Why not? tabs ------------------------------------------------- */
@@ -290,15 +290,15 @@ body { background: var(--bg); font-size: 14px; }
   padding: 12px 16px;
   overflow-y: auto;
   display: flex; flex-direction: column; gap: 12px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 /* The Why not? tab: the hand as a heading, then one block per card - its
    name, and the reason indented beneath it in a quieter voice. The rail is
    narrow, so the reason goes under its card rather than beside it. */
 .whypanel { gap: 18px; }
 .whyhead { display: flex; flex-direction: column; gap: 3px; }
-.whyhand { font-family: var(--font-read); font-weight: 600; font-size: 16px; color: var(--ink); }
-.whymeta { display: block; color: var(--muted); font-size: 12.5px; }
+.whyhand { font-family: var(--font-read); font-weight: 600; font-size: var(--text-lg); color: var(--ink); }
+.whymeta { display: block; color: var(--muted); font-size: var(--text-sm); }
 .whysection { display: flex; flex-direction: column; gap: 10px; }
 .whylist { display: flex; flex-direction: column; gap: 10px; }
 .whylist.tight { gap: 4px; }
@@ -313,11 +313,11 @@ body { background: var(--bg); font-size: 14px; }
 }
 .whylink:hover { text-decoration: underline; text-underline-offset: 2px; }
 .whylink:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.whylink.whycard { font-family: var(--font-read); font-size: 14px; color: var(--ink); }
-.whylink.whyreason { margin-left: 14px; padding-left: 0; font-size: 12.5px; color: var(--muted); }
+.whylink.whycard { font-family: var(--font-read); font-size: var(--text-md); color: var(--ink); }
+.whylink.whyreason { margin-left: 14px; padding-left: 0; font-size: var(--text-sm); color: var(--muted); }
 .whylink.whyreason:hover { color: var(--ink); }
-.whycard { font-family: var(--font-read); font-size: 14px; color: var(--ink); }
-.whyreason { padding-left: 14px; font-size: 12.5px; color: var(--muted); }
+.whycard { font-family: var(--font-read); font-size: var(--text-md); color: var(--ink); }
+.whyreason { padding-left: 14px; font-size: var(--text-sm); color: var(--muted); }
 /* The fold sits under the near misses, not pushed to the panel's foot as the
    curtain it borrows its look from is. */
 .whyrest { margin-top: 0; }
@@ -331,33 +331,33 @@ body { background: var(--bg); font-size: 14px; }
 .jfilters { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 16px 8px 14px; border-bottom: 1px solid var(--line-soft); }
 .jflt {
   display: inline-flex; align-items: center; gap: 3px;
-  font-size: 10.5px; font-weight: 600; padding: 1px 8px;
+  font-size: var(--text-xs); font-weight: 600; padding: 1px 8px;
   border: 1px solid var(--line-soft); border-radius: var(--radius-pill);
   background: transparent; color: var(--muted); opacity: 0.55; cursor: pointer; font-family: inherit;
   transition: opacity var(--dur-quick) var(--ease-standard), border-color var(--dur-quick) var(--ease-standard);
 }
 .jflt.on { opacity: 1; border-color: var(--line); color: var(--ink); }
 .jrow { display: flex; align-items: baseline; gap: 8px; line-height: 1.45; }
-.jt { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); min-width: 26px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.jt { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted); min-width: 26px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Box-qualified stamps ("contracts 4") need a wider, still-aligned column. */
 .journal.stamped .jt { min-width: 72px; max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
-.jk { font-weight: 600; font-size: 11px; min-width: 44px; }
+.jk { font-weight: 600; font-size: var(--text-xs); min-width: 44px; }
 .jp { flex: 1; overflow-wrap: anywhere; color: var(--ink); }
 /* The "becomes" arrow between a before and an after: drawn, muted, on the line. */
 .jarrow { display: inline-flex; vertical-align: middle; align-self: center; color: var(--muted); margin: 0 4px; }
 .j-deal .jk { color: var(--ok); }
 .j-play .jk { color: var(--accent); }
 .j-write .jk { color: var(--warn); }
-.j-write .jp { font-family: var(--font-mono); font-size: 11px; }
+.j-write .jp { font-family: var(--font-mono); font-size: var(--text-xs); }
 .j-evict .jk, .j-evict .jp { color: var(--muted); }
 .j-turn .jk { color: var(--muted); }
 .j-warn .jk, .j-warn .jp { color: var(--danger); }
 .j-warn .jk { display: inline-flex; align-self: center; }
 
-.runerr { color: var(--danger); font-size: 13px; }
+.runerr { color: var(--danger); font-size: var(--text-md); }
 .loaderr { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; }
 .loaderr h2 { font-family: var(--font-read); margin: 0; }
-.loaderr pre { font-family: var(--font-mono); font-size: 13px; color: var(--danger); white-space: pre-wrap; max-width: 60ch; text-align: left; }
+.loaderr pre { font-family: var(--font-mono); font-size: var(--text-md); color: var(--danger); white-space: pre-wrap; max-width: 60ch; text-align: left; }
 
 /* --- the ripple (design/board-ripple.md) ------------------------------------
    Consequences indent under their play in the journal; changed hands pulse
@@ -369,11 +369,11 @@ body { background: var(--bg); font-size: 14px; }
 .jrow.j-in { padding-left: 26px; }
 /* The author's own poke, on the record: wrote's colour, meddled's honesty. */
 .j-meddle .jk { color: var(--warn); font-style: italic; }
-.j-meddle .jp { font-family: var(--font-mono); font-size: 11px; }
+.j-meddle .jp { font-family: var(--font-mono); font-size: var(--text-xs); }
 .boardbox-head { display: flex; align-items: baseline; gap: 8px; margin: 10px 2px 2px; }
 .boardbox-head:first-child { margin-top: 0; }
-.bbname { font-family: var(--font-read); font-weight: 600; font-size: 14.5px; color: var(--ink); }
-.bbadge { font-size: 11.5px; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-pill); padding: 1px 8px; }
+.bbname { font-family: var(--font-read); font-weight: 600; font-size: var(--text-lg); color: var(--ink); }
+.bbadge { font-size: var(--text-xs); color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-pill); padding: 1px 8px; }
 .hcell.rippled { animation: ripple-pulse 1.1s ease-out 2; }
 @keyframes ripple-pulse {
   0% { box-shadow: 0 0 0 0 var(--accent-soft); }
@@ -391,8 +391,8 @@ body { background: var(--bg); font-size: 14px; }
 .tbody { grid-template-columns: 172px 1fr 320px; }
 .tbody.nonav { grid-template-columns: 1fr 320px; }
 .bnav { display: flex; flex-direction: column; gap: 1px; padding: 14px 8px; border-right: 1px solid var(--line-soft); background: var(--surface); overflow-y: auto; }
-.bnav-row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; font: inherit; font-size: 13.5px; color: var(--ink); background: none; border: 0; border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; }
+.bnav-row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; font: inherit; font-size: var(--text-md); color: var(--ink); background: none; border: 0; border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; }
 .bnav-row:hover { background: var(--accent-soft); }
 .bnav-row.sel { background: var(--accent-soft); font-weight: 600; }
 .bnav-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bnav-n { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bnav-n { font-size: var(--text-xs); color: var(--muted); font-variant-numeric: tabular-nums; }

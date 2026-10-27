@@ -158,7 +158,7 @@ function mountCanvas(host: HTMLElement, strip: HTMLElement, first: FocusedView):
     const face = (card: LinkCard, emphasis = false): CardNode => ({
       id: card.id,
       title: nameOf(card),
-      deck: card.deckTitle,
+      deck: card.deckTitle, showDeck: true, // the Links canvas mixes decks, so each card names its own
       x: 0, y: 0, width: NODE_W, height: NODE_H, cornerRadius: NODE_RADIUS,
       ...(emphasis ? { emphasis: true } : {}),
     });

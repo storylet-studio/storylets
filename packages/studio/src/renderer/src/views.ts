@@ -234,11 +234,14 @@ export function projectLead(
   remote: { status: string; edits: number } | undefined,
   go: () => void,
 ): HTMLElement {
+  // The project's name and nothing else: no app name in its own window, and no
+  // spaced hyphen. The remote status is a separate, quieter span beside it (the
+  // October 2026 UI review, 3-composition.md proposal 8).
   const button = el("button", {
     className: "pname", tip: `The project overview\n${project.dir}`, onClick: go,
-  }, `${project.name} - Storyletter`);
+  }, project.name);
   if (remote !== undefined && remote.edits > 0) {
-    button.append(el("span", { className: "pname-note", text: ` - ${remote.status}` }));
+    button.append(el("span", { className: "pname-note", text: remote.status }));
   }
   return button;
 }
@@ -433,14 +436,14 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
         deckRow.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
         host.append(deckRow);
       }
-      host.append(el("button", { className: "nav-add nav-d2", text: "+ New deck", onClick: () => actions.newDeck(box.id) }));
+      host.append(el("button", { className: "nav-add nav-d2", onClick: () => actions.newDeck(box.id) }, iconNode("add", 12), "New deck"));
     });
 
     collection("Hands", "hands", box.hands.length);
 
   }
 
-  host.append(el("button", { className: "nav-add nav-add-box nav-d0", text: "+ New box", onClick: () => actions.newBox() }));
+  host.append(el("button", { className: "nav-add nav-add-box nav-d0", onClick: () => actions.newBox() }, iconNode("add", 12), "New box"));
 }
 
 // The delete guard's evidence for a card lives with the other deletes
@@ -582,7 +585,7 @@ export function renderDeckCentre(
   const trail = crumbTrail([
     { label: box.title ?? box.gameId, go: () => actions.focus({ kind: "box", box: box.id }) },
     { label: "Decks", go: () => actions.focus({ kind: "decks", box: box.id }) },
-  ], tab === "cards" ? viewToggle(mode, actions, true) : null);
+  ]);
   let titled = deck.title ?? "";
   let purpose = deck.purpose ?? "";
   let pinned = deck.gameIdPinned ?? "";
@@ -604,6 +607,9 @@ export function renderDeckCentre(
     { key: "properties", label: "Properties", count: deck.properties.length },
     ...extensionTabs(actions.project?.(), "deck", deck.id),
   ], tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "deck", box: box.id, deck: deck.id }); });
+  // The card / table / node switch is a view of the Cards tab, so it sits at the
+  // tab bar's right end while that tab is open, not in the back row above.
+  if (tab === "cards") tabs.append(viewToggle(mode, actions, true));
 
   let body: HTMLElement;
   let bar: HTMLElement | null = null;

@@ -539,8 +539,11 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
 
   // --- the grid ---------------------------------------------------------------
   // Drawn across the visible world rect only, so panning a long way costs
-  // nothing. Two levels, both of which fade out when they stop reading as a
-  // grid: minor lines go first, then the majors.
+  // nothing. At rest only the majors, at a whisper: graph paper behind every
+  // deck was noise. While an item is being dragged, and the snap is live, both
+  // levels draw as they used to, so the grid explains the snap the moment it
+  // bites (the October 2026 UI review, 3-composition.md proposal 6). Either
+  // level fades out when it stops reading as a grid.
   const grid = new Konva.Shape({
     listening: false,
     sceneFunc: (ctx) => {
@@ -568,8 +571,12 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
         ctx.stroke();
       };
 
-      rule(snap, tokens.lineSoft, true);
-      rule(major, tokens.line, false);
+      if (draggingItem) {
+        rule(snap, tokens.lineSoft, true);
+        rule(major, tokens.line, false);
+      } else {
+        rule(major, tokens.lineSoft, false);
+      }
     },
   });
   gridLayer.add(grid);
@@ -809,6 +816,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       clearHover();
       hideTip();
       draggingItem = true;
+      gridLayer.batchDraw(); // the minor lines come and go with the drag
       resolveCursor();
       opts.onDragStart?.();
     });
@@ -837,6 +845,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       e.cancelBubble = true;
       dragDirty = false;
       draggingItem = false;
+      gridLayer.batchDraw(); // the minor lines come and go with the drag
       // Now the grid bites, once (canvas-geometry `snapDelta`).
       const from = dragStart?.get(item.id);
       const delta = from

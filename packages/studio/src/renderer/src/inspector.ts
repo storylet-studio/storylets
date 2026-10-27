@@ -957,11 +957,16 @@ export function documentHeading(label: string, opts: {
    *  which is how the feedback walk arrives at a comment it navigated to. */
   comments?: { on: string; count: number; open: (anchor: HTMLElement) => void };
 }): HTMLElement {
+  // No caption over the title ("Deck", "Card"): the back button above names the
+  // collection and the navigator marks the row, so the kind is said twice already
+  // (the October 2026 UI review, 3-composition.md proposal 5). It stays the
+  // heading's accessible name. The comment bubble and the More menu end the title
+  // row, after the address.
   const head = el("div", { className: "doc-head" });
-  const topline = el("div", { className: "doc-topline" }, caption(label));
-  if (opts.comments) topline.append(commentBubble(opts.comments.on, opts.comments.count, opts.comments.open));
-  if (opts.menu?.length) topline.append(moreMenu(opts.menu));
-  head.append(topline);
+  head.setAttribute("aria-label", label);
+  const actionsEl: HTMLElement[] = [];
+  if (opts.comments) actionsEl.push(commentBubble(opts.comments.on, opts.comments.count, opts.comments.open));
+  if (opts.menu?.length) actionsEl.push(moreMenu(opts.menu));
   // The venue's claim, built once and shown while it holds. One line per
   // installation and nothing at all otherwise, which is the density rule: a
   // project with no server has no venue to be told about.
@@ -1001,7 +1006,12 @@ export function documentHeading(label: string, opts: {
     titleRow.append(input);
   }
   if (gid) titleRow.append(el("div", { className: "doc-gid" }, gid.root));
-  if (titleRow.childElementCount > 0) head.append(titleRow);
+  if (titleRow.childElementCount > 0) {
+    if (actionsEl.length) titleRow.append(el("div", { className: "doc-actions" }, ...actionsEl));
+    head.append(titleRow);
+  } else if (actionsEl.length) {
+    head.append(el("div", { className: "doc-topline" }, ...actionsEl)); // a heading with no title still has its actions
+  }
   if (opts.kind !== undefined) head.append(el("p", { className: "doc-kind", text: opts.kind }));
   // The venue's claim on this entity, under the name it claims.
   for (const line of claimLines) head.append(line);
@@ -1020,8 +1030,9 @@ export function documentHeading(label: string, opts: {
     // seven. "Purpose" is that word because it is what the format already calls
     // the field, so the app, the shards and the docs agree.
     head.append(el("label", { className: "doc-purpose-label", text: "Purpose" }));
+    // One line when empty, growing as the author types (field-sizing, in the CSS).
     const ta = el("textarea", { className: "insp-input insp-beat doc-purpose" });
-    ta.value = p.get(); ta.rows = 2; ta.placeholder = p.placeholder ?? "";
+    ta.value = p.get(); ta.rows = 1; ta.placeholder = p.placeholder ?? "";
     bindField(ta, { mode: "input", set: p.set, commit: p.commit });
     head.append(ta);
   }

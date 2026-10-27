@@ -36,7 +36,7 @@
    face, weight 600, muted. Not an overline: the tracked-caps eyebrow is
    retired everywhere but table column heads, which wear the shell's
    `.overline` ("Captions are words, not overlines", design-language.md). */
-.caption { font: 600 13px/1.3 var(--font-ui); color: var(--muted); }
+.caption { font: 600 var(--text-md)/1.3 var(--font-ui); color: var(--muted); }
 
 /* The tool-window close is drawn now (toolWindowHead appends the vocabulary's
    `close` at 14px, the pin's size), so it takes the pin's box: the shell's own

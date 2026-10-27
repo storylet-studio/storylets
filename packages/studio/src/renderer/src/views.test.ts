@@ -660,7 +660,7 @@ describe("the topbar's project name", () => {
 
   it("says nothing about a server for a project that has none", () => {
     const lead = projectLead(project, undefined, go);
-    expect(lead.textContent).toBe("This Room - Storyletter");
+    expect(lead.textContent).toBe("This Room"); // no app name in its own window, no spaced hyphen (October 2026)
     expect(lead.querySelector(".pname-note")).toBeNull();
     // And it is still the way home, with WHERE in the tooltip: two projects can
     // share a name and nothing else on screen tells them apart.
@@ -669,13 +669,13 @@ describe("the topbar's project name", () => {
 
   it("carries the status line, in the Server menu's own words, when there are edits", () => {
     const lead = projectLead(project, { status: "3 edits unpushed", edits: 3 }, go);
-    expect(lead.querySelector(".pname-note")?.textContent).toBe(" - 3 edits unpushed");
-    expect(lead.textContent).toBe("This Room - Storyletter - 3 edits unpushed");
+    expect(lead.querySelector(".pname-note")?.textContent).toBe("3 edits unpushed"); // its own span, spaced by CSS
+    expect(lead.firstChild?.textContent).toBe("This Room");
   });
 
   it("is silent while the project is level with the server: nothing nags", () => {
     const lead = projectLead(project, { status: "In sync", edits: 0 }, go);
-    expect(lead.textContent).toBe("This Room - Storyletter");
+    expect(lead.textContent).toBe("This Room");
     expect(lead.querySelector(".pname-note")).toBeNull();
   });
 });
@@ -729,11 +729,12 @@ describe("Group by", () => {
 });
 
 describe("copy and deletes (the October 2026 review, items 5 and 25)", () => {
-  it("the navigator's add row says + New deck, as everywhere else", () => {
+  it("the navigator's add row says New deck beside the drawn add, as everywhere else", () => {
     const host = document.createElement("div");
     const expanded = new Set([navId.box("b_1"), navId.collection("b_1", "decks")]);
     renderNav(host, project, { kind: "deck", box: "b_1", deck: "k_1" } as Focus, expanded, stubActions());
-    expect([...host.querySelectorAll(".nav-add")].map((b) => b.textContent)).toContain("+ New deck");
+    expect([...host.querySelectorAll(".nav-add")].map((b) => b.textContent)).toContain("New deck");
+    expect(host.querySelector(".nav-add svg")).not.toBeNull(); // the drawn icon, not a typed "+"
     expect(host.textContent).not.toContain("+ deck");
   });
 
