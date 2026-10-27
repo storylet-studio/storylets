@@ -70,6 +70,13 @@ jobs:
         working-directory: storylets
         run: npm run build -w @storylet-studio/hamlet-client
 
+      # The zips carry the projects, and a player opens them in Storyletter and
+      # Patterpad, which validate on open. 0.9.0 shipped one with a warning and a
+      # Patter bundle stale against the released Patter; this refuses that.
+      - name: The shipped projects validate clean
+        working-directory: storylets
+        run: npm run examples
+
       - name: Assemble the plain Hamlet's zip (its project, and the page Storyletter exports)
         working-directory: storylets
         run: |

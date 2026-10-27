@@ -14,9 +14,9 @@
     }
   ],
   "content": {
-    "hash": "02fw8n0",
+    "hash": "0x9d5to",
     "project": "proj_mfj6p1i9",
-    "structureHash": "19a73c7"
+    "structureHash": "1xmmg87"
   },
   "locales": {
     "default": "en",
@@ -32,6 +32,7 @@
             {
               "beats": [
                 {
+                  "action": true,
                   "id": "T_77a352f0",
                   "kind": "text"
                 },
@@ -159,6 +160,7 @@
             {
               "beats": [
                 {
+                  "action": true,
                   "id": "T_665628bb",
                   "kind": "text"
                 }
@@ -205,6 +207,7 @@
                     {
                       "beats": [
                         {
+                          "action": true,
                           "id": "L_duorb56a",
                           "kind": "text"
                         }
@@ -248,6 +251,7 @@
             {
               "beats": [
                 {
+                  "action": true,
                   "id": "T_acf6f963",
                   "kind": "text"
                 },
@@ -280,6 +284,7 @@
             {
               "beats": [
                 {
+                  "action": true,
                   "id": "T_07a7313f",
                   "kind": "text"
                 }
@@ -529,6 +534,7 @@
             {
               "beats": [
                 {
+                  "action": true,
                   "id": "T_985d8f12",
                   "kind": "text"
                 },
@@ -546,6 +552,7 @@
                 {
                   "beats": [
                     {
+                      "action": true,
                       "id": "T_inn_night",
                       "kind": "text"
                     }
@@ -572,6 +579,7 @@
                 {
                   "beats": [
                     {
+                      "action": true,
                       "id": "L_zgv6v66a",
                       "kind": "text"
                     }
@@ -597,6 +605,7 @@
                           "kind": "line"
                         },
                         {
+                          "action": true,
                           "id": "L_xscc5c4p",
                           "kind": "text"
                         }
@@ -628,6 +637,7 @@
                           "kind": "line"
                         },
                         {
+                          "action": true,
                           "id": "L_r41z2eh1",
                           "kind": "text"
                         }
@@ -794,6 +804,7 @@
             {
               "beats": [
                 {
+                  "action": true,
                   "id": "T_374799a6",
                   "kind": "text"
                 }
@@ -813,6 +824,7 @@
                           "kind": "line"
                         },
                         {
+                          "action": true,
                           "id": "L_oop87xn6",
                           "kind": "text"
                         }
@@ -849,6 +861,7 @@
                           "kind": "line"
                         },
                         {
+                          "action": true,
                           "id": "L_6rt8t6k5",
                           "kind": "text"
                         }
@@ -875,6 +888,7 @@
                     {
                       "beats": [
                         {
+                          "action": true,
                           "id": "L_qawld22y",
                           "kind": "text"
                         }

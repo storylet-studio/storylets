@@ -63,6 +63,12 @@ jobs:
         working-directory: storylets
       - run: npm run build
         working-directory: storylets
+      # The examples are what we ship (the Hamlet's zips carry its projects), so each
+      # must validate with no error, no warning and no stale bundle. The CLI exits 0
+      # on a warning by design, which is how the Hamlet 0.9.0 shipped one. The Patter
+      # projects go through the latest published Patter CLI, as a player's Patterpad would.
+      - run: npm run examples
+        working-directory: storylets
       # The playable-HTML export inlines a MINIFIED COPY of the runtime, generated
       # into packages/ops/src/playable-player.ts by ops' prebuild. If that copy
       # drifts from the current runtime, a published page ships a stale engine.

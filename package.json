@@ -15,6 +15,7 @@
     "bump:play": "node scripts/bump-play-version.mjs",
     "parity": "node scripts/check-runtime-api-parity.mjs",
     "sample": "node scripts/check-sample-coverage.mjs",
+    "examples": "node scripts/check-examples.mjs",
     "check:unity-demo": "./scripts/check-unity-demo.sh",
     "check:unreal-plugin": "./scripts/check-unreal-plugin.sh",
     "test:watch": "vitest",

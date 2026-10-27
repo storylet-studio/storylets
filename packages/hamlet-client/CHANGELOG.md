@@ -7,6 +7,15 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-27
+
+### Fixed
+
+- **The projects in the zips validate clean.** The Hamlet's Storylet projects carried a canvas position for a card
+  that had left its deck, so Storyletter warned about it on open; it is gone. The Patter project's compiled bundle
+  predated Patter 0.13's compiler, so `patter validate` and Patterpad called it stale; it is re-exported with the
+  current Patter. Neither changed how the Hamlet plays.
+
 ## [0.9.0] - 2026-10-22
 
 ### Changed

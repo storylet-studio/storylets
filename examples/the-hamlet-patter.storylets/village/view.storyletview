@@ -1,14 +1,6 @@
 {
   schema: "storylets/view@0",
   canvases: {
-    k_ambients: {
-      cards: {
-        c_3ftq28te: {
-          x: 344,
-          y: -29,
-        },
-      },
-    },
     k_arrival: {
       cards: {
         c_arrive: {
