@@ -7,13 +7,13 @@
 // and the simulation reads current disk. The clock and the status are the
 // shell's save controller; WHAT is pending is ours, and lives here.
 //
-// Also here, because they are the same question asked of the same queue: the
-// flush a delete waits on, whether the review walk or the problems bar may move
-// the document away from a field, and Auto Rebuild, which follows the saves.
+// Also here, because they are the same question asked of the same queue:
+// whether the review walk or the problems bar may move the document away from
+// a field, and Auto Rebuild, which follows the saves.
 // ---------------------------------------------------------------------------
 
-import { confirmDialog, createSaveController, debounce, isEditableTarget } from "@wildwinter/app-shell";
-import type { ConfirmOptions, SaveStatus } from "@wildwinter/app-shell";
+import { createSaveController, debounce, isEditableTarget } from "@wildwinter/app-shell";
+import type { SaveStatus } from "@wildwinter/app-shell";
 import { ok, quietly } from "./results.js";
 import { remember } from "./session.js";
 import type { Session } from "./session.js";
@@ -152,17 +152,6 @@ export function createSaveQueue(ctx: SaveQueueContext) {
      *  recreate the card. */
     dropCards(cardIds: string[]): void {
       for (const id of cardIds) pendingCards.delete(id);
-    },
-
-    /**
-     * The delete guard's question, when there is one (deletes.ts builds it from
-     * the evidence), after landing every pending edit: a delete is a write, and
-     * a write that raced the save queue could recreate what it removed or lose an
-     * edit made a moment before. True to go ahead.
-     */
-    async deleting(question: ConfirmOptions | undefined): Promise<boolean> {
-      await saver.flush();
-      return question === undefined || confirmDialog(question);
     },
 
     /**

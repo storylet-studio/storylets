@@ -71,7 +71,8 @@ open document's row is highlighted strongly, and each ancestor softly. When the 
 document has no row of its own (a card, a hand, a tag group), its nearest ancestor takes the
 strong highlight, so you can always see which deck you're in.
 
-Right-click a box or deck row for **Duplicate** and **Delete**. To reorder boxes, decks or
+Right-click a box or deck row for **Duplicate** and **Delete**. A delete doesn't ask first: a
+message names what went, and what went with it, and its **Undo** puts it all back. To reorder boxes, decks or
 hands, drag them on the project's page, the box's Decks page or its Hands page. Toggle the pane with
 **View ▸ Show Navigator** (`Cmd+1`).
 
@@ -103,11 +104,11 @@ Each kind of document has a fixed set of tabs:
 
 | Document | Tabs |
 |---|---|
-| Box | Map (when the box uses the project map) · Contents · Dealing · Card template · Hand templates · Tags · Properties |
-| Deck | Cards · Dealing · Properties |
-| Card | Dealing · Outcomes · Fields |
-| Hand | Cards · Dealing · Slots · Properties |
-| Hand template | Dealing · Bindings · Properties |
+| Box | Map (when the box uses the project map), Contents, Dealing, Card template, Hand templates, Tags, Properties |
+| Deck | Cards, Dealing, Properties |
+| Card | Dealing, Outcomes, Fields |
+| Hand | Cards, Dealing, Slots, Properties |
+| Hand template | Dealing, Bindings, Properties |
 
 **Dealing** always holds how the thing gets dealt. A tab shows a count where one makes
 sense (a **0** included, so a dimmed tab reads as empty rather than disabled), and a tab
@@ -161,7 +162,7 @@ replaces text across the whole project. That covers the titles and purposes of e
 deck, card, outcome, hand, hand template, and tag group, the project's name, and the text
 fields on cards. Type what to find and what to replace it with, and the list previews every
 match as before → after, with where it lives. **Replace all** rewrites them all at once,
-after asking you to confirm the count; the **Replace** button on a row does just that one.
+and the message it shows has **Undo**; the **Replace** button on a row does just that one.
 It never touches conditions, changes, gameIds, or ids, and a replace is one step in
 **Undo**. If the card you're editing is one of the matches, it shows the new text as soon
 as the replace lands.
@@ -191,15 +192,15 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 
 | Menu | Items |
 |---|---|
-| Storyletter (macOS only) | About Storyletter · User Information… |
-| File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · Open Storyletpack… · Open Recent · Close Project · Save (`Cmd+S`) · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a Server… · New Card (`Shift+Cmd+N`) · Project Settings… (`Cmd+,`) · Share Scopes with Other Tools… · User Information… (Windows and Linux) · Exit (Windows) or Quit (Linux) |
-| Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Cut · Copy · Paste · Select All · Duplicate (`Cmd+D`) · Show Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)) · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
-| Play | The Board (`Cmd+P`) · Live Link |
-| Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage Test… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Find by Field… · Show Resolved Comments |
-| Publish | Publish Playable HTML… · Publish Spreadsheet… · Publish Bundle (`Shift+Cmd+B`) · Auto Rebuild |
-| View | Project Overview · Up a Level (`Cmd+[`) · Back · Forward · Show Navigator (`Cmd+1`) · Reset View · Coverage Overlay · Colour Theme · Actual Size · Zoom In · Zoom Out · Toggle Full Screen (Windows and Linux; macOS adds its own) |
+| Storyletter (macOS only) | About Storyletter, User Information… |
+| File | New Project… (`Cmd+N`), Open Project… (`Cmd+O`), Open Storyletpack…, Open Recent, Close Project, Save (`Cmd+S`), Export as Storyletpack…, Merge Returned Storyletpack…, Connect to a Server…, New Card (`Shift+Cmd+N`), Project Settings… (`Cmd+,`), Share Scopes with Other Tools…, User Information… (Windows and Linux), Exit (Windows) or Quit (Linux) |
+| Edit | Undo (`Cmd+Z`), Redo (`Shift+Cmd+Z`), Cut, Copy, Paste, Select All, Duplicate (`Cmd+D`), Show Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)), Find… (`Cmd+F`), Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
+| Play | The Board (`Cmd+P`), Live Link |
+| Review | Review Feedback (`Shift+Cmd+R`), Next Feedback (`F8`), Previous Feedback (`Shift+F8`), Coverage Test… (`Shift+Cmd+C`), Links…, Find Property Usage…, Find by Field…, Show Resolved Comments |
+| Publish | Publish Playable HTML…, Publish Spreadsheet…, Publish Bundle (`Shift+Cmd+B`), Auto Rebuild |
+| View | Command Palette… (`Cmd+K`), Project Overview, Up a Level (`Cmd+[`), Back, Forward, Show Navigator (`Cmd+1`), Reset View, Coverage Overlay, Colour Theme, Actual Size, Zoom In, Zoom Out, Toggle Full Screen (Windows and Linux; macOS adds its own) |
 | Window | the platform's own window items |
-| Help | Open an Example ▸ (The Hamlet…, The Village…, Port Meridian…, The Hamlet (Patter Version)…) · Storyletter Documentation · Storylet Studio Documentation Home · Check for Updates… · About Storyletter (Windows and Linux) |
+| Help | Open an Example ▸ (The Hamlet…, The Village…, Port Meridian…, The Hamlet (Patter Version)…), Storyletter Documentation, Storylet Studio Documentation Home, Check for Updates…, About Storyletter (Windows and Linux) |
 
 A few of these deserve a note. **Undo** and **Redo** reverse any edit to any kind of item,
 through the same version-control path a save takes, not just the text field you're in.

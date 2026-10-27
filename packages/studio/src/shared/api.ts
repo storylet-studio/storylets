@@ -13,8 +13,11 @@ import type { TraceEvent } from "@storylet-studio/runtime";   // Live Link: the 
 
 // The updater's wire shapes are the shell's; re-exported so preload, renderer and
 // main all read one definition rather than three that can drift.
-import type { UpdaterDownloadProgress, UpdaterPromptOptions } from "@wildwinter/app-shell/updater";
-export type { UpdaterDownloadProgress, UpdaterPromptOptions };
+import type { UpdaterDownloadProgress, UpdaterPromptOptions, UpdaterReadyInfo } from "@wildwinter/app-shell/updater";
+export type { UpdaterDownloadProgress, UpdaterPromptOptions, UpdaterReadyInfo };
+// The command palette's rows are the shell's flattened menu (app-shell palette-main).
+import type { MenuCommand as PaletteCommand } from "@wildwinter/app-shell/menu";
+export type { PaletteCommand };
 
 export type { CoverageOrder, CoverageReport } from "@storylet-studio/ops";
 // Find: the Property and Replace tabs carry the ops types across unchanged.
@@ -908,9 +911,17 @@ export interface MapUpgradeDto {
   refusals: string[];
 }
 
+/** A step of the undo history, as a write that made it reports it: its id, and
+ *  whether it joined the step before (the same edit continuing), which a toast
+ *  doesn't offer to undo on its own (main history.ts `StepHistory`). */
+export interface ProjectStep { id: number; merged: boolean }
+
 export interface OpenResult {
   project: ProjectDto;
   problems: Problem[];
+  /** The undo step this write made, for a report that offers Undo (the
+   *  October 2026 review). Absent on a read, an open, or a write of nothing. */
+  step?: ProjectStep;
   /** Absent for an ordinary project. */
   remote?: RemoteDto;
   /** Launch at an item (`storyletter <path> --at <where>`): land HERE instead
@@ -1708,6 +1719,8 @@ export type MenuCommand =
   /** `project`: from a view window, so the project's history, never a field's typing in the editor. */
   | { cmd: "undo"; project?: boolean }
   | { cmd: "redo"; project?: boolean }
+  // View > Command Palette… (Cmd+K): every menu command by name, and quick open.
+  | { cmd: "command-palette" }
   // Edit > Select All in the editor: scoped to the canvas or the field (Patterpad's rule).
   | { cmd: "select-all" }
   | { cmd: "table" }
@@ -1906,7 +1919,7 @@ export interface StudioApi {
   deleteCard(deckId: string, cardId: string): Promise<OpenResult | { error: string }>;
   /** Delete several cards of one deck as ONE commit and one undo step. A card
    *  not in the deck refuses the whole delete. */
-  deleteCards(deckId: string, cardIds: string[]): Promise<OpenResult | { error: string }>;
+  deleteCards(deckId: string, cardIds: string[], key?: string): Promise<OpenResult | { error: string }>;
   /** Cards from several decks (a box's Contents selection), as one undo step. */
   deleteCardsAcross(groups: { deckId: string; cardIds: string[] }[]): Promise<OpenResult | { error: string }>;
   /** Reorder: move a card before/after a target card in its deck. */
@@ -1918,7 +1931,7 @@ export interface StudioApi {
 
   /** Add a new deck (a new shard) to a box; the result carries its id. */
   createDeck(boxId: string): Promise<{ result: OpenResult; deckId: string } | { error: string }>;
-  /** Remove an EMPTY deck's shard file. */
+  /** Remove a deck's shard file, and the cards in it, as one undo step. */
   deleteDeck(deckId: string): Promise<OpenResult | { error: string }>;
   /** Rename a deck (title and/or gameId; the file moves with the gameId). */
   renameDeck(deckId: string, edit: DeckEdit): Promise<OpenResult | { error: string }>;
@@ -1928,6 +1941,14 @@ export interface StudioApi {
    *  step stays where it was, to try again. */
   undo(): Promise<OpenResult | { error: string } | null>;
   redo(): Promise<OpenResult | { error: string } | null>;
+  /** A toast's Undo: undo step `id` (a write's `step`), but only while it is
+   *  still the newest. `stale` when anything has been done since, and nothing
+   *  changes. */
+  undoStep(id: number): Promise<OpenResult | { error: string } | { stale: true }>;
+  /** Editor window only: another window's toast (Find's Replace) asks for
+   *  `undoStep`; the editor owns the page it redraws, so it runs it and says
+   *  how it went. */
+  onUndoStep(handler: (id: number) => Promise<"done" | "stale">): void;
   /** Editor only: whether its page has a deck in focus, so the menu's New Card
    *  is live only when it has somewhere to put a card. Send on a change. */
   setDeckFocused(on: boolean): Promise<void>;
@@ -1967,7 +1988,9 @@ export interface StudioApi {
   // Find's Replace tab (ops runReplace). Preview is read-only; apply writes
   // through the mutation path as ONE undo step, after the editor has flushed.
   replacePreview(opts: ReplaceOptions): Promise<{ hits: ReplaceHit[]; items: number }>;
-  replaceApply(opts: ReplaceOptions): Promise<{ count: number; items: number } | { error: string }>;
+  replaceApply(opts: ReplaceOptions): Promise<{ count: number; items: number; step?: ProjectStep } | { error: string }>;
+  /** Find's toast Undo: the editor takes back step `id`, only while it is still the newest. */
+  searchUndoStep(id: number): Promise<"done" | "stale">;
   /** Editor window only: main wants pending edits on disk before a project-wide
    *  write; answer with `editorFlushed` when they are. */
   onEditorFlush(handler: () => void): void;
@@ -2077,9 +2100,9 @@ export interface StudioApi {
   mapZone(tagId: string): Promise<MapZoneDetailDto | null>;
   /** Put a box on the project map, or take it off. Leaving is refused, with a
    *  sentence, while the box's hands, cards or expressions still reference the
-   *  map; a box with hands placed on the map answers `confirm` first, and
-   *  leaves when asked again with `confirmed`. */
-  useProjectMap(boxId: string, on: boolean, confirmed?: boolean): Promise<OpenResult | { error: string } | { confirm: { title: string; body: string } } | { refused: LeaveRefusalDto }>;
+   *  map; leaving takes its hands' places on the map with it, and `cleared`
+   *  says how many, for the report that offers Undo. */
+  useProjectMap(boxId: string, on: boolean): Promise<(OpenResult & { cleared?: number }) | { error: string } | { refused: LeaveRefusalDto }>;
   /** A box's layer colour, picked from its swatch: a palette slot, stored in
    *  the box's view sidecar, one undo step. */
   setBoxColour(boxId: string, colour: number): Promise<OpenResult | { error: string }>;
@@ -2420,6 +2443,17 @@ export interface StudioApi {
   onUpdaterPrompt(handler: (opts: UpdaterPromptOptions) => Promise<number>): void;
   /** Live download progress, for a dialog opened with `progress: true`. */
   onUpdaterDownloadProgress(handler: (p: UpdaterDownloadProgress) => void): void;
+  /** An update downloaded on its own and is ready: a "Restart to update" chip
+   *  in the top bar (the shell's showUpdateReady), never a dialog. */
+  onUpdaterReady(handler: (info: UpdaterReadyInfo) => void): void;
+  /** The chip's click: restart and install, after the usual unsaved-edits question. */
+  updaterRestart(): void;
+
+  // --- the command palette (Cmd+K), the shell's two channels -----------------
+  /** The live application menu, flattened (app-shell palette-main). */
+  paletteCommands(): Promise<PaletteCommand[]>;
+  /** Run the menu item the palette picked, as clicking it would. */
+  paletteRun(id: string): void;
 }
 
 // --- the Fields window (Pattershot's brief, "a map of records edited in a helper window", H1 to H5) ------
@@ -2480,8 +2514,9 @@ export type ExtensionWriteResult = OpenResult | { error: string; code: Extension
 // every channel here has exactly one handler in main, and the preload calls
 // every one.
 //
-// The updater's seven channels are the shell's and stay out of this list: the
+// The updater's nine channels are the shell's and stay out of this list: the
 // preload writes them out literally, and updater-channels.test.ts holds them.
+// So are the command palette's two (app-shell palette-main registers main's half).
 
 /**
  * Every channel the renderer INVOKES, and the `StudioApi` method that invokes
@@ -2565,6 +2600,8 @@ export const INVOKE_CHANNELS = {
   "menu:setDeckFocused": "setDeckFocused",
   "edit:undo": "undo",
   "edit:redo": "redo",
+  "edit:undoStep": "undoStep",
+  "search:undoStep": "searchUndoStep",
   "table:open": "openTable",
   "board:setPin": "setBoardPinned",
   "state:setBoardFollow": "setBoardFollow",
@@ -2703,6 +2740,8 @@ export const PUSH_CHANNELS = {
   "search:navigate": carries<ReviewAt>(),
   "editor:flush": carries<void>(),
   "replace:applied": carries<number>(),
+  // Find's toast Undo, asked of the editor (`ask` pairs it with the reply).
+  "editor:undoStep": carries<{ ask: number; id: number }>(),
   "coverage:done": carries<void>(),
   [JOB_PROGRESS_CHANNEL]: carries<JobProgress>(),
   [PROJECT_CHANGED]: carries<void>(),
@@ -2732,6 +2771,8 @@ export const SEND_CHANNELS = {
   "app:ready": carries<void>(),
   "server:leave-shown": carries<void>(),
   "server:leave-reply": carries<number>(),
+  // The editor's answer to "editor:undoStep".
+  "editor:undoStepReply": carries<{ ask: number; result: "done" | "stale" }>(),
 };
 
 export type SendChannel = keyof typeof SEND_CHANNELS;

@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openProject } from "./project.js";
-import { createCard, createDeck, deleteDeck, redo, renameDeck, saveCard, undo } from "./mutate.js";
+import { createCard, createDeck, deleteCard, deleteDeck, redo, renameDeck, saveCard, undo, undoStep } from "./mutate.js";
+import { StepHistory, UNDO_LIMIT } from "./history.js";
 import type { ProjectSession } from "./project.js";
 
 const exampleDir = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
@@ -111,5 +112,74 @@ describe("undo / redo", () => {
     await saveCard(session, docks, id, { title: "Two" });   // a fresh edit
     expect(await redo(session)).toBeNull();                 // "One" is no longer redoable
     expect(titleOf(session, id)).toBe("Two");
+  });
+});
+
+// A toast's Undo (the October 2026 review: Undo replaces "Are you sure?") takes
+// back the step it reported and nothing else: each step has an id, and undoing
+// one by id is refused once anything newer has been done.
+describe("undoing one step by its id", () => {
+  const stepOf = (r: Awaited<ReturnType<typeof saveCard>>): { id: number; merged: boolean } => {
+    if ("error" in r || r.step === undefined) throw new Error("no step");
+    return r.step;
+  };
+
+  it("names each write's step, and the same id when an edit coalesces into it", async () => {
+    const session = scratchProject();
+    const id = ambushId(session);
+    const first = stepOf(await saveCard(session, docks, id, { title: "One" }));
+    const again = stepOf(await saveCard(session, docks, id, { title: "Two" }));
+    expect(first.merged).toBe(false);
+    expect(again).toEqual({ id: first.id, merged: true });
+    expect(session.history.newest).toBe(first.id);
+  });
+
+  it("undoes the step while it is the newest", async () => {
+    const session = scratchProject();
+    const id = ambushId(session);
+    const deleted = await deleteCard(session, docks, id);
+    if ("error" in deleted) throw new Error(deleted.error);
+    const undone = await undoStep(session, deleted.step!.id);
+    expect(undone).not.toHaveProperty("stale");
+    expect(titleOf(session, id)).toBe("Ambush at the ford");
+  });
+
+  it("is stale, and changes nothing, once something newer has been done", async () => {
+    const session = scratchProject();
+    const id = ambushId(session);
+    const deleted = await deleteCard(session, docks, id);
+    if ("error" in deleted) throw new Error(deleted.error);
+    const other = session.dto.boxes[0]!.decks[0]!.cards[0]!.id;
+    await saveCard(session, docks, other, { title: "Newer" });
+    expect(await undoStep(session, deleted.step!.id)).toEqual({ stale: true });
+    expect(titleOf(session, other)).toBe("Newer");
+    expect(titleOf(session, id)).toBeUndefined();
+    // Edit > Undo steps back to it in order, and then it is the newest again.
+    await undo(session);
+    expect(await undoStep(session, deleted.step!.id)).not.toHaveProperty("stale");
+    expect(titleOf(session, id)).toBe("Ambush at the ford");
+  });
+
+  it("is stale for a step already undone, and newest again once redone", async () => {
+    const session = scratchProject();
+    const deleted = await deleteCard(session, docks, ambushId(session));
+    if ("error" in deleted) throw new Error(deleted.error);
+    await undo(session);
+    expect(await undoStep(session, deleted.step!.id)).toEqual({ stale: true });
+    await redo(session);
+    expect(session.history.newest).toBe(deleted.step!.id);
+  });
+
+  it("keeps its ids in step with the shell's history across the cap", async () => {
+    const history = new StepHistory();
+    const ids = Array.from({ length: UNDO_LIMIT + 20 }, (_, i) => history.record(`step ${i}`, `struct:${i}`, [], []).id);
+    let steps = 0;
+    while (history.canUndo) {
+      expect(history.newest).toBe(ids[ids.length - 1 - steps]);
+      await history.applyUndo();
+      steps++;
+    }
+    expect(steps).toBe(UNDO_LIMIT);
+    expect(history.newest).toBeUndefined();
   });
 });

@@ -20,7 +20,7 @@ import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { currentDocTab, docTabs, documentHeading, setDocTab } from "./inspector.js";
 import { extensionTabs, knownTab } from "./extension-rows.js";
 import { problemText } from "./problem-copy.js";
-import { boxConfirm, cardHasContent, deleteLabel, templateConfirm } from "./deletes.js";
+import { deleteLabel } from "./deletes.js";
 import { placeGroupsOf } from "./where.js";
 import { mapGlyph } from "./map-glyphs.js";
 import { boxColour, boxPin } from "./box-tint.js";
@@ -400,7 +400,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
       path: inBox && focus.kind !== "box",
       onClick: () => actions.focus({ kind: "box", box: box.id }),
     });
-    boxRow.addEventListener("contextmenu", itemMenu("box", boxConfirm(box) !== undefined, () => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
+    boxRow.addEventListener("contextmenu", itemMenu("box", () => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
     host.append(boxRow);
     if (!expanded.has(boxNode)) continue;
 
@@ -436,7 +436,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
           sel: here,
           onClick: () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }),
         });
-        deckRow.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
+        deckRow.addEventListener("contextmenu", itemMenu("deck", () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
         host.append(deckRow);
       }
       host.append(el("button", { className: "nav-add shell-nav-row shell-nav-add nav-d2", onClick: () => actions.newDeck(box.id) }, iconNode("add", 12), "New deck"));
@@ -451,7 +451,6 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
 
 // The delete guard's evidence for a card lives with the other deletes
 // (deletes.ts); re-exported for the callers that have always read it here.
-export { cardHasContent } from "./deletes.js";
 
 // --- one gesture grammar, all three views of a deck ---------------------------
 //
@@ -570,7 +569,7 @@ const cardMenu = (box: string, deck: string, card: CardDto, actions: ViewActions
     { label: "Links\u2026", onClick: () => actions.showLinks(card.id) },
     { label: "Duplicate", onClick: () => actions.duplicateCard(box, deck, card.id) },
     // The object, and the ellipsis only when a question follows (deletes.ts).
-    { label: deleteLabel("card", cardHasContent(card)), danger: true, onClick: () => actions.deleteCard(box, deck, card.id) },
+    { label: deleteLabel("card"), danger: true, onClick: () => actions.deleteCard(box, deck, card.id) },
   ]); };
 
 export function renderDeckCentre(
@@ -598,7 +597,7 @@ export function renderDeckCentre(
     // The purpose is not a rename, so it commits as you type like every other
     // field (ruling N); only the title waits for the blur.
     purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "What these cards are for", commit: () => actions.saveDeckLater(deck.id, { purpose }) },
-    menu: [{ label: deleteLabel("deck", false), danger: true, onClick: () => actions.deleteDeck(box.id, deck.id) }],
+    menu: [{ label: deleteLabel("deck"), danger: true, onClick: () => actions.deleteDeck(box.id, deck.id) }],
     comments: { on: deck.id, count: actions.openThreads(deck.id), open: (a) => actions.showComments(deck.id, titled || deck.gameId, a) },
   });
   // Cards first: a deck IS its cards, and that is the tab an author opens the page
@@ -877,7 +876,7 @@ export function renderBoxCentre(
       // the page; main refuses it, with a sentence, while anything still names
       // a zone.
       ...(onMap ? [{ label: "Leave the project map", onClick: () => actions.useProjectMap(box.id, false) }] : []),
-      { label: deleteLabel("box", boxConfirm(box) !== undefined), danger: true, onClick: () => actions.deleteBox(box.id) },
+      { label: deleteLabel("box"), danger: true, onClick: () => actions.deleteBox(box.id) },
     ],
     // The venue's claim is on the NAME it bound: renaming the box in place lets
     // it go, and the line and the chip's mark go with it rather than standing
@@ -997,7 +996,7 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
       listMeta([t.bindings.join(", ") || "pulls the whole stock", /^\d+$/.test(t.slots) ? plural(Number(t.slots), "slot") : `${t.slots} slots`]),
       el("span", { className: "listmeta", text: `${plural(t.instances, "instance")}` }));
     row.dataset["vc"] = vcKeys.hands(box.id);
-    row.addEventListener("contextmenu", itemMenu("hand template", templateConfirm(t) !== undefined, () => actions.duplicateTemplate(box.id, t.id), () => actions.deleteTemplate(box.id, t.id)));
+    row.addEventListener("contextmenu", itemMenu("hand template", () => actions.duplicateTemplate(box.id, t.id), () => actions.deleteTemplate(box.id, t.id)));
     list.append(row);
   }
   list.append(el("button", { className: "listrow ghost", text: "+ New hand template", onClick: () => actions.newTemplate(box.id) }));
@@ -1024,7 +1023,7 @@ function boxTagsBody(box: BoxDto, actions: ViewActions, canMakeMap: boolean): HT
       group.spatial ? el("span", { className: "listmeta", text: "map" }) : null,
       el("div", { className: "chips" }, ...group.values.map(chip)));
     row.dataset["vc"] = vcKeys.tags(box.id);
-    row.addEventListener("contextmenu", itemMenu("tag group", false, () => actions.duplicateTagGroup(box.id, group.id), () => actions.deleteTagGroup(box.id, group.id)));
+    row.addEventListener("contextmenu", itemMenu("tag group", () => actions.duplicateTagGroup(box.id, group.id), () => actions.deleteTagGroup(box.id, group.id)));
     list.append(row);
   }
   list.append(el("button", { className: "listrow ghost", text: "+ New tag group", onClick: () => actions.newTagGroup(box.id) }));
@@ -1046,13 +1045,13 @@ function boxTagsBody(box: BoxDto, actions: ViewActions, canMakeMap: boolean): HT
 }
 
 /** Right-click Duplicate / Delete, the same pair every item row offers (F5).
- *  The delete names its object, with an ellipsis when it will ask first
- *  (`asks`, the evidence in deletes.ts). */
-const itemMenu = (noun: string, asks: boolean, duplicate: () => void, remove: () => void) => (e: MouseEvent): void => {
+ *  The delete names its object, and reports with Undo rather than asking
+ *  first (deletes.ts), so it has no ellipsis. */
+const itemMenu = (noun: string, duplicate: () => void, remove: () => void) => (e: MouseEvent): void => {
   e.preventDefault();
   openContextMenu(e.clientX, e.clientY, [
     { label: "Duplicate", onClick: duplicate },
-    { label: deleteLabel(noun, asks), danger: true, onClick: remove },
+    { label: deleteLabel(noun), danger: true, onClick: remove },
   ]);
 };
 
@@ -1094,7 +1093,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
         el("td", { text: deck.purpose ?? "" }),
       );
       row.addEventListener("click", () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }));
-      row.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
+      row.addEventListener("contextmenu", itemMenu("deck", () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
       wireDrop(row, deck.id, "y", move);
       tbody.append(row);
     }
@@ -1109,7 +1108,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
         el("span", { className: "sub", text: plural(deck.cards.length, "card") }),
         deck.purpose ? el("p", { className: "beat", text: deck.purpose }) : null);
       face.dataset["vc"] = vcKeys.deck(deck.id);
-      face.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
+      face.addEventListener("contextmenu", itemMenu("deck", () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
       face.append(grip());
       wireDrop(face, deck.id, "x", move);
       body.append(face);
@@ -1154,7 +1153,7 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
       el("span", { className: "listname listtitle", text: box.title ?? box.gameId }),
       listMeta([plural(box.decks.length, "deck"), plural(cards, "card"), plural(box.hands.length, "hand")]));
     row.dataset["vc"] = vcKeys.box(box.id);
-    row.addEventListener("contextmenu", itemMenu("box", boxConfirm(box) !== undefined, () => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
+    row.addEventListener("contextmenu", itemMenu("box", () => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
     row.append(grip());
     wireDrop(row, box.id, "y", move);
     list.append(row);
@@ -1180,7 +1179,7 @@ export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewA
     row.dataset["vc"] = vcKeys.hands(box.id);
     // A hand's evidence is its pin, which only the map knows: actions.ts asks
     // it, so the label promises a question wherever there could be one.
-    row.addEventListener("contextmenu", itemMenu("hand", box.usesMap === true, () => actions.duplicateHand(box.id, hand.id), () => actions.deleteHand(box.id, hand.id)));
+    row.addEventListener("contextmenu", itemMenu("hand", () => actions.duplicateHand(box.id, hand.id), () => actions.deleteHand(box.id, hand.id)));
     row.append(grip());
     wireDrop(row, hand.id, "y", (from, to, before) => actions.moveHand(box.id, from, to, before));
     list.append(row);
@@ -1274,7 +1273,7 @@ export function fixLabel(fix: NonNullable<Problem["fix"]>): string {
   if (fix.kind === "pick-stage" || fix.kind === "pick-tag-stage") return "Choose a stage…";
   if (fix.kind === "add-outcome") return `Add outcome “${fix.gameId}”`;
   if (fix.kind === "create-scene") return "Create the scene in Patter";
-  if (fix.kind === "upgrade-project") return "Upgrade the project…";
+  if (fix.kind === "upgrade-project") return "Upgrade the project";
   return "Fix";
 }
 
@@ -1289,7 +1288,7 @@ function fixButton(
     tip: fix.kind === "declare-property" ? "Declare it, then take me to it"
       : fix.kind === "add-outcome" ? "Give this card the outcome its Patter scene names, then open it"
       : fix.kind === "create-scene" ? "Write a stub scene for this card into the Patter project, one option per outcome, then open it in Patterpad"
-      : fix.kind === "upgrade-project" ? "Move this project onto the project map, after showing what will change"
+      : fix.kind === "upgrade-project" ? "Move this project onto the project map, as one step you can undo"
       : "Point this at a tag that exists",
   });
   button.addEventListener("click", () => onFix(problem, fix, button));

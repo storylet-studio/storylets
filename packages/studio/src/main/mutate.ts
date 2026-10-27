@@ -8,6 +8,7 @@
 export type { Written } from "./mutate/write-path.js";
 export {
   commit, commitMaking, ensureBoxColours, freshKey, redo, refuse, reload, serialised, setProjectWrittenListener, undo,
+  undoStep,
 } from "./mutate/write-path.js";
 export {
   createCard, createCardOnCanvas, deleteCard, deleteCards, deleteCardsAcross, duplicateCard, layoutDeck, moveCard,

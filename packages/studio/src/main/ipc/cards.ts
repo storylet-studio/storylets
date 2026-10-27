@@ -39,8 +39,8 @@ export function registerCards(ipc: Ipc, deps: Pick<MainContext, "session">): voi
   ipc.write("card:move", project(moveCard));
   ipc.handle("card:catalogue", read(cardCatalogue, []));
   // Several cards of one deck, as one undo step (review 2026-10, item 5).
-  ipc.write("card:deleteMany", project((open, deckId: string, cardIds: string[]) =>
-    deleteCards(open, deckId, Array.isArray(cardIds) ? cardIds : [])));
+  ipc.write("card:deleteMany", project((open, deckId: string, cardIds: string[], key?: unknown) =>
+    deleteCards(open, deckId, Array.isArray(cardIds) ? cardIds : [], typeof key === "string" ? key : undefined)));
   // Cards spanning several decks (a box's Contents), still one undo step.
   ipc.write("card:deleteAcross", project((open, groups: unknown) => {
     const valid = Array.isArray(groups) ? groups.filter((g): g is { deckId: string; cardIds: string[] } =>

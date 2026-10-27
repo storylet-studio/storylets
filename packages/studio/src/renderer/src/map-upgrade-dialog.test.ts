@@ -2,7 +2,7 @@
 // CLI's are not true here (map-upgrade-dialog.ts `inAppWords`).
 
 import { describe, expect, it } from "vitest";
-import { inAppWords } from "./map-upgrade-dialog.js";
+import { inAppWords, upgradeReport } from "./map-upgrade-dialog.js";
 
 describe("the upgrade report, in the app's words", () => {
   it("says a picture is copied, because the app copies it and the CLI moves it", () => {
@@ -15,5 +15,13 @@ describe("the upgrade report, in the app's words", () => {
 
   it("leaves every other line as the planner wrote it", () => {
     expect(inAppWords("2 frame(s) moved to the project map")).toBe("2 frame(s) moved to the project map");
+  });
+});
+
+describe("the report of an upgrade the problems bar asked for (no question first)", () => {
+  it("leads with what happened, and carries the planner's warnings as sentences", () => {
+    expect(upgradeReport({ report: ["box harbour joins the map"], warnings: [], refusals: [] })).toBe("Moved the map to the project.");
+    expect(upgradeReport({ report: [], warnings: ["the copies disagree; make them agree, then run format again"], refusals: [] }))
+      .toBe("Moved the map to the project.\nThe copies disagree; make them agree, then upgrade the project again.");
   });
 });

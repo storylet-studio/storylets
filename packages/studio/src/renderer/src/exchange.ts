@@ -13,7 +13,7 @@ import { askPush, askServer } from "./server-dialog.js";
 import { flash, flashError, ok } from "./results.js";
 import type { PushOptions } from "./server-dialog.js";
 import type { Session } from "./session.js";
-import type { ContractBreakDto, JobProgress, OpenResult, PackOffer } from "../../shared/api.js";
+import type { ContractBreakDto, JobProgress, OpenResult, PackOffer, ProjectStep } from "../../shared/api.js";
 
 export interface ExchangeContext {
   session: Session;
@@ -29,6 +29,8 @@ export interface ExchangeContext {
   adopt: (pending: Promise<OpenResult | { error: string } | null>) => Promise<void>;
   /** Fetch the open condition catalogue again; false when none was open. */
   reloadCatalogue: () => Promise<boolean>;
+  /** Say what a write did, with Undo for the step it made (undo-toast.ts). */
+  reportWithUndo: (message: string, step: ProjectStep | undefined, kind?: "info" | "ok" | "error") => void;
 }
 
 export type Exchange = ReturnType<typeof createExchange>;
@@ -249,11 +251,16 @@ export function createExchange(ctx: ExchangeContext) {
   /**
    * Merge a returned pack back in, against the pack that was sent.
    *
-   * PLAN, confirm, commit. The op is pure, so the whole merge runs before anything
-   * is written and the confirmation can quote REAL counts - "7 merged, 2 added, 3
-   * conflicts will keep yours" - rather than describing what is about to be
-   * attempted. A confirmation that cannot say what will happen is only a speed bump.
+   * PLAN, then commit. The op is pure, so the whole merge runs before anything
+   * is written and the report can quote REAL counts - "7 merged, 2 added, 3
+   * conflicts will keep yours" - rather than describing what was attempted.
    * (Adopted from the Patter side, which built this shape first.)
+   *
+   * The merge is one step of the project history, so it asks first only when
+   * there's something to read before it happens: a pack that seems to come from
+   * another project, or a World change that also goes to the game's shared file.
+   * Otherwise it merges, and the report carries Undo (the October 2026 review:
+   * Undo replaces "Are you sure?").
    */
   async function mergePack(): Promise<void> {
     await ctx.flushSaves();
@@ -284,7 +291,8 @@ export function createExchange(ctx: ExchangeContext) {
     // likely to mean the author picked the wrong file. Cancel is the shell confirm's
     // focused button either way, so the safe answer is the one already under the
     // keyboard. It warns and never refuses: an id can legitimately differ.
-    const merge = await confirmDialog({
+    const asks = provenance !== undefined || gameWorld !== undefined;
+    const merge = !asks || await confirmDialog({
       title: provenance !== undefined ? "This pack may not belong to this project" : "Merge the returned pack?",
       // ONE paragraph, deliberately: `.confirm-body` sets no `white-space`, so a
       // newline here collapses to a space and a `\n\n` is two characters that do
@@ -299,12 +307,14 @@ export function createExchange(ctx: ExchangeContext) {
 
     const result = await studio.mergePackCommit();
     if (result === null) return;
-    if (!ctx.applied(result)) return;
+    if (!ctx.applied(result) || "error" in result) return;
     ctx.repaintReplacedProject();
+    // Unasked, the World line the question would have carried is said here.
+    const worldNote = !asks && worldLine ? `\n${worldLine.trim()}` : "";
     // A conflict is not a failure, but it is not a success either: the shard was
     // written provisionally with OURS and a sidecar sits beside it.
-    if (conflicts > 0) flashError(`Merged the returned pack (${counts}). ${plural(conflicts, "conflict")} ${conflicts === 1 ? "needs" : "need"} a look: each is named in its file under "unresolved", and in the .storyletconflict file beside it.`);
-    else flash(`Merged the returned pack (${counts})`, "ok");
+    if (conflicts > 0) ctx.reportWithUndo(`Merged the returned pack (${counts}). ${plural(conflicts, "conflict")} ${conflicts === 1 ? "needs" : "need"} a look: each is named in its file under "unresolved", and in the .storyletconflict file beside it.${worldNote}`, result.step, "error");
+    else ctx.reportWithUndo(`Merged the returned pack (${counts})${worldNote}`, result.step, "ok");
   }
 
   return {

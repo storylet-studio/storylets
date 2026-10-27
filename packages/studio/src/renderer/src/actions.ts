@@ -9,13 +9,13 @@
 // other, which is how they used to delegate back and forth.
 //
 // Creating things lives here too: every create, duplicate and delete, and the
-// one guarded path every card delete takes.
+// one path every card delete takes. A delete goes at once and reports what went,
+// with Undo (deletes.ts).
 // ---------------------------------------------------------------------------
 
-import { confirmDialog } from "@wildwinter/app-shell";
 import { refusalDialog } from "./refusal-dialog.js";
 import { openBoxKitPicker } from "./kits.js";
-import { boxConfirm, cardsConfirm, handConfirm, templateConfirm } from "./deletes.js";
+import { boxReport, cardsReport, deckReport, handReport, leftMapReport, templateReport } from "./deletes.js";
 import { noteMadeInDeck, setDocTab } from "./inspector.js";
 import { ok } from "./results.js";
 import { remember } from "./session.js";
@@ -28,7 +28,7 @@ import type { Catalogues } from "./catalogues.js";
 import type { MapPage } from "./map-page.js";
 import type { DeckCanvas } from "./deck-canvas.js";
 import type { Session } from "./session.js";
-import type { BoxEdit, DeckEdit, OpenResult } from "../../shared/api.js";
+import type { BoxEdit, DeckEdit, OpenResult, ProjectStep } from "../../shared/api.js";
 
 export interface ActionsContext {
   session: Session;
@@ -55,6 +55,8 @@ export interface ActionsContext {
   /** Whether a view opens on this machine, and opening it: a field naming it as its editor opens it (Y5). */
   viewInstalled: (extension: string, view: string) => boolean;
   openView: (extension: string, view: string) => void;
+  /** Say what a write did, with Undo for the step it made (undo-toast.ts). */
+  reportWithUndo: (message: string, step: ProjectStep | undefined) => void;
 }
 
 export type Actions = ReturnType<typeof createActions>;
@@ -62,7 +64,6 @@ export type Actions = ReturnType<typeof createActions>;
 export function createActions(ctx: ActionsContext) {
   const { session, nav, saves, comments, catalogues } = ctx;
   const studio = session.studio;
-  const { deleting } = saves;
 
   /** A box's or deck's title or address, written now: a rename moves a file, so
    *  these commit on blur rather than through the save controller. The open
@@ -95,23 +96,28 @@ export function createActions(ctx: ActionsContext) {
   /**
    * Delete cards from one deck: the one path for the Delete key, the context
    * menus, the card's own page and the canvas, in every view. One call, one
-   * commit, one undo step, and one render, however many cards (the dialog has
-   * always promised one step; it was one per card).
+   * commit, one undo step, one render, and one report with Undo, however many
+   * cards.
    *
    * The deck comes from the caller rather than from the focus, so a card in a
    * box's Contents, which shows several decks, deletes too. True when they
    * went: the canvas then lets a frame in the same selection go too, never
-   * ahead of a cancelled question.
+   * ahead of a delete that was refused.
    */
-  async function deleteCards(deckId: string, cardIds: string[]): Promise<boolean> {
+  async function deleteCards(deckId: string, cardIds: string[], key?: string): Promise<boolean> {
     const deck = session.project?.boxes.flatMap((b) => b.decks).find((d) => d.id === deckId);
     if (!deck || cardIds.length === 0) return false;
     const cards = deck.cards.filter((c) => cardIds.includes(c.id));
     if (cards.length === 0) return false;
     // Writing an edit of a card we are about to delete would recreate it.
     saves.dropCards(cards.map((c) => c.id));
-    if (!(await deleting(cardsConfirm(cards)))) return false;
-    if (!ctx.applied(await studio.deleteCards(deckId, cards.map((c) => c.id)))) return false;
+    // Every pending edit lands first: a delete is a write, and one that raced
+    // the save queue could recreate what it removed or lose an edit made a
+    // moment before.
+    await saves.flush();
+    const result = await studio.deleteCards(deckId, cards.map((c) => c.id), key);
+    if (!ctx.applied(result) || "error" in result) return false;
+    ctx.reportWithUndo(cardsReport(cards), result.step);
     nav.selectCards([]);
     // The card's own page goes back to its deck; any other page stays.
     const open = nav.inspected;
@@ -124,8 +130,7 @@ export function createActions(ctx: ActionsContext) {
 
   /**
    * The selection, wherever it is drawn: one deck's, or a box's Contents, whose
-   * cards can come from several decks. One question for all of them, then one
-   * delete for the lot.
+   * cards can come from several decks. One delete for the lot, and one report.
    */
   async function deleteSelection(): Promise<void> {
     const box = nav.currentBox();
@@ -143,36 +148,47 @@ export function createActions(ctx: ActionsContext) {
     }
     const cards = box.decks.flatMap((d) => d.cards).filter((c) => selection.includes(c.id));
     saves.dropCards(cards.map((c) => c.id));
-    if (!(await deleting(cardsConfirm(cards)))) return;
+    await saves.flush();
     // One undo step for the lot, however many decks it spans.
-    if (!ctx.applied(await studio.deleteCardsAcross([...byDeck].map(([deckId, cardIds]) => ({ deckId, cardIds }))))) return;
+    const result = await studio.deleteCardsAcross([...byDeck].map(([deckId, cardIds]) => ({ deckId, cardIds })));
+    if (!ctx.applied(result) || "error" in result) return;
+    ctx.reportWithUndo(cardsReport(cards), result.step);
     nav.selectCards([]);
     ctx.render();
   }
 
   async function deleteDeck(boxId: string, deckId: string): Promise<void> {
     const deck = session.project?.boxes.find((b) => b.id === boxId)?.decks.find((d) => d.id === deckId);
-    // A deck with cards is refused by main, naming why: nothing to ask here.
-    if (!deck || !(await deleting(undefined))) return;
-    if (!ctx.applied(await studio.deleteDeck(deckId))) return;
+    if (!deck) return;
+    // Its cards go with it, and the report says how many: Undo brings the lot back.
+    saves.dropCards(deck.cards.map((c) => c.id));
+    await saves.flush();
+    const result = await studio.deleteDeck(deckId);
+    if (!ctx.applied(result) || "error" in result) return;
+    ctx.reportWithUndo(deckReport(deck), result.step);
     nav.focus = { kind: "box", box: boxId }; nav.inspected = { kind: "box", box: boxId };
     ctx.render();
   }
 
   async function deleteTemplate(boxId: string, templateId: string): Promise<void> {
     const template = session.project?.boxes.find((b) => b.id === boxId)?.templates.find((t) => t.id === templateId);
-    if (!template || !(await deleting(templateConfirm(template)))) return;
-    if (!ctx.applied(await studio.deleteTemplate(boxId, templateId))) return;
+    if (!template) return;
+    await saves.flush();
+    const result = await studio.deleteTemplate(boxId, templateId);
+    if (!ctx.applied(result) || "error" in result) return;
+    ctx.reportWithUndo(templateReport(template), result.step);
     nav.detail = undefined;
     setDocTab(`box:${boxId}`, "templates"); actions.focus({ kind: "box", box: boxId });
   }
 
-  /** No question here: main refuses a group that cards still carry, and says how
-   *  many, so asking first would only be asking about a delete that cannot
-   *  happen. An unused group goes at once (undo brings it back). */
+  /** Main refuses a group that cards still carry, and says how many. An unused
+   *  group goes at once, and the report's Undo brings it back. */
   async function deleteTagGroup(boxId: string, groupId: string): Promise<void> {
-    if (!(await deleting(undefined))) return;
-    if (!ctx.applied(await studio.deleteTagGroup(boxId, groupId))) return;
+    const group = session.project?.boxes.find((b) => b.id === boxId)?.tagGroups.find((g) => g.id === groupId);
+    await saves.flush();
+    const result = await studio.deleteTagGroup(boxId, groupId);
+    if (!ctx.applied(result) || "error" in result) return;
+    if (group) ctx.reportWithUndo(`Deleted \u201c${group.gameId}\u201d.`, result.step);
     nav.detail = undefined;
     setDocTab(`box:${boxId}`, "tags"); actions.focus({ kind: "box", box: boxId });
   }
@@ -184,8 +200,10 @@ export function createActions(ctx: ActionsContext) {
     if (!box || !hand) return;
     const pinned = box.usesMap === true
       && (await studio.projectMapView()).layers.some((l) => l.box === boxId && l.sites.some((s) => s.id === handId));
-    if (!(await deleting(handConfirm(hand, pinned)))) return;
-    if (!ctx.applied(await studio.deleteHand(boxId, handId))) return;
+    await saves.flush();
+    const result = await studio.deleteHand(boxId, handId);
+    if (!ctx.applied(result) || "error" in result) return;
+    ctx.reportWithUndo(handReport(hand, pinned), result.step);
     nav.detail = undefined; actions.focus({ kind: "hands", box: boxId });
   }
 
@@ -266,9 +284,10 @@ export function createActions(ctx: ActionsContext) {
       const b = session.project?.boxes.find((x) => x.id === box);
       if (!b) return;
       void (async () => {
-        if (!(await deleting(boxConfirm(b)))) return;
+        await saves.flush();
         const result = await studio.deleteBox(box);
-        if (!ctx.applied(result)) return;
+        if (!ctx.applied(result) || "error" in result) return;
+        ctx.reportWithUndo(boxReport(b), result.step);
         nav.focus = nav.defaultFocus();
         nav.inspected = nav.focus?.kind === "deck" ? { kind: "deck", box: nav.focus.box, deck: nav.focus.deck } : undefined;
         nav.detail = undefined;
@@ -312,8 +331,8 @@ export function createActions(ctx: ActionsContext) {
     duplicateCard(box, deck, card) {
       making(() => studio.duplicateCard(deck, card), (created) => actions.inspectCard(box, deck, created.cardId), true);
     },
-    // Every route to deleting a card goes through the guard: the context menus in
-    // all three views and a box's Contents, the Delete key, and the canvas. The
+    // Every route to deleting a card goes through the one path: the context menus
+    // in all three views and a box's Contents, the Delete key, and the canvas. The
     // deck comes from the caller, since a box's Contents shows several.
     deleteCard(_box, deck, card) { void deleteCards(deck, [card]); },
     // Asking about a card does not select it: the lens is pointed straight at it, so
@@ -380,7 +399,7 @@ export function createActions(ctx: ActionsContext) {
     useProjectMap(box, on) {
       void (async () => {
         await saves.flush();
-        let result = await studio.useProjectMap(box, on);
+        const result = await studio.useProjectMap(box, on);
         // Refused while something still names the map: main says what, by its
         // title, and the prompt offers to open it.
         if ("refused" in result) {
@@ -394,15 +413,11 @@ export function createActions(ctx: ActionsContext) {
           else actions.focus({ kind: "deck", box: at.box, deck: at.id });
           return;
         }
-        // Leaving deletes the box's positions on the map: main says how many and
-        // asks, and only a yes sends it again.
-        if ("confirm" in result) {
-          const leave = await confirmDialog({ title: result.confirm.title, body: result.confirm.body, confirmLabel: "Leave the map" });
-          if (!leave) return;
-          result = await studio.useProjectMap(box, on, true);
-          if ("confirm" in result || "refused" in result) return;
-        }
-        if (!ctx.applied(result)) return;
+        if (!ctx.applied(result) || "error" in result) return;
+        // Leaving takes the box's hands' places on the map with it: main says
+        // how many, and the report's Undo puts them back.
+        const b = session.project?.boxes.find((x) => x.id === box);
+        if (result.cleared !== undefined && b) ctx.reportWithUndo(leftMapReport(b, result.cleared), result.step);
         // Joining lands on the box's new Map tab, which is what it now leads
         // with; leaving goes back to Contents, the tab having gone.
         setDocTab(`box:${box}`, on ? "map" : "contents");
@@ -430,8 +445,8 @@ export function createActions(ctx: ActionsContext) {
     saveHand: saves.saveHand,
     renameStage: saves.renameStage,
     stageGates: (target) => studio.stageGates(target),
-    // Through the guard, like every other route to deleting a card: this one is
-    // the card's own page, where the content at risk is on screen in front of you.
+    // The one path, like every other route to deleting a card: this one is the
+    // card's own page.
     deleteCard: (deckId, cardId) => void deleteCards(deckId, [cardId]),
     deleteTemplate: (boxId, templateId) => void deleteTemplate(boxId, templateId),
     deleteHand: (boxId, handId) => void deleteHand(boxId, handId),

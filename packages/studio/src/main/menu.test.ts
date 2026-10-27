@@ -94,6 +94,15 @@ describe("View (item 24)", () => {
     expect(back).toBeLessThan(nav);
   });
 
+  it("opens on the command palette, on Cmd+K, set apart from the groups below (the October 2026 review)", async () => {
+    const view = submenu(await menuOn("darwin"), "View");
+    expect(view[0]).toMatchObject({ label: "Command Palette\u2026", accelerator: "CmdOrCtrl+K" });
+    expect(view[1]?.type).toBe("separator");
+    // Live without a project: the palette lists every command, greyed or not.
+    expect(view[0]?.enabled).not.toBe(false);
+    expect(everyItem(await menuOn("darwin")).filter((i) => i.accelerator === "CmdOrCtrl+K")).toHaveLength(1);
+  });
+
   it("leaves Enter Full Screen to macOS, and adds it elsewhere", async () => {
     expect(submenu(await menuOn("darwin"), "View").some((i) => i.role === "togglefullscreen")).toBe(false);
     expect(submenu(await menuOn("linux"), "View").some((i) => i.role === "togglefullscreen")).toBe(true);

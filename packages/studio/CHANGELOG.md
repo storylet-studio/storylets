@@ -10,8 +10,25 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **The command palette.** View ▸ Command Palette… (Cmd+K) lists every menu command by name, with its shortcut,
+  and finds the project's boxes, decks, and cards too: type a few letters, press Return, and you're there.
+- **Updates wait for you.** An update that downloads on its own puts a "Restart to update" button in the top
+  bar and says so once, instead of opening a window over your work. Click it to restart and install (you're
+  asked about anything unsaved first), or carry on: it installs when you quit.
+
 ### Changed
 
+- **Deletes don't ask first; they tell you what went, with Undo.** Deleting a card, a deck, a box, a hand, or a
+  hand template happens straight away, and a message names it and says what went with it (a box's decks and
+  cards, a hand's pin on the map). Its Undo button puts it all back, as long as nothing's been changed since;
+  Edit ▸ Undo works as it always has. Replace all in Find, taking a box off the project map, and Upgrade the
+  project in the problems bar work the same way. Merging a returned pack still asks first when the pack seems
+  to come from another project, or when it changes the World properties in the game's shared file; otherwise it
+  merges and offers Undo.
+- **You can delete a deck that still has cards.** Its cards go with it, and Undo brings the deck and every card
+  back.
 - **A box or card somebody else holds is easier to read.** Its locked fields and buttons keep their text at full
   strength, so you can read every value; they show they're locked with a dashed edge and a no-entry cursor,
   and the notice above the document still says who holds it.

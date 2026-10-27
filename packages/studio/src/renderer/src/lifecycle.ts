@@ -13,7 +13,7 @@ import { mountWelcome } from "@wildwinter/app-shell";
 import { forgetBoxColours, setBoxColours } from "./box-tint.js";
 import { baseName } from "./paths.js";
 import { setCanvasProject } from "./canvas-memory.js";
-import { askMapUpgrade } from "./map-upgrade-dialog.js";
+import { askMapUpgrade, upgradeReport } from "./map-upgrade-dialog.js";
 import { resetDocTabMemory } from "./inspector.js";
 import { setCameFrom } from "./views.js";
 import { setPlayRung } from "./play-ladder.js";
@@ -30,7 +30,7 @@ import type { VcView } from "./vc-view.js";
 import type { Catalogues } from "./catalogues.js";
 import type { ViewActions } from "./views.js";
 import type { Session } from "./session.js";
-import type { OpenResult } from "../../shared/api.js";
+import type { OpenResult, ProjectStep } from "../../shared/api.js";
 
 export interface LifecycleContext {
   session: Session;
@@ -57,6 +57,8 @@ export interface LifecycleContext {
   liveLink: (on: boolean) => void;
   /** Re-read the coverage overlay for the project now open. */
   gatherCoverage: () => Promise<void>;
+  /** Say what a write did, with Undo for the step it made (undo-toast.ts). */
+  reportWithUndo: (message: string, step: ProjectStep | undefined, kind?: "info" | "ok" | "error") => void;
 }
 
 export type Lifecycle = ReturnType<typeof createLifecycle>;
@@ -231,9 +233,13 @@ export function createLifecycle(ctx: LifecycleContext) {
 
   /**
    * Upgrade a project from before the project map (main `map-upgrade.ts`): the
-   * planner `storyletengine format` runs, shown first, refused in its own
-   * sentences, one undo step when it runs. `asked` is the problems bar's button,
-   * which deserves an answer even when there turns out to be nothing to do.
+   * planner `storyletengine format` runs, refused in its own sentences, one undo
+   * step when it runs. `asked` is the problems bar's button (or Make a map),
+   * which deserves an answer even when there turns out to be nothing to do, and
+   * goes ahead without a question: the report, with any warnings, carries Undo
+   * (the October 2026 review: Undo replaces "Are you sure?"). Unasked, as the
+   * project opens, it is still offered first: nobody asked for their files to
+   * be rewritten just by opening them, and "Not now" leaves them as they are.
    */
   async function offerMapUpgrade(asked: boolean): Promise<void> {
     if (!session.project) return;
@@ -243,13 +249,14 @@ export function createLifecycle(ctx: LifecycleContext) {
       if (asked) { flash("This project is already on the project map.", "ok"); await refreshProject(); }
       return;
     }
-    if (!(await askMapUpgrade(plan))) return;
+    // A refused plan is shown either way: its sentences are what to put right.
+    if ((!asked || plan.refusals.length > 0) && !(await askMapUpgrade(plan))) return;
     const result = await studio.upgradeProjectMap();
     if ("refused" in result) { await askMapUpgrade({ report: [], warnings: [], refusals: result.refused }); return; }
-    if (!ctx.applied(result)) return;
+    if (!ctx.applied(result) || "error" in result) return;
     repaintReplacedProject();
     void vc.refresh();
-    flash("Moved the map to the project", "ok");
+    ctx.reportWithUndo(asked ? upgradeReport(plan) : "Moved the map to the project.", result.step, "ok");
     // To the map, which is the thing that had vanished.
     if (session.project?.map !== undefined) ctx.actions().focus({ kind: "map" });
   }

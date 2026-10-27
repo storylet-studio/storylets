@@ -35,7 +35,7 @@ describe("the preload answers the shell's updater channels", () => {
   it("finds the shell's channel list at all", () => {
     // Guards the guard: a rename or a bundling change that stops the regex
     // matching would otherwise make every assertion below vacuously pass.
-    expect(shellChannels.length).toBe(7);
+    expect(shellChannels.length).toBe(9);
   });
 
   it("names every channel the shell defines", () => {
@@ -44,18 +44,22 @@ describe("the preload answers the shell's updater channels", () => {
     }
   });
 
-  it("listens on the four main-to-renderer channels", () => {
-    const inbound = shellChannels.filter((c) => !/reply|done/.test(c));
-    expect(inbound).toHaveLength(4);
+  // Since app-shell 0.67: "updater:ready" in (an update downloaded on its own),
+  // and "updater:restart" out (the top bar chip's click).
+  const outbound = (c: string): boolean => /reply|done|restart/.test(c);
+
+  it("listens on the five main-to-renderer channels", () => {
+    const inbound = shellChannels.filter((c) => !outbound(c));
+    expect(inbound).toHaveLength(5);
     for (const name of inbound) {
       expect(preload, `no ipcRenderer.on for "${name}"`).toContain(`ipcRenderer.on("${name}"`);
     }
   });
 
-  it("replies on the three renderer-to-main channels", () => {
-    const outbound = shellChannels.filter((c) => /reply|done/.test(c));
-    expect(outbound).toHaveLength(3);
-    for (const name of outbound) {
+  it("sends on the four renderer-to-main channels", () => {
+    const sent = shellChannels.filter(outbound);
+    expect(sent).toHaveLength(4);
+    for (const name of sent) {
       expect(preload, `no ipcRenderer.send for "${name}"`).toContain(`ipcRenderer.send("${name}"`);
     }
   });

@@ -14,6 +14,7 @@ import { BrowserWindow, app, safeStorage } from "electron";
 import type { ToolWindows } from "@wildwinter/app-shell/tool-window";
 import { createProjectSession } from "@wildwinter/app-shell/session";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
+import { registerCommandPalette } from "@wildwinter/app-shell/palette-main";
 import { guardAllWindows } from "@wildwinter/app-shell/window-guard";
 import { clearParseCache } from "@storylet-studio/compiler";
 import { clearCanonicalCache } from "@storylet-studio/ops";
@@ -300,6 +301,7 @@ void app.whenReady().then(() => {
   // Live Link: every saved edit reaches a connected game. And the unpushed
   // count may have moved with it, which the menu and the title say.
   setProjectWrittenListener(() => { live.schedulePush(); noteProjectWritten(); });
+  registerCommandPalette();   // Cmd+K reads the live menu and runs what it picks
   createWindow();
   menu();
   // Auto-update. `configureUpdater` FIRST, or every prompt is addressed to "This

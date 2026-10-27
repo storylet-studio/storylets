@@ -271,15 +271,15 @@ export async function deleteCard(session: ProjectSession, deckId: string, cardId
  * steps for one gesture. A card that is not in the deck refuses the whole
  * delete rather than recording a step that removes less than was asked.
  */
-export async function deleteCards(session: ProjectSession, deckId: string, cardIds: string[]): Promise<Written> {
-  return deleteCardsAcross(session, [{ deckId, cardIds }]);
+export async function deleteCards(session: ProjectSession, deckId: string, cardIds: string[], key?: string): Promise<Written> {
+  return deleteCardsAcross(session, [{ deckId, cardIds }], key);
 }
 
 /** Cards from one or several decks (a box's Contents can hold a selection
  *  spanning decks), as ONE undo step: every deck is checked before any changes,
  *  then one commit writes them all (review 2026-10). */
 export async function deleteCardsAcross(
-  session: ProjectSession, groups: { deckId: string; cardIds: string[] }[],
+  session: ProjectSession, groups: { deckId: string; cardIds: string[] }[], key?: string,
 ): Promise<Written> {
   const plans: { found: NonNullable<ReturnType<typeof locate>>; doomed: Set<string> }[] = [];
   for (const g of groups) {
@@ -294,7 +294,9 @@ export async function deleteCardsAcross(
   const total = plans.reduce((n, p) => n + p.doomed.size, 0);
   if (total === 0) return { error: "no cards to delete" };
   for (const p of plans) p.found.deck.shard.cards = p.found.deck.shard.cards.filter((c) => !p.doomed.has(c.id));
-  return commit(session, total === 1 ? "Delete card" : `Delete ${total} cards`, freshKey(),
+  // `key` lets a canvas delete that also takes frames land them in this same step (their write passes the
+  // key too, and the history merges a write with the key on top), so one Undo brings back the lot.
+  return commit(session, total === 1 ? "Delete card" : `Delete ${total} cards`, key ?? freshKey(),
     plans.map((p) => deckWrite(session, p.found.deck)));
 }
 

@@ -13,7 +13,7 @@ import {
 } from "../mutate/hands.js";
 import { createGroupAsMap } from "../mutate/map.js";
 import { renameQualityStage, stageGates } from "../mutate/stages.js";
-import { redo, undo } from "../mutate/write-path.js";
+import { redo, undo, undoStep } from "../mutate/write-path.js";
 import { boxCatalogue } from "../read/catalogue.js";
 import { handCards, handDetail, tagGroupDetail, templateDetail } from "../read/details.js";
 import type { MainContext } from "../context.js";
@@ -64,4 +64,6 @@ export function registerStructure(ipc: Ipc, deps: Pick<MainContext, "session">):
   // An undo or redo that cannot write says so, and its step stays where it was.
   ipc.write("edit:undo", read(undo, null));
   ipc.write("edit:redo", read(redo, null));
+  // A toast's Undo: that step, only while it is still the newest.
+  ipc.write("edit:undoStep", project(undoStep));
 }

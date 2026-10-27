@@ -49,6 +49,8 @@ export interface CommandsContext {
   openSettings: (section?: string) => void;
   /** Live Link: the chip's click, from the menu. */
   toggleLiveLink: () => void;
+  /** View > Command Palette… (Cmd+K). */
+  openPalette: () => void;
 }
 
 export function createCommands(ctx: CommandsContext) {
@@ -99,8 +101,29 @@ export function createCommands(ctx: CommandsContext) {
     const result = which === "undo" ? await studio.undo() : await studio.redo();
     // Null: nothing to step. A failed write is said, and nothing moves.
     if (!result || !ctx.applied(result)) return;
-    // The reverted content may have removed what's selected; fall back calmly -
-    // for EVERY item type, not just cards (v3 8).
+    afterStep();
+  }
+
+  /**
+   * A toast's Undo (undo-toast.ts): the same path as Edit > Undo, for step `id`
+   * only, and only while it is still the newest. Pending edits land first, so
+   * one typed since the delete counts as newer, as it is. "stale", and nothing
+   * moves, when anything has been done since.
+   */
+  async function undoStep(id: number): Promise<"done" | "stale"> {
+    if (!session.project) return "stale";
+    await saves.flush();
+    const result = await studio.undoStep(id);
+    if ("stale" in result) return "stale";
+    // A failed write is said, and the step stays where it was.
+    if (!ctx.applied(result)) return "done";
+    afterStep();
+    return "done";
+  }
+
+  /** After a step of history: the reverted content may have removed what's
+   *  selected; fall back calmly, for EVERY item type, not just cards (v3 8). */
+  function afterStep(): void {
     const box = nav.currentBox();
     const ins = nav.inspected;
     const still = !ins
@@ -212,6 +235,7 @@ export function createCommands(ctx: CommandsContext) {
       case "search-field": if (project) void studio.openSearch({ mode: "field" }); break;
       case "undo": void undoRedo("undo", command.project === true); break;
       case "redo": void undoRedo("redo", command.project === true); break;
+      case "command-palette": ctx.openPalette(); break;
       case "table": if (project) afterFlush(() => studio.openTable()); break;
       case "coverage": if (project) afterFlush(() => studio.openCoverage()); break;
       // The card goes WITH the request, so the window cannot boot and read the
@@ -410,6 +434,7 @@ export function createCommands(ctx: CommandsContext) {
   return {
     onMenu,
     undoRedo,
+    undoStep,
     /** Register the window's own keys: the Esc capture first, then the map. */
     listen(): void {
       window.addEventListener("keydown", onKeyCapture, true);

@@ -25,7 +25,8 @@ export interface DeckCanvasContext {
   selection: () => string[];
   selectCards: (ids: string[]) => void;
   /** Delete cards from one deck, through the guard (actions.ts). */
-  deleteCards: (deckId: string, cardIds: string[]) => Promise<boolean>;
+  /** `key` names the history step, so frames removed in the same gesture join it. */
+  deleteCards: (deckId: string, cardIds: string[], key?: string) => Promise<boolean>;
   applied: (r: OpenResult | { error: string }) => boolean;
   applyResult: (r: OpenResult) => void;
   refreshVc: () => void;
@@ -98,7 +99,7 @@ export function createDeckCanvas(ctx: DeckCanvasContext) {
             ctx.renderCentre();
           })();
         },
-        removeMany: (cardIds) => ctx.deleteCards(deck.id, cardIds),
+        removeMany: (cardIds, key) => ctx.deleteCards(deck.id, cardIds, key),
         layOut: async (ids, current, size) => {
           const laid = await studio.layoutDeck(deck.id, ids, current, size);
           if (!ok(laid)) return undefined;

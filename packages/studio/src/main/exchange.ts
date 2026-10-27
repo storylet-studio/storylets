@@ -833,12 +833,13 @@ export function createExchange(deps: ExchangeDeps): Exchange {
           if (!applied.ok) return refuse(live(), applied.error);
           // One undo step for the whole merge: a returned pack is one act, and
           // unpicking it shard by shard would be worse than useless.
-          live().history.record("Merge returned storyletpack", `pack:${stepKey()}`, before, writes.map((w) => ({ path: w.path, content: w.content })));
+          const step = live().history.record("Merge returned storyletpack", `pack:${stepKey()}`, before, writes.map((w) => ({ path: w.path, content: w.content })));
           // A write like any other, including to the server: the shards it changed
           // are shards the far end has not seen, and the count says so on its own.
           deps.noteProjectWritten();
           deps.schedulePush();   // Live Link: a merge is a write like any other
-          return openResult(live(), validate(live()));
+          // With its step, for the report's Undo.
+          return { ...openResult(live(), validate(live())), step };
         } catch (e) {
           return { error: e instanceof Error ? e.message : String(e) };
         }

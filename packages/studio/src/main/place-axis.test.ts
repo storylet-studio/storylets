@@ -14,7 +14,7 @@ import { PLACE_GROUP, framesOf } from "@storylet-studio/model";
 import { openProject, toDto } from "./project.js";
 import type { ProjectSession } from "./project.js";
 import {
-  addBackground, createBox, createCard, handCards, mapZoneDetail, moveSitesOnMap, setGroupSpatial, useProjectMap,
+  addBackground, createBox, createCard, handCards, mapZoneDetail, moveSitesOnMap, setGroupSpatial, undoStep, useProjectMap,
 } from "./mutate.js";
 import { boxEntries, groupEntries } from "../renderer/src/card-groups.js";
 
@@ -146,18 +146,21 @@ describe("leaving the map", () => {
     expect(left).not.toHaveProperty("refused");
   });
 
-  it("asks before deleting the box's positions on the map", async () => {
+  it("leaves without asking, saying how many positions went, as one step Undo puts back", async () => {
     const s = scratch("port-meridian.storylets");
     expect(await useProjectMap(s, "b_codex", true)).not.toHaveProperty("error");
     const hand = sourceBox(s, "b_codex").hands.hands[0]!;
     // Put down well away from every zone, so nothing is bound by it.
     const moved = await moveSitesOnMap(s, "b_codex", PM_GROUP, [{ id: hand.id, x: -99999, y: -99999 }]);
     if ("error" in moved) throw new Error(moved.error);
-    const asked = await useProjectMap(s, "b_codex", false);
-    expect(asked).toEqual({ confirm: { title: expect.stringContaining("off the project map"), body: expect.stringContaining("position") } });
-    expect(sourceBox(s, "b_codex").box.box.usesMap).toBe(true);
-    expect(await useProjectMap(s, "b_codex", false, true)).not.toHaveProperty("error");
+    const left = await useProjectMap(s, "b_codex", false);
+    if ("error" in left || "refused" in left) throw new Error("it should have left");
+    // The report's evidence (the October 2026 review: Undo replaces "Are you sure?").
+    expect(left.cleared).toBe(1);
+    expect(left.step).toMatchObject({ merged: false });
     expect(sourceBox(s, "b_codex").box.box.usesMap).toBeUndefined();
+    expect(await undoStep(s, left.step!.id)).not.toHaveProperty("stale");
+    expect(sourceBox(s, "b_codex").box.box.usesMap).toBe(true);
   });
 });
 

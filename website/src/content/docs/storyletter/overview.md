@@ -194,7 +194,9 @@ There's no writing status. Comments and the review walk exist, but there's no pe
 
 Storyletter keeps itself up to date. **Help ▸ Check for Updates…** looks for a new version,
 downloads it in the background, and asks to relaunch, saving your work first. It also checks
-by itself shortly after it starts.
+by itself shortly after it starts. An update it finds that way downloads quietly and puts
+**Restart to update** in the top bar: click it to relaunch, saving your work first, or carry on
+and it installs when you quit.
 
 On a Mac, a small helper installs the update once Storyletter has closed. The first time that
 happens, macOS may show a notice that Storyletter is running in the background. Nothing of

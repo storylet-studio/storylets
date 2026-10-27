@@ -53,8 +53,10 @@ vi.mock("@wildwinter/app-shell/view-host", () => ({
 }));
 
 /** The updater's channels are the shell's, and held by updater-channels.test.ts; the view port's is the shell's
- *  too, held below. */
-const shellOwned = (channel: string): boolean => channel.startsWith("updater:") || channel === VIEW_PORT_CHANNEL;
+ *  too, held below; and so are the command palette's, whose main half app-shell's registerCommandPalette
+ *  registers itself (main/index.ts calls it at startup), held below as well. */
+const shellOwned = (channel: string): boolean =>
+  channel.startsWith("updater:") || channel.startsWith("palette:") || channel === VIEW_PORT_CHANNEL;
 
 /** The page's window, for the view port's hand-over the listeners below are fired through. */
 vi.stubGlobal("window", { postMessage: () => undefined });
@@ -81,14 +83,21 @@ describe("the preload", () => {
   beforeAll(async () => { await loadPreload(); });
 
   it("invokes every channel of the contract, each from the method the contract names", async () => {
-    expect([...touched.invoke].sort()).toEqual(Object.keys(INVOKE_CHANNELS).sort());
+    expect(touched.invoke.filter((c) => !shellOwned(c)).sort()).toEqual(Object.keys(INVOKE_CHANNELS).sort());
     for (const [channel, method] of Object.entries(INVOKE_CHANNELS)) {
       expect(invokedBy.get(channel), channel).toBe(method);
     }
   });
 
   it("invokes each channel from one method only", async () => {
-    expect(new Set(touched.invoke).size).toBe(Object.keys(INVOKE_CHANNELS).length);
+    expect(new Set(touched.invoke.filter((c) => !shellOwned(c))).size).toBe(Object.keys(INVOKE_CHANNELS).length);
+  });
+
+  it("asks the shell's palette for the menu and runs its picks on the shell's channels", () => {
+    // PALETTE_CHANNELS, written out as the updater's are: main's half is app-shell's registerCommandPalette.
+    expect(touched.invoke).toContain("palette:commands");
+    expect(touched.send).toContain("palette:run");
+    expect(readFileSync(new URL("../main/index.ts", import.meta.url), "utf8")).toContain("registerCommandPalette()");
   });
 
   it("listens only on channels main is declared to send, and on all of them", async () => {

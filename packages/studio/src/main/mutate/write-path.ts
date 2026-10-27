@@ -71,12 +71,13 @@ export async function commit(session: ProjectSession, label: string, key: string
     if (applied.wrote) { session.history.record(label, key, before, changing); onWritten?.(); }
     return refuse(session, applied.error);
   }
-  session.history.record(label, key, before, changing);
+  const step = session.history.record(label, key, before, changing);
   // NOTHING is tallied here any more (2026-09-07). What the server has not seen
   // is a fact about the shards on disk, worked out by comparing them with the
   // revision last pulled (remote.ts `unpushedShards`), so a write counts by
   // changing a file rather than by being announced.
-  return reload(session, true);
+  // The step goes back with the project, for a report that offers its Undo.
+  return { ...reload(session, true), step };
 }
 
 /**
@@ -133,6 +134,18 @@ export async function undo(session: ProjectSession): Promise<Written | null> {
   // unpushed edit at all, which is what an author who types and undoes expects
   // and what the old tally got wrong in both directions.
   return reload(session, true);
+}
+
+/**
+ * A toast's Undo: take back step `id`, but only while it is still the newest,
+ * so the button never undoes something done since (the October 2026 review:
+ * Undo replaces "Are you sure?"). Anything newer, and nothing changes: Edit >
+ * Undo steps back to it in order. Checked here, in the write queue, so no write
+ * can land between the check and the undo.
+ */
+export async function undoStep(session: ProjectSession, id: number): Promise<Written | { stale: true }> {
+  if (session.history.newest !== id) return { stale: true };
+  return (await undo(session)) ?? { stale: true };
 }
 
 export async function redo(session: ProjectSession): Promise<Written | null> {

@@ -395,8 +395,11 @@ export function refreshMenu(
       label: "View",
       submenu: [
         // Patterpad's three groups, in its order (review 2026-10, item 24):
-        // hierarchy, then history, then the panes.
-        //
+        // hierarchy, then history, then the panes. Above them all, the
+        // palette: every command by name, and quick open for boxes, decks and
+        // cards (app-shell's command palette; the October 2026 review).
+        { ...VIEW_MENU.commandPalette, click: send({ cmd: "command-palette" }) },
+        { type: "separator" },
         // The overview's door, and the one a family user looks for first (A13):
         // Patterpad has View > Project Overview. Up a Level climbs; Cmd+[ is the
         // key advertised because it is unambiguous (Cmd+Up and Cmd+Left are OS

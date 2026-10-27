@@ -45,7 +45,8 @@ import "@wildwinter/app-shell/identity.css";
 import "@wildwinter/app-shell/notes-editor.css";
 import "@wildwinter/app-shell/comments.css";
 import "@wildwinter/app-shell/toast.css";
-import "@wildwinter/app-shell/updater.css";
+import "@wildwinter/app-shell/updater.css"; // the updater's prompt and its "Restart to update" chip
+import "@wildwinter/app-shell/command-palette.css"; // Cmd+K (openCommandPalette)
 import "@wildwinter/app-shell/welcome.css";
 import "@wildwinter/app-shell/kit-gallery.css";
 import "@wildwinter/app-shell/link-status.css";
@@ -53,9 +54,9 @@ import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import {
   askIdentity, el, feedUpdaterDownloadProgress, historyNav, iconNode, initTooltips, keyLabel, mountLinkStatus, mountPaneShell,
-  revealRowWhenReady, saveIndicator, showUpdaterDialog, tipWithKey,
+  openCommandPalette, revealRowWhenReady, saveIndicator, showUpdateReady, showUpdaterDialog, tipWithKey,
 } from "@wildwinter/app-shell";
-import type { LinkStatus, LinkStatusChip, PaneShell } from "@wildwinter/app-shell";
+import type { LinkStatus, LinkStatusChip, PaletteItem, PaneShell, ToastKind } from "@wildwinter/app-shell";
 import { applyTheme } from "./theme.js";
 import { setBoxColours } from "./box-tint.js";
 import { hydrateCameras } from "./canvas-memory.js";
@@ -92,10 +93,11 @@ import { createExchange } from "./exchange.js";
 import { createActions } from "./actions.js";
 import { createCommands } from "./commands.js";
 import { createLifecycle } from "./lifecycle.js";
+import { toastWithUndo } from "./undo-toast.js";
 import type { Session } from "./session.js";
 import type { StoryPageContext } from "./story-page.js";
 import type {
-  CoverageOverlayDto, LiveLinkStatus, OpenResult, StudioApi, ThemeChoice,
+  CoverageOverlayDto, LiveLinkStatus, OpenResult, ProjectStep, StudioApi, ThemeChoice,
 } from "../../shared/api.js";
 
 declare global { interface Window { studio: StudioApi; } }
@@ -268,7 +270,7 @@ const deckCanvas = createDeckCanvas({
   currentBox: nav.currentBox,
   selection: () => nav.selection,
   selectCards: nav.selectCards,
-  deleteCards: (deckId, cardIds) => made.deleteCards(deckId, cardIds),
+  deleteCards: (deckId, cardIds, key) => made.deleteCards(deckId, cardIds, key),
   applied: (r) => applied(r),
   applyResult: (r) => applyResult(r),
   refreshVc: () => void vc.refresh(),
@@ -290,6 +292,7 @@ const made = createActions({
   openFields: (kind, id) => fieldsLink.openOn(kind, id),
   viewInstalled,
   openView: (extension, view) => { void studio.openView(extension, view).then((r) => { if (r && "error" in r) flashError(r.error); }); },
+  reportWithUndo: (message, step) => reportWithUndo(message, step),
 });
 // A field's Edit goes to its view, or to the Fields window, by what's installed here.
 studio.onViewOffers((offers) => {
@@ -313,6 +316,7 @@ const lifecycle = createLifecycle({
   tellDeckFocused: (on) => tellDeckFocused(on),
   liveLink: (on) => { if (on) showLiveLinkChip(); else liveLinkChip?.setVisible(false); },
   gatherCoverage: () => gatherCoverage(),
+  reportWithUndo: (message, step, kind) => reportWithUndo(message, step, kind),
 });
 const { adopt, refreshProject, offerMapUpgrade, repaintReplacedProject } = lifecycle;
 
@@ -326,6 +330,7 @@ const exchange = createExchange({
   repaintReplacedProject: () => repaintReplacedProject(),
   adopt: (pending) => adopt(pending),
   reloadCatalogue: catalogues.reload,
+  reportWithUndo: (message, step, kind) => reportWithUndo(message, step, kind),
 });
 
 const commands = createCommands({
@@ -346,7 +351,40 @@ const commands = createCommands({
   setCoverageOverlay,
   openSettings: (section) => projectSettingsPanel.open(section),
   toggleLiveLink: () => liveLinkChip?.toggle(),
+  openPalette: () => openPalette(),
 });
+
+/** A report with Undo for the step a write made: the toast's Undo is the same
+ *  path as Edit > Undo, for that step only, while it is still the newest
+ *  (undo-toast.ts; the October 2026 review: Undo replaces "Are you sure?"). */
+function reportWithUndo(message: string, step: ProjectStep | undefined, kind: ToastKind = "info"): void {
+  toastWithUndo((id) => commands.undoStep(id), message, kind, step);
+}
+
+/** Cmd+K: every menu command by name (the live menu, so it can't drift from
+ *  it), and quick open for the project's boxes, decks and cards (the October
+ *  2026 review, behaviour change 2). */
+function openPalette(): void {
+  const items: PaletteItem[] = [];
+  for (const box of session.project?.boxes ?? []) {
+    const boxName = box.title ?? box.gameId;
+    // Gone to as a Find hit goes (nav.goTo).
+    items.push({ label: boxName, detail: "Box", run: () => nav.goTo({ kind: "box", box: box.id }) });
+    for (const deck of box.decks) {
+      const deckName = deck.title ?? deck.gameId;
+      items.push({ label: deckName, detail: `Deck in ${boxName}`, run: () => nav.goTo({ kind: "deck", box: box.id, deck: deck.id }) });
+      for (const card of deck.cards) {
+        items.push({ label: card.title ?? card.gameId, detail: `Card in ${deckName}`, run: () => nav.goTo({ kind: "card", box: box.id, deck: deck.id, card: card.id }) });
+      }
+    }
+  }
+  openCommandPalette({
+    commands: () => studio.paletteCommands(),
+    run: (id) => studio.paletteRun(id),
+    items: () => items,
+    placeholder: session.project ? "Type a command, or a box, deck or card to open" : "Type a command",
+  });
+}
 
 const storyPage: StoryPageContext = {
   session,
@@ -873,6 +911,10 @@ async function boot(): Promise<void> {
   studio.onUpdaterSaveBeforeInstall(async () => { await saves.flush(); return { ok: !saves.pending }; });
   studio.onUpdaterPrompt((opts) => showUpdaterDialog(opts));
   studio.onUpdaterDownloadProgress(feedUpdaterDownloadProgress);
+  // An update that downloaded on its own: a "Restart to update" chip in the top
+  // bar and one remark, never a dialog over the work (the October 2026 review).
+  // It installs on quit if the chip is never clicked.
+  studio.onUpdaterReady((info) => { showUpdateReady(info, { host: shell.topbarTrail, restart: () => studio.updaterRestart() }); });
   // The way out of a project the server has not seen the whole of. Registered
   // at boot for the same reason as the four above: main asks at the moment of
   // quitting, and a question nobody is listening for falls back to a native box
@@ -887,10 +929,10 @@ async function boot(): Promise<void> {
   // Find's Replace tab: main asks for pending edits on disk before it rewrites,
   // and says when it has, so the open document shows the new text.
   studio.onEditorFlush(() => void (async () => { await saves.flush(); await studio.editorFlushed(); })());
-  studio.onReplaceApplied((count) => void (async () => {
-    await refreshProject();
-    flash(`Replaced ${count} across the project`, "ok");
-  })());
+  // ...and its toast's Undo, which this window runs, since it owns the page an undo redraws.
+  studio.onUndoStep((id) => commands.undoStep(id));
+  // Find says what it replaced, with Undo, in its own window: here the page only catches up.
+  studio.onReplaceApplied(() => void refreshProject());
   // The OS asked the running app to open something else.
   studio.onProjectOpened((result) => void exchange.arrive(result));
   commands.listen();

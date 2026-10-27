@@ -56,7 +56,7 @@ To take a box off, use **Leave the project map** in the box's heading menu. Stor
 won't do it while anything in the box still uses a zone: a hand standing in one, a hand
 template that binds or chooses one, a card filed to one, or a condition or change that reads
 a zone's property or play history. It says what is in the way and offers to open it. Once
-nothing is, it asks before taking the box's pins off the map.
+nothing is, it takes the box off, its pins with it, and says how many went, with **Undo**.
 
 ## Reading the map
 
@@ -233,7 +233,8 @@ The prompt lists what the upgrade will do: which map becomes the project map, wh
 copies are folded into it, and the boxes put on the map. Frames and comments move to the project;
 pictures are copied to the project's `assets/` folder, and each box's old copies are tidied away
 when you close the project. **Upgrade** makes the change as one step you can undo. **Not now** leaves the project
-as it is, and **Upgrade the project…** on the problems bar brings the prompt back. Until you
+as it is, and **Upgrade the project** on the problems bar upgrades it when you're ready, with **Undo** in the
+message it shows. Until you
 upgrade, the map isn't drawn and the project won't publish or play.
 
 The first box's map, in folder order, becomes the project map. Every other box's copy has to

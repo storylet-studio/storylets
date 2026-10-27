@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // The upgrade prompt for a project from before the project map (main
-// `map-upgrade.ts`): one question when such a project opens, and the same
-// question from the problems bar's "Upgrade the project…".
+// `map-upgrade.ts`): one question when such a project opens. The problems bar's
+// "Upgrade the project" asks nothing: it upgrades, and its report (below) says
+// what moved, with Undo. A refused plan is shown here either way.
 //
 // It shows what the move will do in the planner's own lines (which map is kept,
 // which copies fold into it, the boxes that join, the pictures and frames
@@ -31,6 +32,13 @@ const asSentence = (line: string): string => {
   const s = line.charAt(0).toUpperCase() + line.slice(1);
   return /[.!?]$/.test(s) ? s : `${s}.`;
 };
+
+/** What an upgrade nobody was asked about says it did: the planner's warnings,
+ *  which are the lines worth reading, under the headline. What moved is on the
+ *  map, where the upgrade lands. */
+export function upgradeReport(plan: MapUpgradeDto): string {
+  return ["Moved the map to the project.", ...plan.warnings.map((w) => asSentence(inAppWords(w)))].join("\n");
+}
 
 /** Ask. Resolves true to upgrade, false otherwise; a refused plan always
  *  resolves false. */

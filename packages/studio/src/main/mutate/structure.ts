@@ -218,9 +218,9 @@ export async function moveDeck(session: ProjectSession, deckId: string, targetId
 export async function deleteDeck(session: ProjectSession, deckId: string): Promise<Written> {
   const found = locate(session, deckId);
   if (!found) return gone("deck");
-  if (found.deck.shard.cards.length > 0) {
-    return { error: "delete the deck's cards first (a non-empty deck is not removed by accident)" };
-  }
+  // Its cards go with it: they live in its shard, so the one step that removes
+  // the file brings the deck and every card back whole (the October 2026 review:
+  // the toast says how many, and offers Undo, where this used to refuse).
   return commit(session, "Delete deck", freshKey(), [deckFileState(session, found.deck, null)]);
 }
 

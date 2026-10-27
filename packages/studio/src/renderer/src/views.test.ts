@@ -4,7 +4,7 @@
 // (the ranking machinery is recessive, on the card page).
 
 import { describe, expect, it, vi } from "vitest";
-import { cardHasContent, navId, projectLead, renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre } from "./views.js";
+import { navId, projectLead, renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre } from "./views.js";
 import type { Focus, ViewActions } from "./views.js";
 import { resetDocTabMemory, setDocTab } from "./inspector.js";
 import type { BoxDto, CardDto, DeckDto, ProjectDto } from "../../shared/api.js";
@@ -422,9 +422,9 @@ describe("deck centre", () => {
     const items = [...menu.querySelectorAll<HTMLButtonElement>(".ctxmenu-item")].map((b) => b.textContent);
     // "Links…" first: it is the one that asks a question rather than changing
     // something, and the two that change something stay together at the bottom.
-    // The delete names its object, with an ellipsis only when a question
-    // follows: this card has content, so it asks.
-    expect(items).toEqual(["Links\u2026", "Duplicate", cardHasContent(deck.cards[0]!) ? "Delete card\u2026" : "Delete card"]);
+    // The delete names its object, and has no ellipsis: it reports with Undo
+    // rather than asking first (the October 2026 review).
+    expect(items).toEqual(["Links\u2026", "Duplicate", "Delete card"]);
     menu.querySelectorAll<HTMLButtonElement>(".ctxmenu-item")[1]!.click();   // Duplicate
     expect(duplicateCard).toHaveBeenCalledWith("b_1", "k_1", "c_1");
     expect(document.querySelector(".ctxmenu")).toBeNull();             // dismissed on action
@@ -594,59 +594,6 @@ describe("problems bar", () => {
     const host = document.createElement("div");
     renderProblems(host, [problems[0]!], 5, () => {}, () => {}, vi.fn());
     expect(host.querySelector(".stepbar-msg")!.textContent).toContain("uses @story.gone");
-  });
-});
-
-describe("cardHasContent (the delete guard)", () => {
-  // Delete is guarded only when there is something to lose (Patter's pattern).
-  // A freshly created card is a placeholder and goes without ceremony; the moment
-  // an author has typed or gated or tagged anything, deleting it asks first.
-  const fresh = (over: Partial<CardDto> = {}): CardDto => ({
-    id: "c_n", gameId: "new-card", title: "New card", priority: 0, redraw: "always",
-    tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "continue", title: "Continue", changes: [], fields: [] }],
-    ...over,
-  });
-
-  it("treats an untouched new card as empty", () => {
-    expect(cardHasContent(fresh())).toBe(false);
-    expect(cardHasContent(fresh({ title: "New card 4" }))).toBe(false);
-    expect(cardHasContent(fresh({ title: undefined }))).toBe(false);
-  });
-
-  it("counts anything an author actually did", () => {
-    expect(cardHasContent(fresh({ title: "Arrive at the inn" }))).toBe(true);
-    expect(cardHasContent(fresh({ purpose: "A hooded figure waits." }))).toBe(true);
-    expect(cardHasContent(fresh({ condition: "@story.act == 1" }))).toBe(true);
-    expect(cardHasContent(fresh({ tags: [{ group: "zone", values: ["docks"] }] }))).toBe(true);
-    expect(cardHasContent(fresh({ fields: [{ name: "scene", value: "scn_gate" }] }))).toBe(true);
-  });
-
-  it("counts an authored outcome, but not the default one", () => {
-    expect(cardHasContent(fresh({ outcomes: [
-      { id: "o_1", gameId: "continue", title: "Continue", changes: ["@story.gold ← 1"], fields: [] },
-    ] }))).toBe(true);
-    expect(cardHasContent(fresh({ outcomes: [
-      { id: "o_1", gameId: "a", title: "A", changes: [], fields: [] },
-      { id: "o_2", gameId: "b", title: "B", changes: [], fields: [] },
-    ] }))).toBe(true);
-  });
-
-  it("counts a filled outcome field, which is often all an author wrote", () => {
-    // The after-line a venue reads (design/outcome-fields-brief.md): a card
-    // whose one outcome carries it has had work done on it, and deleting it
-    // must ask. Whitespace is not work, as everywhere else here.
-    expect(cardHasContent(fresh({ outcomes: [
-      { id: "o_1", gameId: "continue", title: "Continue", changes: [], fields: [{ name: "after", value: "The door shuts." }] },
-    ] }))).toBe(true);
-    expect(cardHasContent(fresh({ outcomes: [
-      { id: "o_1", gameId: "continue", title: "Continue", changes: [], fields: [{ name: "after", value: "  " }] },
-    ] }))).toBe(false);
-  });
-
-  it("does not count whitespace as content", () => {
-    expect(cardHasContent(fresh({ purpose: "   ", condition: " " }))).toBe(false);
-    expect(cardHasContent(fresh({ fields: [{ name: "scene", value: "  " }] }))).toBe(false);
-    expect(cardHasContent(fresh({ tags: [{ group: "zone", values: [] }] }))).toBe(false);
   });
 });
 

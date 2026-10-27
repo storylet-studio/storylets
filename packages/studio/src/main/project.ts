@@ -24,7 +24,7 @@ import type {
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../shared/api.js";
 import { declDto, fieldDeclDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
-import { History, applyStates } from "./history.js";
+import { StepHistory, applyStates } from "./history.js";
 import { extensionDtos, extensionNodeChoices } from "./extensions.js";
 import { pinVcProvider, pinnedVcs, resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
@@ -32,7 +32,7 @@ import type { ShardRef } from "./vc.js";
 export interface ProjectSession {
   loaded: LoadedProject;
   dto: ProjectDto;
-  history: History;
+  history: StepHistory;
   /** What the files said when the project was last read (`diskStamp`), so a
    *  revalidate on focus can tell that nothing has changed and say so. */
   stamp?: string;
@@ -343,7 +343,7 @@ export function openProject(path: string): { session: ProjectSession; problems: 
   resetShardStatus();   // a new project never inherits the last one's VC answers
   pinVcProvider(loaded.source.project.vcs);   // its own system, never one guessed from the folders above
   return {
-    session: withHeldGuard({ loaded, dto: toDto(loaded), history: new History(), stamp: diskStamp(loaded) }),
+    session: withHeldGuard({ loaded, dto: toDto(loaded), history: new StepHistory(), stamp: diskStamp(loaded) }),
     problems: runValidate(loaded, { checkBundle: false }).issues,
   };
 }
@@ -355,7 +355,7 @@ export function openProject(path: string): { session: ProjectSession; problems: 
  * editor's locks read (lockedBy), so an undo can never write what the page would not let the author type into.
  */
 function withHeldGuard(session: ProjectSession): ProjectSession {
-  session.history = new History({
+  session.history = new StepHistory({
     write: async (states) => {
       const held = await heldRefusal(session, states.filter((s) => !s.local).map((s) => s.path));
       return held !== undefined ? { ok: false, error: held, wrote: false } : applyStates(states);

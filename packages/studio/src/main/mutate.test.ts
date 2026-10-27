@@ -15,7 +15,7 @@ import {
   editBackground, restackBackground, removeBackground,
   addBackground,
   addCoverageDrivers, cardCatalogue, createBox, createCard, createDeck, createHand, createTagGroup, createTemplate,
-  deleteBox, deleteCard, deleteDeck, deleteHand, deleteTagGroup, deleteTemplate, duplicateBox, duplicateCard,
+  deleteBox, deleteCard, deleteCards, deleteDeck, deleteHand, deleteTagGroup, deleteTemplate, duplicateBox, duplicateCard,
   duplicateDeck, duplicateHand, duplicateTagGroup, duplicateTemplate,
   handDetail, moveBox, moveCard, moveDeck, moveHand, proposeDrivers, renameDeck,
   saveBox, saveCard, saveHand, saveProjectSettings, saveTagGroup, saveTemplate,
@@ -533,10 +533,25 @@ describe("card mutations", () => {
     expect(existsSync(join(session.loaded.dir, "encounters", "decks", "new-deck.storyletdeck"))).toBe(false);
   });
 
-  it("refuses to delete a non-empty deck", async () => {
+  it("deletes a deck that still has cards, and one undo brings the deck and every card back whole", async () => {
+    // The October 2026 review: this used to be refused, which was a confirm by
+    // another name; now the report says how many cards went, and offers Undo.
     const session = scratchProject();
+    const file = join(session.loaded.dir, "encounters", "decks", "docks.storyletdeck");
+    const bytes = readFileSync(file, "utf8");
+    const cards = session.dto.boxes[0]!.decks.find((d) => d.id === docks)!.cards.map((c) => c.id);
+    expect(cards.length).toBeGreaterThan(0);
+
     const result = await deleteDeck(session, docks);
-    expect(result).toEqual({ error: expect.stringContaining("cards first") });
+    if ("error" in result) throw new Error(result.error);
+    expect(result.project.boxes[0]!.decks.some((d) => d.id === docks)).toBe(false);
+    expect(existsSync(file)).toBe(false);
+    expect(result.step).toMatchObject({ merged: false });
+
+    const undone = await undo(session);
+    if (!undone || "error" in undone) throw new Error("the undo didn't land");
+    expect(readFileSync(file, "utf8")).toBe(bytes);
+    expect(undone.project.boxes[0]!.decks.find((d) => d.id === docks)!.cards.map((c) => c.id)).toEqual(cards);
   });
 
   it("saves the deck gate and @deck properties and round-trips them", async () => {
@@ -1773,6 +1788,23 @@ describe("canvas furniture", () => {
     expect(view.map).toBeUndefined();
     const map = parseSource(readFileSync(mapShard(session), "utf8")) as ProjectMapShard;
     expect(map.frames).toEqual([onMap]);
+  });
+
+  it("a canvas delete of cards and a frame is one undo step: the frame's write joins the cards' by key", async () => {
+    const session = scratchProject();
+    await setCanvasFurniture(session, encBox, { kind: "deck", deck: docks }, { frames: [frame] }, "Draw a frame");
+    const deckBefore = readFileSync(dockDeckFile(session), "utf8");
+    const viewBefore = readFileSync(sidecar(session), "utf8");
+    const card = session.dto.boxes.flatMap((b) => b.decks).find((d) => d.id === docks)!.cards[0]!;
+    const key = "canvas-delete:test";
+    const gone = await deleteCards(session, docks, [card.id], key);
+    expect("error" in gone).toBe(false);
+    await setCanvasFurniture(session, encBox, { kind: "deck", deck: docks }, { frames: [] }, "Remove", key);
+    expect(readFileSync(dockDeckFile(session), "utf8")).not.toBe(deckBefore);
+    expect(readFileSync(sidecar(session), "utf8")).not.toBe(viewBefore);
+    await undo(session);
+    expect(readFileSync(dockDeckFile(session), "utf8")).toBe(deckBefore);
+    expect(readFileSync(sidecar(session), "utf8")).toBe(viewBefore);
   });
 
   it("a drag is one undo step however many frames it took; a command is its own", async () => {

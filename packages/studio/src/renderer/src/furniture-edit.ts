@@ -52,8 +52,9 @@ export interface FurnitureController {
   /** Take the furniture out of a delete, removing it, and return what is left. */
   absorbDelete: (ids: string[]) => string[];
   /** Remove these frames: for a view that has to wait on a guarded delete of
-   *  the rest of the selection before it may take the frames too. */
-  remove: (ids: string[]) => void;
+   *  the rest of the selection before it may take the frames too. `coalesce`
+   *  joins that delete's history step, so one undo brings both back. */
+  remove: (ids: string[], coalesce?: string) => void;
   /** A right-click landed on `id`: did it belong to furniture? */
   menu: (id: string, e: MouseEvent) => boolean;
   /** A double-click landed on `id`: did it belong to furniture? */
@@ -186,13 +187,13 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
     return rest;
   }
 
-  function removeAll(ids: string[]): void {
+  function removeAll(ids: string[], coalesce?: string): void {
     if (fixed() || ids.length === 0) return;
     const gone = new Set(ids);
     if (editing !== undefined && gone.has(editing)) closeEditor({ discard: true });
     commit({
       frames: frames().filter((r) => !gone.has(r.id)),
-    }, ids.length > 1 ? "Remove furniture" : "Remove");
+    }, ids.length > 1 ? "Remove furniture" : "Remove", coalesce);
   }
 
   // --- the menu -----------------------------------------------------------------
@@ -321,7 +322,7 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
     cancel: () => { closeEditor({ discard: true }); if (armed) stop(); },
     absorbMoves,
     absorbDelete,
-    remove: (ids) => removeAll(ids.filter(owns)),
+    remove: (ids, coalesce) => removeAll(ids.filter(owns), coalesce),
     menu,
     // Reading mode must not rename a frame: a double-click there is the frame's
     // all the same, so nothing else opens, but no editor does either.

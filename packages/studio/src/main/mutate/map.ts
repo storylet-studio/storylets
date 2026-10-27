@@ -143,8 +143,8 @@ export async function setBoxColour(session: ProjectSession, boxId: string, colou
  * nothing reads, and one undo puts both back.
  */
 export async function useProjectMap(
-  session: ProjectSession, boxId: string, on: boolean, confirmed = false,
-): Promise<OpenResult | { error: string } | { confirm: { title: string; body: string } } | { refused: LeaveRefusalDto }> {
+  session: ProjectSession, boxId: string, on: boolean,
+): Promise<(OpenResult & { cleared?: number }) | { error: string } | { refused: LeaveRefusalDto }> {
   const box = locateBox(session, boxId);
   if (!box) return gone("box");
   const source = session.loaded.source!;
@@ -175,18 +175,11 @@ export async function useProjectMap(
       },
     };
   }
-  // The pins go with it (a box off the map has nowhere to draw them), so the
-  // author is asked first, saying how many: one undo puts them back, but a menu
-  // item that silently deleted a layout was the antagonist review's 1.3.
+  // The pins go with it (a box off the map has nowhere to draw them). A menu
+  // item that silently deleted a layout was the antagonist review's 1.3, so the
+  // answer says how many went, for the report that carries the Undo putting
+  // them back (the October 2026 review: Undo replaces "Are you sure?").
   const pinned = box.hands.hands.filter((h) => mapSites(box)[h.id] !== undefined).length;
-  if (pinned > 0 && !confirmed) {
-    return {
-      confirm: {
-        title: `Take "${name}" off the project map?`,
-        body: `Its ${pinned === 1 ? "hand's position" : `${pinned} hands' positions`} on the map will be deleted, and the game can no longer ask this box about a zone. You can undo this.`,
-      },
-    };
-  }
   delete box.box.box.usesMap;
   const forget = planForgetSites(session.loaded.dir, box, box.hands.hands.map((h) => h.id));
   // With every pin gone, the box's map shard holds nothing at all, so it goes
@@ -196,11 +189,12 @@ export async function useProjectMap(
   const shardPath = mapPath(session.loaded.dir, box);
   const legacyFrames = (box.map?.map as { frames?: unknown[] } | undefined)?.frames ?? [];
   const husk = legacyFrames.length === 0 && (existsSync(shardPath) || forget.some((w) => w.path === shardPath));
-  return commit(session, "Leave the project map", freshKey(), [
+  const left = await commit(session, "Leave the project map", freshKey(), [
     boxWrite(session, box),
     ...forget.filter((w) => !husk || w.path !== shardPath).map((w) => ({ path: w.path, content: w.content })),
     ...(husk ? [{ path: shardPath, content: null }] : []),
   ]);
+  return "error" in left || pinned === 0 ? left : { ...left, cleared: pinned };
 }
 
 /**

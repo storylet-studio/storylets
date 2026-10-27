@@ -18,6 +18,7 @@ Shortcuts are shown for macOS (`Cmd`). On Windows and Linux, use Ctrl wherever y
 | `Cmd+S` | Save. Storyletter saves as you go, so this flushes anything still pending |
 | `Cmd+,` | Project Settings |
 | `Cmd+Z` / `Shift+Cmd+Z` | Undo / Redo |
+| `Cmd+K` | Command Palette: every menu command by name, and the project's boxes, decks, and cards to open |
 | `Cmd+D` | Duplicate the selection |
 | `Cmd+F` | Find, across the project |
 | `Cmd+Alt+F` (`Ctrl+H` on Windows and Linux) | Replace text across the project: the Find window's Replace tab |
@@ -83,4 +84,4 @@ close it.
 | `Esc` | Close |
 
 The Replace tab has no list keys. Each row carries its own **Replace** button, and
-**Replace all** asks you to confirm before it rewrites anything.
+**Replace all** rewrites every match at once, with **Undo** in the message it shows.

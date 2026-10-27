@@ -48,7 +48,7 @@ export interface NodeViewActions {
    *  that also holds frames removes them only once the cards have gone, so a
    *  cancelled delete leaves everything where it was. An answer of nothing
    *  (no promise) is taken as "do not know", and the frames stay. */
-  removeMany: (cardIds: string[]) => void | Promise<boolean>;
+  removeMany: (cardIds: string[], key?: string) => void | Promise<boolean>;
   /** Arrange by dependency; resolves to the new positions and any loops found. */
   layOut: (
     ids: string[], current: { id: string; x: number; y: number }[],
@@ -296,16 +296,19 @@ export function mountNodeView(
     },
     onActivate: (id) => { if (furniture?.activate(id) !== true) actions.open(id); },
     onDelete: (ids) => {
-      // The CARDS first, through the app's guard; the frames only once they have
-      // gone. Frames used to be removed first, so cancelling "Delete 3 cards?"
-      // still lost the frame a marquee had taken with them.
+      // The CARDS first, through the app's one delete path; the frames only once
+      // they have gone. Frames used to be removed first, so a delete that didn't
+      // happen still lost the frame a marquee had taken with them.
+      // Both go in ONE history step, named here and passed to each write, so the report's Undo (and one
+      // Edit > Undo) brings back the cards and the frames together.
       const frames = ids.filter((id) => furniture?.owns(id) === true);
       const cardIds = ids.filter((id) => furniture?.owns(id) !== true);
       if (cardIds.length === 0) { furniture?.remove(frames); return; }
-      const answer = actions.removeMany(cardIds);
+      const key = frames.length ? `canvas-delete:${Date.now()}:${Math.random().toString(36).slice(2, 8)}` : undefined;
+      const answer = actions.removeMany(cardIds, key);
       if (frames.length === 0 || !(answer instanceof Promise)) return;
       const keep = furniture;
-      void answer.then((gone) => { if (gone) keep?.remove(frames); });
+      void answer.then((gone) => { if (gone) keep?.remove(frames, key); });
     },
     // No grace period here: a chip left beside a card that has moved away reads
     // as a bug, and nobody needs an Open button while they are dragging.

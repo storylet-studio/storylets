@@ -16,9 +16,10 @@ import "../tool-window/base.css";
 import "./search.css";
 import "@wildwinter/app-shell/tooltip.css";
 import "@wildwinter/app-shell/toast.css";
-import { breadcrumb, confirmDialog, debounce, el, iconNode, metaLine, pinButton, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
+import { breadcrumb, debounce, el, iconNode, metaLine, pinButton, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
 import { bootToolWindow } from "../tool-window/boot.js";
 import { searchIndex, searchMatch } from "../src/search.js";
+import { toastWithUndo } from "../src/undo-toast.js";
 import type { SearchHit } from "../src/search.js";
 import type { DeclaredField, FieldUsage, ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen } from "../../shared/api.js";
 
@@ -294,24 +295,18 @@ function runSoon(): void {
   runLater();
 }
 
-/** Apply the replacement: one hit, or every previewed one. A bulk replace is
- *  confirmed with its count first; it is one undo step in the editor. */
+/** Apply the replacement: one hit, or every previewed one. No question first:
+ *  it is one undo step in the editor, so a bulk replace reports with Undo (the
+ *  October 2026 review: Undo replaces "Are you sure?"). */
 async function applyReplace(only?: ReplaceHit): Promise<void> {
   const n = only ? 1 : replaceHits.length;
   if (n === 0) return;
-  if (!only) {
-    const items = new Set(replaceHits.map((h) => h.id)).size;
-    const ok = await confirmDialog({
-      title: `Replace ${plural(n, "occurrence")} across ${plural(items, "item")}?`,
-      body: `Every “${query}” becomes “${replacement}”. You can undo this.`,
-      confirmLabel: "Replace",
-    });
-    if (!ok) return;
-  }
   const res = await studio.replaceApply(only ? { ...replaceOpts(), onlyId: only.id, onlyField: only.field } : replaceOpts());
   // Said twice on purpose: the list explains, the toast is the family's voice
   // for a failure in a tool window (parity row 19).
   if ("error" in res) { toast(`Replace failed: ${res.error}`, "error"); listEl.replaceChildren(none(`Replace failed: ${res.error}`)); return; }
+  // The editor owns the history, so it runs the Undo (only while the step is still the newest).
+  if (!only) toastWithUndo((id) => studio.searchUndoStep(id), `Replaced ${plural(res.count, "occurrence")} in ${plural(res.items, "item")}.`, "ok", res.step);
   // The applied hits are gone; the preview says so. Read unconditionally: main
   // wrote the files itself, so to `revalidate` the disk has not moved.
   await loadProject();

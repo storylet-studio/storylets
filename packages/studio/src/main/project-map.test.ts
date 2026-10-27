@@ -129,11 +129,11 @@ describe("the project map page", () => {
     const deck = codex.decks[0]!.shard;
     deck.cards[0]!.condition = "@hand.patrolled";
     // Without a declaration of its own, `patrolled` is the map's: refused.
-    expect(await useProjectMap(s, "b_codex", false, true)).toMatchObject({ refused: { body: expect.stringContaining("@hand.patrolled") } });
+    expect(await useProjectMap(s, "b_codex", false)).toMatchObject({ refused: { body: expect.stringContaining("@hand.patrolled") } });
     // Its own tag group declaring `patrolled` (Saltmarsh's `area/docks` shape):
     // off the map the name resolves to that, so the box may leave.
     codex.tags.groups.push({ id: "d_lore", gameId: "lore", tags: [{ id: "v_lore_old", gameId: "old", properties: [{ name: "patrolled", type: "boolean", default: false }] }] });
-    expect(await useProjectMap(s, "b_codex", false, true)).not.toHaveProperty("refused");
+    expect(await useProjectMap(s, "b_codex", false)).not.toHaveProperty("refused");
   });
 
   it("makes a hand of a picked template from the map, its zone hole filled by the pin", async () => {
@@ -171,7 +171,7 @@ describe("the project map page", () => {
     expect(await moveSitesOnMap(s, "b_codex", GROUP, [{ id: hand.id, x: docks[0]!.x - 5000, y: docks[0]!.y - 5000 }])).not.toHaveProperty("error");
     const shard = join(s.loaded.dir, "codex", "map.storyletmap");
     expect(existsSync(shard)).toBe(true);
-    expect(await useProjectMap(s, "b_codex", false, true)).not.toHaveProperty("error");
+    expect(await useProjectMap(s, "b_codex", false)).not.toHaveProperty("error");
     expect(existsSync(shard)).toBe(false);
     await undo(s);
     expect(existsSync(shard)).toBe(true);

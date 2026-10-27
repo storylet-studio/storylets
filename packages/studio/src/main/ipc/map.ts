@@ -29,8 +29,7 @@ export function registerMap(ipc: Ipc, deps: Pick<MainContext, "session" | "edito
   // same reason as `map:box`.
   ipc.write("map:view", () => projectMapView(deps.session()));
   ipc.handle("map:zone", read(mapZoneDetail, null));
-  ipc.write("map:use", project((open, boxId: string, on: boolean, confirmed?: boolean) =>
-    useProjectMap(open, boxId, on, confirmed === true)));
+  ipc.write("map:use", project(useProjectMap));
   ipc.write("map:colour", project(setBoxColour));
 
   ipc.write("map:setSpatial", project(setGroupSpatial));

@@ -8,7 +8,7 @@ import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type {
   BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, MapLayerPrefs, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
   ProjectKit, UpdaterPromptOptions, VcsSetting,
-  UpdaterDownloadProgress,
+  UpdaterDownloadProgress, UpdaterReadyInfo,
   InvokeArgs, InvokeChannel, InvokeResult, PushArgs, PushChannel, SendArgs, SendChannel,
 } from "../shared/api.js";
 import type { SaveFile } from "@storylet-studio/model";
@@ -90,7 +90,7 @@ const api: StudioApi = {
   duplicateCard: (deckId: string, cardId: string) => invoke("card:duplicate", deckId, cardId),
   moveCard: (deckId: string, cardId: string, targetId: string, before: boolean) => invoke("card:move", deckId, cardId, targetId, before),
   deleteCard: (deckId: string, cardId: string) => invoke("card:delete", deckId, cardId),
-  deleteCards: (deckId: string, cardIds: string[]) => invoke("card:deleteMany", deckId, cardIds),
+  deleteCards: (deckId: string, cardIds: string[], key?: string) => invoke("card:deleteMany", deckId, cardIds, key),
   deleteCardsAcross: (groups: { deckId: string; cardIds: string[] }[]) => invoke("card:deleteAcross", groups),
   cardCatalogue: (deckId: string) => invoke("card:catalogue", deckId),
   createDeck: (boxId: string) => invoke("deck:create", boxId),
@@ -99,6 +99,14 @@ const api: StudioApi = {
   setDeckFocused: (on: boolean) => invoke("menu:setDeckFocused", on),
   undo: () => invoke("edit:undo"),
   redo: () => invoke("edit:redo"),
+  undoStep: (id: number) => invoke("edit:undoStep", id),
+  // Find's toast Undo, run by the editor: it answers with the outcome, sent back
+  // rather than invoked (the leaving prompt's way), so main can wait for it.
+  onUndoStep: (handler) => {
+    listen("editor:undoStep", ({ ask, id }) => {
+      void handler(id).then((result) => tell("editor:undoStepReply", { ask, result }), () => tell("editor:undoStepReply", { ask, result: "stale" }));
+    });
+  },
   openTable: () => invoke("table:open"),
   setBoardPinned: (on: boolean) => invoke("board:setPin", on),
   setBoardFollow: (on: boolean) => invoke("state:setBoardFollow", on),
@@ -117,6 +125,7 @@ const api: StudioApi = {
   declaredFields: () => invoke("search:declaredFields"),
   replacePreview: (opts: ReplaceOptions) => invoke("search:replacePreview", opts),
   replaceApply: (opts: ReplaceOptions) => invoke("search:replaceApply", opts),
+  searchUndoStep: (id: number) => invoke("search:undoStep", id),
   onEditorFlush: (handler) => { listen("editor:flush", handler); },
   editorFlushed: () => invoke("editor:flushed"),
   onReplaceApplied: (handler) => { listen("replace:applied", handler); },
@@ -155,7 +164,7 @@ const api: StudioApi = {
   projectMaps: () => invoke("map:project"),
   projectMapView: () => invoke("map:view"),
   mapZone: (tagId: string) => invoke("map:zone", tagId),
-  useProjectMap: (boxId: string, on: boolean, confirmed?: boolean) => invoke("map:use", boxId, on, confirmed),
+  useProjectMap: (boxId: string, on: boolean) => invoke("map:use", boxId, on),
   setBoxColour: (boxId: string, colour: number) => invoke("map:colour", boxId, colour),
   setGroupSpatial: (boxId: string, groupId: string, on: boolean) => invoke("map:setSpatial", boxId, groupId, on),
   createZone: (boxId: string, groupId: string, polygon: { x: number; y: number }[], name?: string) =>
@@ -313,6 +322,17 @@ const api: StudioApi = {
   onUpdaterDownloadProgress: (handler: (p: UpdaterDownloadProgress) => void) => {
     ipcRenderer.on("updater:download-progress", (_event, p: UpdaterDownloadProgress) => handler(p));
   },
+  // ...and the two since app-shell 0.67: an update that downloaded on its own,
+  // and the top bar chip's restart.
+  onUpdaterReady: (handler: (info: UpdaterReadyInfo) => void) => {
+    ipcRenderer.on("updater:ready", (_event, info: UpdaterReadyInfo) => handler(info));
+  },
+  updaterRestart: () => { ipcRenderer.send("updater:restart"); },
+
+  // The command palette's two channels, the shell's PALETTE_CHANNELS written
+  // out as the updater's are: main's half is app-shell's registerCommandPalette.
+  paletteCommands: () => ipcRenderer.invoke("palette:commands"),
+  paletteRun: (id: string) => { ipcRenderer.send("palette:run", id); },
 };
 
 contextBridge.exposeInMainWorld("studio", api);

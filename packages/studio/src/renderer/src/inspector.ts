@@ -26,7 +26,7 @@ import type { ShareScope } from "./zone-share.js";
 import { gameIdify, isHoleRef, turnSpan, PLACE_GROUP } from "@storylet-studio/model";
 import { bindField, inputField, option, optionSelect, segmented } from "./fields.js";
 import { fieldValueFromText, fieldValueToText } from "./field-value.js";
-import { cardHasContent, deleteLabel } from "./deletes.js";
+import { deleteLabel } from "./deletes.js";
 
 import { openContextMenu, openPopover } from "@wildwinter/app-shell/context-menu";
 import { chipDot, commentBubble, listMeta, moreMenu } from "./widgets.js";
@@ -487,7 +487,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       title: { get: () => edit.title ?? "", set: (v) => { edit.title = v; }, placeholder: "Card title", commit },
       gameId: { get: () => edit.gameId ?? "", set: (v) => { edit.gameId = v; }, fallback: card.gameId, deriveFrom: () => edit.title ?? "", commit },
       purpose: { get: () => edit.purpose ?? "", set: (v) => { edit.purpose = v; }, placeholder: "What happens when this card plays", commit },
-      menu: [{ label: deleteLabel("card", cardHasContent(card)), danger: true, onClick: () => h.deleteCard(deck.id, card.id) }],
+      menu: [{ label: deleteLabel("card"), danger: true, onClick: () => h.deleteCard(deck.id, card.id) }],
       comments: { on: card.id, count: h.openThreads(card.id), open: (a) => h.showComments(card.id, edit.title ?? card.gameId, a) },
     }));
     const setN = edit.fields.filter((f) => f.value.trim() !== "").length
@@ -1425,7 +1425,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       gameId: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, fallback: detail.gameId, deriveFrom: () => edit.title, commit },
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What sits here, and why", commit },
       // A hand's evidence is its pin, which only the map knows (deletes.ts).
-      menu: [{ label: deleteLabel("hand", box.usesMap === true), danger: true, onClick: () => h.deleteHand(boxId, detail.id) }],
+      menu: [{ label: deleteLabel("hand"), danger: true, onClick: () => h.deleteHand(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
       // A venue binds a NAME, so the claim holds only while this hand still
       // answers to the one it bound. Renaming it in place is exactly when a
@@ -1779,7 +1779,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
       title: { get: () => edit.title, set: (v) => { edit.title = v; }, placeholder: "What you call hands of this kind", commit },
       gameId: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, fallback: detail.gameId, deriveFrom: () => edit.title, commit },
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What kind of hand this is", commit },
-      menu: [{ label: deleteLabel("hand template", detail.instances.length > 0), danger: true, onClick: () => h.deleteTemplate(boxId, detail.id) }],
+      menu: [{ label: deleteLabel("hand template"), danger: true, onClick: () => h.deleteTemplate(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
     }));
     const holes = edit.bindings.filter((b) => b.hole).length;
@@ -1886,7 +1886,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       name: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, placeholder: "group-name", commit },
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What this group classifies", commit },
       // No question: main refuses a group cards still carry, saying how many.
-      menu: [{ label: deleteLabel("tag group", false), danger: true, onClick: () => h.deleteTagGroup(boxId, detail.id) }],
+      menu: [{ label: deleteLabel("tag group"), danger: true, onClick: () => h.deleteTagGroup(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.gameId, a) },
     }));
 
