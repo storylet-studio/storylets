@@ -25,7 +25,7 @@ describe("migrating a pre-shell settings file", () => {
 
   it("keeps every setting the author had chosen", () => {
     const s = new StudioStore(scratch()).get();
-    expect(s.theme).toBe("linen");
+    expect(s.theme).toBe("light");               // Linen is Light since the October 2026 UI review
     expect(s.viewMode).toBe("node");
     expect(s.boardFollow).toBe(true);
     expect(s.showResolved).toBe(true);
@@ -57,10 +57,26 @@ describe("migrating a pre-shell settings file", () => {
     expect((after["windows"] as Record<string, unknown>)["board"]).toEqual({ pinned: false });
 
     // Second construction sees the new shape and leaves it be.
-    new StudioStore(dir).setTheme("baize");
+    new StudioStore(dir).setTheme("dark");
     const twice = JSON.parse(readFileSync(join(dir, "studio-state.json"), "utf8")) as Record<string, Record<string, unknown>>;
-    expect(twice["app"]!["theme"]).toBe("baize");
+    expect(twice["app"]!["theme"]).toBe("dark");
     expect(twice["recents"]).toEqual([{ path: "/p/one.storylets" }]);
+  });
+
+  it("carries every retired palette onto the family's, from the current file too", () => {
+    // Chambray and Linen are Light now, Indigo and Baize are Dark (the October 2026 UI review); a current id
+    // stands, and one nobody can read falls back to Follow System rather than to no theme at all.
+    const cases: Array<[string, string]> = [
+      ["chambray", "light"], ["linen", "light"], ["indigo", "dark"], ["baize", "dark"],
+      ["light", "light"], ["dark", "dark"], ["parchment", "parchment"], ["system", "system"], ["neon", "system"],
+    ];
+    for (const [stored, now] of cases) {
+      const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+      writeFileSync(join(dir, "studio-state.json"), JSON.stringify({
+        recents: [], places: {}, panes: {}, windows: {}, app: { theme: stored },
+      }));
+      expect(new StudioStore(dir).get().theme, stored).toBe(now);
+    }
   });
 
   it("a first run with no file at all is defaults, not a crash", () => {

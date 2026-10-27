@@ -1,5 +1,6 @@
 // Chrome has its own scale (design-language.md section 4, ruled 2026-09-16):
-// the chrome is sized in pixels off a 14px base, never off the root, so a
+// the chrome is sized in pixels off the shell's `--chrome-size` (13px since
+// the October 2026 UI review; 14px on Windows), never off the root, so a
 // reading-size control can never inflate the navigator, inspector, top bar,
 // status bars or tool windows. Storyletter has no reading root today, so the
 // whole renderer is chrome and no stylesheet in it may use `rem`.
@@ -41,10 +42,10 @@ describe("chrome scale", () => {
     expect(hits).toEqual([]);
   });
 
-  it("pins the chrome containers at the 14px base", () => {
+  it("pins the chrome containers at the shell's chrome base", () => {
     const theme = readFileSync(join(SRC, "src/theme.css"), "utf8");
     for (const host of [".topbar", ".pane-nav", ".pane-inspector", ".welcome", ".swin-head", ".stepbar"]) {
-      expect(theme).toMatch(new RegExp(`:where\\([^)]*${host.replace(".", "\\.")}[^)]*\\)\\s*\\{\\s*font-size:\\s*14px`));
+      expect(theme).toMatch(new RegExp(`:where\\([^)]*${host.replace(".", "\\.")}[^)]*\\)\\s*\\{\\s*font-size:\\s*var\\(--chrome-size\\)`));
     }
   });
 });

@@ -16,6 +16,7 @@ import type { MenuCommand, StudioState } from "../shared/api.js";
 import { EXAMPLES } from "../shared/examples.js";
 import { push } from "./ipc/push.js";
 import { manualCheckForUpdates } from "@wildwinter/app-shell/updater";
+import { THEME_CHOICES } from "@wildwinter/app-shell/theme";
 import { viewMenuLabel } from "@wildwinter/app-shell/view-package";
 
 /**
@@ -427,9 +428,7 @@ export function refreshMenu(
           ...VIEW_MENU.colourTheme,
           // Follow System first, as Patterpad lists it: the default, then the palettes.
           submenu: [
-            themeItem("Follow System", "system"),
-            themeItem("Chambray", "chambray"), themeItem("Indigo", "indigo"),
-            themeItem("Linen", "linen"), themeItem("Baize", "baize"),
+            ...THEME_CHOICES.map(([theme, label]) => themeItem(label, theme)),
           ],
         },
         { type: "separator" },

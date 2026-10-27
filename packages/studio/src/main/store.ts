@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAppStore, resetWindows, windowSlice } from "@wildwinter/app-shell/app-store";
 import type { AppStore, WindowSlice } from "@wildwinter/app-shell/app-store";
+import { migrateTheme } from "@wildwinter/app-shell/theme";
 import type { CardGroupPrefs, CoverageOrder, LastPlace, MapLayerPrefs, PaneState, StudioState, ThemeChoice, ViewMode, WindowBounds } from "../shared/api.js";
 
 /** The settings that are OURS rather than the family's: everything the shell
@@ -294,6 +295,9 @@ export class StudioStore {
     const cardGroups = s.lastProject !== undefined ? projectCardGroups?.[s.lastProject] : undefined;
     return {
       ...app,
+      // The family's palettes since the October 2026 UI review: Chambray and Linen read as Light, Indigo and
+      // Baize as Dark (app-shell's `migrateTheme`), until the next theme change writes the new id.
+      theme: migrateTheme(app.theme),
       // A file from before the Fields window has no say: on, as the default.
       fieldsFollow: app.fieldsFollow ?? DEFAULTS.fieldsFollow,
       ...(mapLayers !== undefined ? { mapLayers } : {}),

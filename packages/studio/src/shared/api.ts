@@ -20,6 +20,7 @@ export type { CoverageOrder, CoverageReport } from "@storylet-studio/ops";
 // Find: the Property and Replace tabs carry the ops types across unchanged.
 export type { DeclaredField, FieldUsage, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 export type { JobProgress } from "@wildwinter/app-shell/job";
+import type { ThemeChoice } from "@wildwinter/app-shell/theme";
 
 /** The long-job progress channel. Declared HERE, not imported from
  *  @wildwinter/app-shell/job, because the preload is sandboxed: a bare module
@@ -51,9 +52,10 @@ export const MAP_CANVAS = "map:";
 export const canvasId = (ref: { kind: "deck"; deck: string } | { kind: "map"; box: string }): string =>
   (ref.kind === "deck" ? ref.deck : `${MAP_CANVAS}${ref.box}`);
 
-/** Chambray/Indigo are the blue defaults (what "system" resolves to); the
- *  green Linen/Baize pair stays as an explicit choice. */
-export type ThemeChoice = "chambray" | "indigo" | "linen" | "baize" | "system";
+/** The colour theme: the family's, from app-shell (Follow System, Light, Dark,
+ *  Parchment), shared with Patterpad since the October 2026 UI review. The
+ *  store carries a retired Chambray, Indigo, Linen or Baize across on read. */
+export type { ThemeChoice };
 
 /** A project in Open Recent: where it is, and what it calls itself.
  *

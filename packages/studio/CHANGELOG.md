@@ -15,8 +15,12 @@ here is part of shipping, not a courtesy.
 - **A box or card somebody else holds is easier to read.** Its locked fields and buttons keep their text at full
   strength, so you can read every value; they show they're locked with a dashed edge and a no-entry cursor,
   and the notice above the document still says who holds it.
-- **Green status text is a touch darker in the light palettes** (Chambray and Linen), so words such as "Saved" and the
-  Live Link status meet the usual contrast guideline for text.
+- **A cleaner, crisper look, shared with Patterpad.** The two apps now have the same colour themes: Light and
+  Dark, which follow your system until you pick one, and Parchment, a warm option for long writing sessions. Blue
+  is the one accent colour, and every text colour meets the usual contrast guideline in every theme. If you'd
+  picked Chambray or Linen you're now on Light, and Indigo or Baize are now Dark. Deck and tag colours come from
+  the family's shared set, so some shift a little. The interface uses your system's own typeface, with quieter
+  corners and shadows, and menus that open straight away; cards on the canvas sit flat, with no shadow.
 
 ## [0.26.0] - 2026-10-22
 

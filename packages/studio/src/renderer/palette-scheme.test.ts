@@ -1,32 +1,22 @@
-// Every palette declares its --color-scheme (app-shell 0.56): the shell's tokens.css sets `color-scheme` from
-// it, so native controls draw for the palette, not the OS (Linen under a dark OS drew unticked checkboxes as
-// dark filled squares). The bare :root leaves it unset, so follow-OS still works through the shell's fallback.
-// A source scan, as chrome-scale.test.ts: a new palette block is one rule in one file.
+// Storyletter's colours are the family's (app-shell's palette.css, since the October 2026 UI review), and every
+// palette block there declares its --color-scheme (app-shell's own test holds that). What this file holds is
+// Storyletter's side: theme.css loads the palette straight after the grammar, so the app's own sheets come
+// later and win, and declares no palette or colour scheme of its own, so nothing here can undo the palette's
+// (Linen under a dark OS once drew unticked checkboxes as dark filled squares).
+// A source scan, as chrome-scale.test.ts.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./src/theme.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-/** Each rule's selector and body, at any depth (the follow-OS block sits in a media query). */
-const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1]!.trim(), body: m[2]! }));
-const scheme = (selector: string): string | undefined =>
-  /--color-scheme:\s*(\w+)/.exec(rules.find((r) => r.selector === selector)?.body ?? "")?.[1];
+const imports = [...css.matchAll(/@import "([^"]+)";/g)].map((m) => m[1]!);
 
-describe("each palette declares its colour scheme", () => {
-  it("light for Chambray and Linen, dark for Indigo and Baize, by their grounds", () => {
-    expect(scheme(':root[data-theme="chambray"]')).toBe("light");
-    expect(scheme(':root[data-theme="linen"]')).toBe("light");
-    expect(scheme(':root[data-theme="indigo"]')).toBe("dark");
-    expect(scheme(':root[data-theme="baize"]')).toBe("dark");
+describe("Storyletter takes the family palette", () => {
+  it("imports the palette straight after the shell's tokens", () => {
+    expect(imports.slice(0, 2)).toEqual(["@wildwinter/app-shell/tokens.css", "@wildwinter/app-shell/palette.css"]);
   });
 
-  it("dark for the follow-OS block under a dark OS, and nothing on the bare :root", () => {
-    expect(scheme(":root:not([data-theme])")).toBe("dark");
-    expect(rules.find((r) => r.selector === ":root")?.body).not.toContain("--color-scheme");
-  });
-
-  it("misses no palette: every block that sets a ground sets the scheme too", () => {
-    const grounds = rules.filter((r) => r.selector.startsWith(":root") && r.selector !== ":root" && /--bg:/.test(r.body));
-    expect(grounds.length).toBe(4);
-    for (const r of grounds) expect(r.body, r.selector).toMatch(/--color-scheme:\s*(light|dark)/);
+  it("declares no palette, colour, or colour scheme of its own", () => {
+    expect(css).not.toMatch(/data-theme/);
+    expect(css).not.toMatch(/--(color-scheme|bg|surface|card|ink|muted|line|line-soft|accent|on-accent|accent-soft|danger|warn|ok|char-\d+)\s*:/);
   });
 });

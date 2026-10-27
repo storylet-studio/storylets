@@ -11,8 +11,8 @@
 // tokens, because that ramp is already what gives a deck or a speaker its
 // colour: furniture picked from a different set would be the one thing on the
 // canvas that did not match the lists it was opened from. The SHARD stores a
-// name ("amber"), never a hex value, so a project drawn on linen still reads on
-// baize.
+// name ("amber"), never a hex value, so a project drawn in Light still reads in
+// Dark.
 // ---------------------------------------------------------------------------
 
 import Konva from "konva";

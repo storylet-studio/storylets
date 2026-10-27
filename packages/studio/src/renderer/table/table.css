@@ -69,8 +69,8 @@ body { background: var(--bg); font-size: 14px; }
   display: flex; justify-content: center; align-items: flex-end;
 }
 .stagefloat .hcell {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
+  background: var(--surface); border: 0;
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); /* floating: the ring is the edge */
   max-width: 100%;
 }
 .stagefloat .hcards { overflow-x: auto; }
@@ -190,9 +190,9 @@ body { background: var(--bg); font-size: 14px; }
 /* --- the play panel: read, choose, continue ----------------------------------- */
 .playpanel {
   background: var(--card);
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-pop); /* floating: the ring is the edge */
   padding: 16px 20px;
   display: flex; flex-direction: column; gap: 10px;
   max-width: 560px;

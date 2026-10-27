@@ -23,7 +23,8 @@ import type { GraphEdge } from "../../shared/api.js";
 
 export const NODE_W = 190;
 export const NODE_H = 76;
-export const NODE_RADIUS = 8;
+/** The shell's `--radius-md` (6px since the October 2026 UI review). */
+export const NODE_RADIUS = 6;
 
 /** A card as the canvas holds it. */
 export interface CardNode extends CanvasItem {
@@ -119,15 +120,15 @@ export function drawCardNode(item: CardNode, ctx: DrawContext): Konva.Group {
     stroke: item.emphasis === true ? tokens.ink : tokens.line,
     strokeWidth: item.emphasis === true ? 2 : 1,
     cornerRadius: NODE_RADIUS,
-    shadowColor: "#000", shadowOpacity: 0.1, shadowBlur: 6, shadowOffsetY: 1,
+    // No shadow: nothing in the family casts one at rest (the October 2026 UI review); the edge is the line.
   }));
 
   // The deck stripe: the one piece of identity that survives every zoom, so a
   // cluster still reads as decks when the words have gone. It keeps a floor in
   // screen pixels for exactly that reason, and is clipped to the card's rounded
   // rect because Konva clamps a corner radius to a narrow shape's width - a
-  // 4-wide stripe cannot curve by 8, and its square corners poked out past the
-  // card's edge. The clip lives in a nested group so the card's shadow, drawn
+  // 4-wide stripe cannot curve by 6, and its square corners poked out past the
+  // card's edge. The clip lives in a nested group so the card's own edge, drawn
   // outside it, survives.
   const stripe = new Konva.Group({
     clipFunc: (c) => { c.beginPath(); c.roundRect(0, 0, item.width, item.height, NODE_RADIUS); },

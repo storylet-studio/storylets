@@ -698,7 +698,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* --- version control (lock / read-only / out-of-date) ----------------------- */
 /* Quiet chrome: a monochrome glyph on the item, nothing at all when the shard
    is clean and writable (which is nearly always). The glyphs inherit their
-   themed colour, so they read the same in Linen and Baize. */
+   themed colour, so they read the same in every palette. */
 /* The six badges and their colours are the shell's (app-shell/vc.css): locked,
    out of date, checked out by you, modified, new, read-only. Three of those were
    dropped on the way into the shared copy and came back in 0.26.0, so the three

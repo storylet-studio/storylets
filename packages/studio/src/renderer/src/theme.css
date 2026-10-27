@@ -1,45 +1,25 @@
 /* ---------------------------------------------------------------------------
-   Storyletter PALETTE + fonts - the app-specific half of "two palettes,
-   one grammar" (Reboot 9.3). The shared grammar (elevation / motion / radius /
-   scrollbar) is imported below from the shared shell package
-   (@wildwinter/app-shell/tokens.css); this file supplies Storyletter's own
-   colour + font VALUES over that grammar: the Chambray (light) and Indigo
-   (dark) defaults, the earlier Linen / Baize green pair kept as explicit
-   choices, plus follow-system.
+   Storyletter's design tokens: the app's own half over app-shell's grammar.
 
-   Chambray and Indigo are the DEFAULTS (the author's ruling, 2026-08-27: the
-   green tints read as tinted, not neutral). They are the green pair's exact
-   lightness structure re-inked in blue-grey: every neutral keeps its L, only
-   the hue moves (~150deg to ~215deg), and the accent is a steel blue of the
-   same weight as the old green. The semantic trio (--danger/--warn/--ok) and
-   the --char-* wheels are UNCHANGED across same-lightness themes on purpose:
-   they are content and status identity, not theme identity, so switching
-   Chambray <-> Linen never recolours an author's tags, decks or furniture.
+   The colours are the FAMILY palette in app-shell (`palette.css`: Light, Dark
+   and Parchment, blue pencil, one character and deck wheel, shared status
+   colours), the same as Patterpad's since the October 2026 UI review
+   (patterkit design/ui-review-2026-10, ruled 2026-10-27). Until then this file
+   held Storyletter's own Chambray, Indigo, Linen and Baize. What stays here is
+   truly Storyletter's: the reading and mono faces, the chrome pin, the
+   caption, and the placeholder style.
 
-   Colour token NAMES mirror Patterpad's (--bg / --surface / --ink / --muted /
-   --line / --accent / --danger / --warn / --ok / --char-0..11) so the surface
-   palette is swap-compatible. Two are storylets EXTENSIONS beyond Patterpad's
-   set, flagged for the eventual shared-token decision:
-     --card       a third surface tier (card faces above --surface panels).
-     --line-soft  a softer divider than --line.
-   The --char-* set keeps Patterpad's hue spacing (a designed,
-   collision-tested wheel) but is tuned for the ink-and-baize temperature:
-   earthed on Linen, embered on Baize (the 2026-07 palette pass).
+   Theme axis: data-theme="light" | "dark" | "parchment" on <html>; absent =
+   follow the OS. The ids, their labels and the migration from the retired
+   ones are app-shell's (`@wildwinter/app-shell/theme`).
 
-   Theme axis: data-theme="chambray" | "indigo" | "linen" | "baize" on
-   <html>; absent = follow-OS (Chambray in light, Indigo in dark). The bare
-   :root IS Chambray; setting any data-theme detaches the follow-OS media
-   query below.
-
-   Every palette block declares --color-scheme, light or dark by its ground
-   (app-shell 0.56): the shell's tokens.css sets color-scheme from it, so
-   native controls (an unticked checkbox, a scrollbar, a select's pop-up)
-   draw for the palette, not for the OS. The bare :root leaves it unset, so
-   follow-OS works through the shell's "light dark" fallback; an explicit
-   Chambray has a block of its own for the token alone.
+   The tiers, as the palette defines them: --bg the desk (the canvas, the
+   board), --surface chrome (panes, bars, menus, dialogs), --card content and
+   fields (a card's face, an input). Storyletter's three tiers were the model.
    --------------------------------------------------------------------------- */
 
 @import "@wildwinter/app-shell/tokens.css";
+@import "@wildwinter/app-shell/palette.css";
 @import "@wildwinter/app-shell/controls.css";
 @import "@wildwinter/app-shell/dialog.css";
 @import "@wildwinter/app-shell/context-menu.css";
@@ -66,124 +46,21 @@
 
 /* Chrome has its own scale (design-language.md section 4, ruled 2026-09-16):
    the navigator, inspector, top bar, status bars and tool-window heads are
-   sized in pixels off a 14px base and never off the root, so a reading-size
-   control cannot inflate them. Every chrome rule in this package is in px
-   for that reason (chrome-scale.test.ts holds the line), and the containers
-   below pin the base so unstyled text inside lands at 14px whatever the root
-   is. The literal stands in for the shell's `--chrome-size`, which does not
-   exist yet; swap the value for the token when it lands.
+   sized in pixels off the shell's `--chrome-size` (13px; 14px on Windows) and
+   never off the root, so a reading-size control cannot inflate them. Every
+   chrome rule in this package is in px for that reason (chrome-scale.test.ts
+   holds the line), and the containers below pin the base so unstyled text
+   inside lands on it whatever the root is.
    `.stepbar` is written at zero specificity because the shell's own
-   `.stepbar` font shorthand (still on the root scale) sits on the same
-   element: this pin is the base the bar inherits from once the shell
-   converts that rule, not an override of it today. */
-:where(.topbar, .pane-nav, .pane-inspector, .welcome, .swin-head, .stepbar) { font-size: 14px; }
+   `.stepbar` font shorthand sits on the same element: this pin is the base
+   the bar inherits from, not an override of it. */
+:where(.topbar, .pane-nav, .pane-inspector, .welcome, .swin-head, .stepbar) { font-size: var(--chrome-size); }
 
 :root {
-  --bg: #e6eaef;
-  --surface: #f4f6f9;
-  --card: #fbfcfe;
-  --ink: #161e28;
-  --muted: #4d5b6b;
-  --line: #c6ceda;
-  --line-soft: #d8dee7;
-  --accent: #2d5c86;
-  --on-accent: #fff;
-  --accent-soft: #2d5c861f;
-  --danger: #b0402f;
-  --warn: #866331;   /* dark enough to pass AA as text in Chambray and Linen (was #a9772b, 3.2:1; 2026-10-21) */
-  --ok: #3a7544;
-
-  --char-0: #a84a38; --char-1: #ab6626; --char-2: #8f7a1e; --char-3: #6f7c2b;
-  --char-4: #44793f; --char-5: #2f7a68; --char-6: #37718a; --char-7: #4a6694;
-  --char-8: #665f9e; --char-9: #7f5590; --char-10: #96487a; --char-11: #a04a52;
-
-  /* The family's type set (fonts.css declares the faces), each over a system stack. */
+  /* The reading and mono faces (fonts.css declares them), each over a
+     system stack. The UI face is the shell's system face. */
   --font-read: "Newsreader", Georgia, "Iowan Old Style", serif;
-  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
-
-/* Chambray chosen explicitly: the bare :root's colours, light whatever the OS. */
-:root[data-theme="chambray"] { --color-scheme: light; }
-
-/* Linen, the original green-tinted light palette, kept as an explicit choice. */
-:root[data-theme="linen"] {
-  --color-scheme: light;
-  --bg: #e7ebe5;
-  --surface: #f5f8f4;
-  --card: #fcfdfb;
-  --ink: #17231c;
-  --muted: #4f6157;
-  --line: #c9d2c8;
-  --line-soft: #dbe1d9;
-  --accent: #28654a;
-  --on-accent: #fff;
-  --accent-soft: #28654a1f;
-}
-
-/* Indigo, the dark default, as an explicit choice... */
-:root[data-theme="indigo"] {
-  --color-scheme: dark;
-  --bg: #131923;
-  --surface: #1c2431;
-  --card: #212a39;
-  --ink: #e8ebef;
-  --muted: #919cad;
-  --line: #2a3444;
-  --line-soft: #242d3b;
-  --accent: #7cb0dd;
-  --on-accent: var(--bg); /* a light accent on a dark ground wants dark ink */
-  --accent-soft: #7cb0dd24;
-  --danger: #d97c66;
-  --warn: #cfa25e;
-  --ok: #79bd80;
-  --char-0: #d97f74; --char-1: #d69a5c; --char-2: #c8ad5e; --char-3: #a4b164;
-  --char-4: #7cb87d; --char-5: #63b09a; --char-6: #68a8bd; --char-7: #7fa0cf;
-  --char-8: #9a97cc; --char-9: #b18fc6; --char-10: #ca86b2; --char-11: #d5808d;
-}
-
-/* Baize, the original green-felt dark palette, kept as an explicit choice. */
-:root[data-theme="baize"] {
-  --color-scheme: dark;
-  --bg: #151c1a;
-  --surface: #1e2724;
-  --card: #232e2a;
-  --ink: #e9edeb;
-  --muted: #92a29c;
-  --line: #2c3934;
-  --line-soft: #26312d;
-  --accent: #6fbfa2;
-  --on-accent: var(--bg);
-  --accent-soft: #6fbfa224;
-  --danger: #d97c66;
-  --warn: #cfa25e;
-  --ok: #79bd80;
-  --char-0: #d97f74; --char-1: #d69a5c; --char-2: #c8ad5e; --char-3: #a4b164;
-  --char-4: #7cb87d; --char-5: #63b09a; --char-6: #68a8bd; --char-7: #7fa0cf;
-  --char-8: #9a97cc; --char-9: #b18fc6; --char-10: #ca86b2; --char-11: #d5808d;
-}
-
-/* The follow-system default when the OS is dark: Indigo. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --color-scheme: dark;
-    --bg: #131923;
-    --surface: #1c2431;
-    --card: #212a39;
-    --ink: #e8ebef;
-    --muted: #919cad;
-    --line: #2a3444;
-    --line-soft: #242d3b;
-    --accent: #7cb0dd;
-    --on-accent: var(--bg);
-    --accent-soft: #7cb0dd24;
-    --danger: #d97c66;
-    --warn: #cfa25e;
-    --ok: #79bd80;
-    --char-0: #d97f74; --char-1: #d69a5c; --char-2: #c8ad5e; --char-3: #a4b164;
-    --char-4: #7cb87d; --char-5: #63b09a; --char-6: #68a8bd; --char-7: #7fa0cf;
-    --char-8: #9a97cc; --char-9: #b18fc6; --char-10: #ca86b2; --char-11: #d5808d;
-  }
 }
 
 /* A hint is not content: placeholders render lighter and italic, so an empty

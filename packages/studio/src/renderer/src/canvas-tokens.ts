@@ -47,16 +47,41 @@ const TOKEN: Record<Exclude<keyof CanvasTokens, "chars">, string> = {
   fontUi: "--font-ui", fontRead: "--font-read", fontMono: "--font-mono",
 };
 
-/** Read the theme as it stands. `--accent-soft` is a translucent colour in the
- *  stylesheet; Konva copes with rgba(), so it is passed through unchanged. */
+/** Read the theme as it stands, every colour resolved to `#rrggbb` (or
+ *  `rgba()` when it is translucent). The family palette derives some tokens
+ *  with `color-mix()` (`--accent-soft`), which a canvas fill and this file's
+ *  own `rgba()` and `readableOn` can't be trusted to read. */
 export function readCanvasTokens(from: Element = document.documentElement): CanvasTokens {
   const style = getComputedStyle(from);
   const out = {} as Record<string, unknown>;
   for (const [key, name] of Object.entries(TOKEN)) {
-    out[key] = style.getPropertyValue(name).trim();
+    const value = style.getPropertyValue(name).trim();
+    out[key] = key.startsWith("font") ? value : resolveColour(value);
   }
-  out.chars = Array.from({ length: CHAR_STEPS }, (_, i) => style.getPropertyValue(`--char-${i}`).trim());
+  out.chars = Array.from({ length: CHAR_STEPS }, (_, i) => resolveColour(style.getPropertyValue(`--char-${i}`).trim()));
   return out as unknown as CanvasTokens;
+}
+
+let probe: CanvasRenderingContext2D | null | undefined;
+
+/** Any CSS colour as the browser paints it: one pixel filled and read back.
+ *  Where there is no canvas to ask (a test's DOM), the value as written. */
+function resolveColour(value: string): string {
+  if (value === "") return value;
+  if (probe === undefined) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    try { probe = canvas.getContext("2d", { willReadFrequently: true }); } catch { probe = null; }
+  }
+  if (!probe) return value;
+  probe.clearRect(0, 0, 1, 1);
+  probe.fillStyle = "#000000";
+  probe.fillStyle = value;   // a colour the canvas can't parse leaves the black, and is passed through
+  if (probe.fillStyle === "#000000" && !/^(#0{3}(0{3})?|black)$/i.test(value)) return value;
+  probe.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data;
+  const hex = (n: number): string => n.toString(16).padStart(2, "0");
+  return a === 255 ? `#${hex(r!)}${hex(g!)}${hex(b!)}` : `rgba(${r}, ${g}, ${b}, ${Math.round((a! / 255) * 1000) / 1000})`;
 }
 
 /** A name's identity colour, resolved. The SAME hash the identity dots in the

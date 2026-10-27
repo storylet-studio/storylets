@@ -8,7 +8,7 @@ describe("studio store", () => {
   it("persists theme and recents across instances", () => {
     const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
     const store = new StudioStore(dir);
-    store.setTheme("baize");
+    store.setTheme("parchment");
     store.touchProject("/a/one.storylets", "The Hamlet");
     store.touchProject("/a/two.storylets", "Draft");
     store.touchProject("/a/one.storylets");   // re-open: dedupes to the front
@@ -16,7 +16,7 @@ describe("studio store", () => {
 
     const again = new StudioStore(dir);
     expect(again.get()).toMatchObject({
-      theme: "baize",
+      theme: "parchment",
       // The re-open passed no name, and the name it had SURVIVES: a second open
       // through a route that does not know it must not blank the menu entry.
       recents: [{ path: "/a/one.storylets", name: "The Hamlet" }, { path: "/a/two.storylets", name: "Draft" }],
