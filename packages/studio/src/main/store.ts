@@ -16,6 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAppStore, resetWindows, windowSlice } from "@wildwinter/app-shell/app-store";
+import type { WhatsNewMemory } from "@wildwinter/app-shell/whats-new-main";
 import type { AppStore, WindowSlice } from "@wildwinter/app-shell/app-store";
 import { migrateTheme } from "@wildwinter/app-shell/theme";
 import type { CardGroupPrefs, CoverageOrder, LastPlace, MapLayerPrefs, PaneState, StudioState, ThemeChoice, ViewMode, WindowBounds } from "../shared/api.js";
@@ -43,6 +44,8 @@ interface StudioSlice {
   coverageOverlay: boolean;
   /** The Coverage window's card table order ("least" reached first, or "deck"). */
   coverageOrder: CoverageOrder;
+  /** What's New: the version that last ran, and the "Show what's new after updates" tickbox. */
+  whatsNew?: WhatsNewMemory;
   navExpanded?: string[];
   /** How each project's map is looked at, PER PROJECT (keyed by path, as
    *  `boardViews` is), then by its zone group id (see StudioState.mapLayers). */
@@ -340,6 +343,11 @@ export class StudioStore {
   /** Patterpad's location, as the author pointed at it (undefined = look for it). */
   patterpadPath(): string | undefined { return this.store.get().app.patterpadPath; }
   setPatterpadPath(path: string): void { this.store.patchApp({ patterpadPath: path }); }
+  /** What's New's memory (app-shell whats-new-main), merged on write. */
+  whatsNew(): WhatsNewMemory { return this.store.get().app.whatsNew ?? {}; }
+  setWhatsNew(patch: WhatsNewMemory): void { this.store.patchApp({ whatsNew: { ...this.store.get().app.whatsNew, ...patch } }); }
+  /** Has Storyletter been used on this machine before (a project in its recents)? */
+  hasRecents(): boolean { return this.store.get().recents.length > 0; }
   setBoardView(view: "list" | "map"): void { this.patchBoardPlace({ view }); }
   /** Which box the Board's navigator is watching ("" = Everything). */
   setBoardBox(box: string): void { this.patchBoardPlace({ box }); }

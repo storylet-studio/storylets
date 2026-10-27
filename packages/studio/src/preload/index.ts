@@ -333,6 +333,10 @@ const api: StudioApi = {
   // out as the updater's are: main's half is app-shell's registerCommandPalette.
   paletteCommands: () => ipcRenderer.invoke("palette:commands"),
   paletteRun: (id: string) => { ipcRenderer.send("palette:run", id); },
+  // WHATS_NEW_CHANNELS, written out as the palette's are: main's half is app-shell's registerWhatsNew.
+  whatsNewState: () => ipcRenderer.invoke("whatsNew:state"),
+  setWhatsNewShow: (show: boolean) => { ipcRenderer.send("whatsNew:setShow", show); },
+  whatsNewSeen: () => { ipcRenderer.send("whatsNew:seen"); },
 };
 
 contextBridge.exposeInMainWorld("studio", api);

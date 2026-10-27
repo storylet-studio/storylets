@@ -17,6 +17,7 @@ import type { UpdaterDownloadProgress, UpdaterPromptOptions, UpdaterReadyInfo } 
 export type { UpdaterDownloadProgress, UpdaterPromptOptions, UpdaterReadyInfo };
 // The command palette's rows are the shell's flattened menu (app-shell palette-main).
 import type { MenuCommand as PaletteCommand } from "@wildwinter/app-shell/menu";
+import type { WhatsNewState } from "@wildwinter/app-shell/whats-new-main";
 export type { PaletteCommand };
 
 export type { CoverageOrder, CoverageReport } from "@storylet-studio/ops";
@@ -1721,6 +1722,8 @@ export type MenuCommand =
   | { cmd: "redo"; project?: boolean }
   // View > Command Palette… (Cmd+K): every menu command by name, and quick open.
   | { cmd: "command-palette" }
+  // Help > What's New: the latest release notes.
+  | { cmd: "whats-new" }
   // Edit > Select All in the editor: scoped to the canvas or the field (Patterpad's rule).
   | { cmd: "select-all" }
   | { cmd: "table" }
@@ -2454,6 +2457,14 @@ export interface StudioApi {
   paletteCommands(): Promise<PaletteCommand[]>;
   /** Run the menu item the palette picked, as clicking it would. */
   paletteRun(id: string): void;
+
+  // --- What's New, the shell's two channels ------------------------------------
+  /** At launch: this version, the one before it, and the tickbox (app-shell whats-new-main). */
+  whatsNewState(): Promise<WhatsNewState>;
+  /** The "Show what's new after updates" tickbox. */
+  setWhatsNewShow(show: boolean): void;
+  /** The launch dialog was closed: main stops giving the launch answer. */
+  whatsNewSeen(): void;
 }
 
 // --- the Fields window (Pattershot's brief, "a map of records edited in a helper window", H1 to H5) ------

@@ -12,6 +12,9 @@ here is part of shipping, not a courtesy.
 
 ### Added
 
+- **What's new, after an update.** The first time Storyletter opens after an update, it shows what's new in that
+  version, or in every version since you last ran it. Help ▸ What's New shows the latest at any time, and a
+  tickbox turns the after-update window off.
 - **The command palette.** View ▸ Command Palette… (Cmd+K) lists every menu command by name, with its shortcut,
   and finds the project's boxes, decks, and cards too: type a few letters, press Return, and you're there.
 - **Updates wait for you.** An update that downloads on its own puts a "Restart to update" button in the top

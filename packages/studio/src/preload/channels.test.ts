@@ -53,10 +53,11 @@ vi.mock("@wildwinter/app-shell/view-host", () => ({
 }));
 
 /** The updater's channels are the shell's, and held by updater-channels.test.ts; the view port's is the shell's
- *  too, held below; and so are the command palette's, whose main half app-shell's registerCommandPalette
- *  registers itself (main/index.ts calls it at startup), held below as well. */
+ *  too, held below; and so are the command palette's and What's New's, whose main halves app-shell's
+ *  registerCommandPalette and registerWhatsNew register themselves (main/index.ts calls both at startup),
+ *  held below as well. */
 const shellOwned = (channel: string): boolean =>
-  channel.startsWith("updater:") || channel.startsWith("palette:") || channel === VIEW_PORT_CHANNEL;
+  channel.startsWith("updater:") || channel.startsWith("palette:") || channel.startsWith("whatsNew:") || channel === VIEW_PORT_CHANNEL;
 
 /** The page's window, for the view port's hand-over the listeners below are fired through. */
 vi.stubGlobal("window", { postMessage: () => undefined });
@@ -98,6 +99,13 @@ describe("the preload", () => {
     expect(touched.invoke).toContain("palette:commands");
     expect(touched.send).toContain("palette:run");
     expect(readFileSync(new URL("../main/index.ts", import.meta.url), "utf8")).toContain("registerCommandPalette()");
+  });
+
+  it("asks What's New's launch state and keeps its tickbox on the shell's channels", () => {
+    // WHATS_NEW_CHANNELS, written out likewise: main's half is app-shell's registerWhatsNew.
+    expect(touched.invoke).toContain("whatsNew:state");
+    expect(touched.send).toContain("whatsNew:setShow");
+    expect(readFileSync(new URL("../main/index.ts", import.meta.url), "utf8")).toContain("registerWhatsNew(");
   });
 
   it("listens only on channels main is declared to send, and on all of them", async () => {

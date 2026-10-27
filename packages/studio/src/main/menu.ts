@@ -498,6 +498,7 @@ export function refreshMenu(
         // ENABLED 2026-08-30: the feed exists. Storyletter 0.1.0 published
         // latest-mac.yml / latest.yml / latest-linux.yml to its GitHub Release,
         // which is what electron-updater walks, so the item can now do its job.
+        { ...HELP_MENU.whatsNew, click: send({ cmd: "whats-new" }) },
         { ...HELP_MENU.checkForUpdates, click: () => void manualCheckForUpdates(window) },
         // macOS keeps About in the app menu; everywhere else this is its home.
         ...(isMac ? [] : [

@@ -51,6 +51,8 @@ export interface CommandsContext {
   toggleLiveLink: () => void;
   /** View > Command Palette… (Cmd+K). */
   openPalette: () => void;
+  /** Help > What's New: the latest release notes. */
+  openWhatsNew: () => void;
 }
 
 export function createCommands(ctx: CommandsContext) {
@@ -236,6 +238,7 @@ export function createCommands(ctx: CommandsContext) {
       case "undo": void undoRedo("undo", command.project === true); break;
       case "redo": void undoRedo("redo", command.project === true); break;
       case "command-palette": ctx.openPalette(); break;
+      case "whats-new": ctx.openWhatsNew(); break;
       case "table": if (project) afterFlush(() => studio.openTable()); break;
       case "coverage": if (project) afterFlush(() => studio.openCoverage()); break;
       // The card goes WITH the request, so the window cannot boot and read the

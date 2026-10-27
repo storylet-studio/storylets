@@ -15,6 +15,7 @@ import type { ToolWindows } from "@wildwinter/app-shell/tool-window";
 import { createProjectSession } from "@wildwinter/app-shell/session";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
 import { registerCommandPalette } from "@wildwinter/app-shell/palette-main";
+import { registerWhatsNew } from "@wildwinter/app-shell/whats-new-main";
 import { guardAllWindows } from "@wildwinter/app-shell/window-guard";
 import { clearParseCache } from "@storylet-studio/compiler";
 import { clearCanonicalCache } from "@storylet-studio/ops";
@@ -302,6 +303,14 @@ void app.whenReady().then(() => {
   // count may have moved with it, which the menu and the title say.
   setProjectWrittenListener(() => { live.schedulePush(); noteProjectWritten(); });
   registerCommandPalette();   // Cmd+K reads the live menu and runs what it picks
+  // What's New after an update: the version that last ran, and the tickbox. A machine with a recent project
+  // ran Storyletter before What's New began counting, so it hears about this version.
+  registerWhatsNew({
+    version: app.getVersion(),
+    read: () => store.whatsNew(),
+    write: (patch) => store.setWhatsNew(patch),
+    existing: store.hasRecents(),
+  });
   createWindow();
   menu();
   // Auto-update. `configureUpdater` FIRST, or every prompt is addressed to "This

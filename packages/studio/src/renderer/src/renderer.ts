@@ -47,6 +47,9 @@ import "@wildwinter/app-shell/comments.css";
 import "@wildwinter/app-shell/toast.css";
 import "@wildwinter/app-shell/updater.css"; // the updater's prompt and its "Restart to update" chip
 import "@wildwinter/app-shell/command-palette.css"; // Cmd+K (openCommandPalette)
+import "@wildwinter/app-shell/whats-new.css"; // What's New after an update, and Help > What's New
+// The changelog, built in as text, so What's New needs no network.
+import changelog from "../../../CHANGELOG.md?raw";
 import "@wildwinter/app-shell/welcome.css";
 import "@wildwinter/app-shell/kit-gallery.css";
 import "@wildwinter/app-shell/link-status.css";
@@ -54,7 +57,7 @@ import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import {
   askIdentity, el, feedUpdaterDownloadProgress, historyNav, iconNode, initTooltips, keyLabel, mountLinkStatus, mountPaneShell,
-  openCommandPalette, revealRowWhenReady, saveIndicator, showUpdateReady, showUpdaterDialog, tipWithKey,
+  openCommandPalette, openWhatsNew, whatsNewAfterUpdate, type WhatsNewOptions, revealRowWhenReady, saveIndicator, showUpdateReady, showUpdaterDialog, tipWithKey,
 } from "@wildwinter/app-shell";
 import type { LinkStatus, LinkStatusChip, PaletteItem, PaneShell, ToastKind } from "@wildwinter/app-shell";
 import { applyTheme } from "./theme.js";
@@ -352,6 +355,7 @@ const commands = createCommands({
   openSettings: (section) => projectSettingsPanel.open(section),
   toggleLiveLink: () => liveLinkChip?.toggle(),
   openPalette: () => openPalette(),
+  openWhatsNew: () => { void studio.whatsNewState().then((st) => openWhatsNew({ ...whatsNewOpts, version: st.version, show: st.show })); },
 });
 
 /** A report with Undo for the step a write made: the toast's Undo is the same
@@ -360,6 +364,15 @@ const commands = createCommands({
 function reportWithUndo(message: string, step: ProjectStep | undefined, kind: ToastKind = "info"): void {
   toastWithUndo((id) => commands.undoStep(id), message, kind, step);
 }
+
+/** What's New's links and tickbox, the same for the launch dialog and Help > What's New. */
+const whatsNewOpts: Pick<WhatsNewOptions, "appName" | "changelog" | "onShow" | "releaseNotes" | "openExternal"> = {
+  appName: "Storyletter",
+  changelog,
+  onShow: (show) => studio.setWhatsNewShow(show),
+  releaseNotes: (version) => `https://github.com/storylet-studio/storylets/releases/tag/v${version}`,
+  openExternal: (url) => { void studio.openExternal(url); },
+};
 
 /** Cmd+K: every menu command by name (the live menu, so it can't drift from
  *  it), and quick open for the project's boxes, decks and cards (the October
@@ -915,6 +928,8 @@ async function boot(): Promise<void> {
   // bar and one remark, never a dialog over the work (the October 2026 review).
   // It installs on quit if the chip is never clicked.
   studio.onUpdaterReady((info) => { showUpdateReady(info, { host: shell.topbarTrail, restart: () => studio.updaterRestart() }); });
+  // The first launch after an update says what's new in it (main gives this answer once per launch).
+  void studio.whatsNewState().then((st) => whatsNewAfterUpdate(st, { ...whatsNewOpts, onClose: () => studio.whatsNewSeen() }));
   // The way out of a project the server has not seen the whole of. Registered
   // at boot for the same reason as the four above: main asks at the moment of
   // quitting, and a question nobody is listening for falls back to a native box
