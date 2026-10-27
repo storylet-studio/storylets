@@ -13,10 +13,13 @@
 .edgekey-cap { margin-top: 6px; font-size: var(--text-xs); color: var(--muted); }
 
 /* The Links window's control: it sits at the end of a quiet caveat line, so it
-   is a word in that line's voice rather than a toolbar button. */
+   is a word in that line's voice rather than a toolbar button. Its hover tint
+   eases in and out (app-shell's --dur-tint): a colour that snaps on every pass
+   of the pointer is busier than one that settles. */
 .edgekey-inline {
   margin-left: 6px; padding: 0 6px; font: inherit; color: var(--muted);
   background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard);
 }
 .edgekey-inline:hover { color: var(--accent); border-color: var(--accent); }

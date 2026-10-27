@@ -23,6 +23,9 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **Hover is calmer.** Drag handles, "Open" links, hints, and the canvas's controls fade in after a moment and
+  fade out gently, instead of blinking, and a highlight eases rather than snapping. A disabled canvas button
+  now stays faint when you point at the canvas. Reduce Motion turns all of it off.
 - **Deletes don't ask first; they tell you what went, with Undo.** Deleting a card, a deck, a box, a hand, or a
   hand template happens straight away, and a message names it and says what went with it (a box's decks and
   cards, a hand's pin on the map). Its Undo button puts it all back, as long as nothing's been changed since;

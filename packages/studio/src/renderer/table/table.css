@@ -304,12 +304,16 @@ body { background: var(--bg); font-size: var(--text-md); }
 .whylist.tight { gap: 4px; }
 .whyitem { display: flex; flex-direction: column; gap: 2px; }
 /* The name and the reason are each a link into the editor: plain text until
-   pointed at, then underlined, as a link in running text is. */
+   pointed at, then underlined, as a link in running text is. The reason's
+   colour change eases in and out (app-shell's --dur-tint), as every hover tint
+   on the Board does: a colour that snaps on every pass of the pointer is busier
+   than one that settles. */
 .whylink {
   align-self: flex-start; text-align: left;
   background: none; border: 0; padding: 0; margin: 0;
   font: inherit; color: inherit; cursor: pointer;
   border-radius: var(--radius-sm);
+  transition: color var(--dur-tint) var(--ease-standard);
 }
 .whylink:hover { text-decoration: underline; text-underline-offset: 2px; }
 .whylink:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -391,7 +395,7 @@ body { background: var(--bg); font-size: var(--text-md); }
 .tbody { grid-template-columns: 172px 1fr 320px; }
 .tbody.nonav { grid-template-columns: 1fr 320px; }
 .bnav { display: flex; flex-direction: column; gap: 1px; padding: 14px 8px; border-right: 1px solid var(--line-soft); background: var(--surface); overflow-y: auto; }
-.bnav-row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; font: inherit; font-size: var(--text-md); color: var(--ink); background: none; border: 0; border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; }
+.bnav-row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; font: inherit; font-size: var(--text-md); color: var(--ink); background: none; border: 0; border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; transition: background-color var(--dur-tint) var(--ease-standard); }
 .bnav-row:hover { background: var(--accent-soft); }
 .bnav-row.sel { background: var(--accent-soft); font-weight: 600; }
 .bnav-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

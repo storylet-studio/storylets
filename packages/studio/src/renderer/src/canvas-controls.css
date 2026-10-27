@@ -25,21 +25,39 @@
   box-shadow: var(--shadow-1);
   cursor: default;
 }
-/* No transition on the dimming: a cluster that fades as the pointer crosses the
-   canvas is motion nobody asked for (the design language keeps movement for
-   what the author did), so it simply changes. */
-.canvasctl > * { opacity: 0.65; }
-.nodestage:hover > .canvasctl > *, .canvasctl:focus-within > * { opacity: 1; }
+/* The dimming fades, as every hover reveal in the family does (app-shell's
+   --dur-reveal, --reveal-delay and --dur-conceal; the author's call). It used to
+   change outright, on the view that a fade was motion nobody asked for, but the
+   snap proved the busier of the two: the cluster blinked up and down each time
+   the pointer crossed the canvas edge. It comes up a beat after the pointer
+   arrives, so a pass on the way somewhere else does not light it, and settles
+   back more slowly than it rose. Reduced motion zeroes the tokens, so there it
+   still simply changes.
+   The reveal's timings are LISTS, in the order .canvasbtn names its transitions
+   (opacity, then its two tints): a button's own hover tint keeps its timing and
+   no delay while the cluster is lit. A child that transitions opacity alone
+   ignores the extra entries. */
+.canvasctl > * { opacity: 0.65; transition: opacity var(--dur-conceal) var(--ease-standard); }
+.nodestage:hover > .canvasctl > *, .canvasctl:focus-within > * {
+  opacity: 1;
+  transition-duration: var(--dur-reveal), var(--dur-tint), var(--dur-tint);
+  transition-delay: var(--reveal-delay), 0s, 0s;
+}
 
 .canvasbtn {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0;
   border: none; background: none; color: var(--muted); font: inherit;
   border-radius: var(--radius-sm); cursor: pointer;
-  transition: background var(--dur-quick) var(--ease-standard), color var(--dur-quick) var(--ease-standard);
+  /* Opacity first: it is the cluster's dimming (above), restated because this
+     rule's transition would otherwise replace it. */
+  transition: opacity var(--dur-conceal) var(--ease-standard),
+              background-color var(--dur-tint) var(--ease-standard),
+              color var(--dur-tint) var(--ease-standard);
 }
 .canvasbtn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
-.canvasbtn:disabled { opacity: 0.35; cursor: default; }
+/* A disabled button stays faint when the cluster lights up: the stage's hover rule outranked this one. */
+.canvasbtn:disabled, .nodestage:hover > .canvasctl > .canvasbtn:disabled, .canvasctl:focus-within > .canvasbtn:disabled { opacity: 0.35; cursor: default; }
 
 .canvasctl-sep { flex: none; width: 1px; height: 15px; background: var(--line-soft); margin: 0 4px; }
 

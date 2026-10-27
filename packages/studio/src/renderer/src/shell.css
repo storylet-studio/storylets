@@ -57,6 +57,17 @@ body {
 .nav-project, .nav-row, .nav-add, .ctable-new, .probstat, .chip {
   background: none; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 4px 10px;
 }
+/* Motion on hover, for this whole file (app-shell's tokens, since 0.69.0):
+   a hover TINT (background, colour, border or outline) eases in and out over
+   --dur-tint, because a colour that snaps on every pass of the pointer is busier
+   than one that settles. A hover REVEAL (a grip, a hint, the Open link) fades
+   in over --dur-reveal after --reveal-delay, so a pointer sweeping across rows
+   does not flicker each one, and out over the slower --dur-conceal; the
+   element's own rule carries the out timing and the revealing rule the in
+   timing, since a transition takes its timing from the state being entered.
+   Nothing lifts, grows or changes its shadow on hover. Highlights that move
+   with the arrow keys and selection states are left instant. */
+.nav-project { transition: background-color var(--dur-tint) var(--ease-standard); }
 .nav-project:hover { background: var(--hover); }
 input, textarea, select {
   font: inherit; background: var(--card); color: var(--ink);
@@ -120,7 +131,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 /* disclosure: the vocabulary's chevron (glyphs render hairline-thin), the
    user's to toggle - clicking it never navigates. Rotates when open. */
 .nav-chev, .nav-chev-space { flex: none; width: 12px; height: 12px; display: inline-flex; align-items: center; justify-content: center; }
-.nav-chev { cursor: pointer; color: var(--muted); transition: transform var(--dur-quick) var(--ease-standard); }
+.nav-chev { cursor: pointer; color: var(--muted); transition: transform var(--dur-quick) var(--ease-standard), color var(--dur-tint) var(--ease-standard); }
 .nav-chev:hover { color: var(--accent); }
 .nav-chev.open { transform: rotate(90deg); }
 /* quick add rows */
@@ -223,10 +234,11 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   font-size: var(--text-sm); color: var(--ink);
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
   padding: 3px 10px 3px 8px;
+  transition: background-color var(--dur-tint) var(--ease-standard), color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard);
 }
 /* Its leading mark is the vocabulary's `add` (or `close` on the cancel), a
    node the builder appends, muted at rest and the button's colour on hover. */
-.stripbtn [data-icon] { color: var(--muted); }
+.stripbtn [data-icon] { color: var(--muted); transition: color var(--dur-tint) var(--ease-standard); }
 .stripbtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .stripbtn:hover [data-icon] { color: inherit; }
 /* The one that gets you OUT of a gesture: the same shape, warned. */
@@ -261,6 +273,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   display: flex; align-items: center; gap: 7px; width: 100%;
   padding: 3px 12px; border: none; background: none; text-align: left;
   font: inherit; font-size: var(--text-md); color: var(--ink); cursor: pointer;
+  transition: background-color var(--dur-tint) var(--ease-standard);
 }
 .mapside-row:hover { background: var(--accent-soft); }
 .mapside-row.todo .mapside-name { color: var(--muted); }
@@ -280,11 +293,12 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 /* The layers (the author's layered map view): Show all / Hide all, then a row
    per layer with its eye, a grip, its tint, its name and what it holds. */
 .maplayers-head { display: flex; align-items: center; gap: 10px; padding: 0 12px 8px; }
-.maplayers-all { border: 0; background: none; padding: 0; font: var(--text-sm) var(--font-ui); color: var(--muted); cursor: pointer; }
+.maplayers-all { border: 0; background: none; padding: 0; font: var(--text-sm) var(--font-ui); color: var(--muted); cursor: pointer; transition: color var(--dur-tint) var(--ease-standard); }
 .maplayers-all:hover { color: var(--accent); }
 .maplayer {
   display: flex; align-items: center; gap: 7px; padding: 5px 12px 5px 9px;
   border-left: 3px solid transparent; cursor: pointer; font-size: var(--text-md); color: var(--ink);
+  transition: background-color var(--dur-tint) var(--ease-standard);
 }
 .maplayer:hover { background: var(--accent-soft); }
 .maplayer.active { background: color-mix(in oklab, var(--accent) 10%, transparent); border-left-color: var(--accent); }
@@ -292,7 +306,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .maplayer.dragging { opacity: 0.45; }
 .maplayer.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .maplayer.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
-.maplayer-eye { flex: none; display: inline-flex; border: 0; background: none; padding: 1px; color: var(--muted); cursor: pointer; }
+.maplayer-eye { flex: none; display: inline-flex; border: 0; background: none; padding: 1px; color: var(--muted); cursor: pointer; transition: color var(--dur-tint) var(--ease-standard); }
 .maplayer-eye:hover { color: var(--accent); }
 .maplayer-eye.off { opacity: 0.6; }
 .maplayer-grip { flex: none; width: 12px; display: inline-flex; color: var(--muted); opacity: 0.6; cursor: grab; }
@@ -300,8 +314,13 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .maplayer-swatch { flex: none; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--muted); }
 /* A box layer's swatch is a BUTTON: the colour is the box's, stored, and the
    author changes it here (map-view.ts `colourSwatch`). A ring on hover and
-   focus says it does something; at rest it is the same small square. */
-.maplayer-swatch.pick { padding: 0; border: 0; cursor: pointer; width: 11px; height: 11px; }
+   focus says it does something; at rest it is the same small square. The ring
+   is there at rest in transparent ink, so the hover only changes its colour and
+   can ease it in. */
+.maplayer-swatch.pick {
+  padding: 0; border: 0; cursor: pointer; width: 11px; height: 11px;
+  outline: 2px solid transparent; outline-offset: 1.5px; transition: outline-color var(--dur-tint) var(--ease-standard);
+}
 .maplayer-swatch.pick:hover, .maplayer-swatch.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1.5px; }
 .maplayer-swatch.zones { background: none; border: 1.5px solid var(--muted); }
 .maplayer-swatch.pictures { background: repeating-linear-gradient(135deg, var(--muted) 0 1.5px, transparent 1.5px 4px); }
@@ -366,15 +385,16 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    tokens.css): uppercase is the table's own convention. */
 .ctable thead th { text-align: left; padding: 0 10px 6px; border-bottom: 1px solid var(--line-soft); }
 .ctable tbody td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: baseline; }
-.ctable tbody tr { cursor: pointer; }
+.ctable tbody tr { cursor: pointer; transition: background-color var(--dur-tint) var(--ease-standard); }
 .ctable tbody tr:hover { background: var(--card); }
-.ctable tbody tr.sel { background: var(--accent-soft); }
+/* The selection is instant: the arrow keys move it. */
+.ctable tbody tr.sel { background: var(--accent-soft); transition: none; }
 .ctable .ct-title { font-family: var(--font-read); }
 .ctable .ct-mono { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--muted); }
 .ctable .ct-when { font-size: var(--text-sm); }
 .ctable td.ct-when { display: flex; align-items: baseline; gap: 4px; }
 .ctable .ct-dim { color: var(--muted); font-style: italic; }
-.ctable-new { border: 1px dashed var(--line); color: var(--muted); }
+.ctable-new { border: 1px dashed var(--line); color: var(--muted); transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 .ctable-new:hover { border-color: var(--accent); color: var(--accent); background: none; }
 .ctable .ct-grip { width: 25.5px; padding-right: 0; }
 
@@ -385,13 +405,19 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    well as the pointer, so quiet chrome stays reachable (parity row 47). */
 .cardgrip { color: var(--muted); cursor: grab; display: inline-flex; user-select: none; }
 .cardgrip:active { cursor: grabbing; }
-.scard .cardgrip, .deck-card .cardgrip { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity var(--dur-quick) var(--ease-standard); }
-.scard:hover .cardgrip, .scard:focus-within .cardgrip, .deck-card:hover .cardgrip, .deck-card:focus-within .cardgrip { opacity: 0.5; }
+.scard .cardgrip, .deck-card .cardgrip { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity var(--dur-conceal) var(--ease-standard); }
+.scard:hover .cardgrip, .scard:focus-within .cardgrip, .deck-card:hover .cardgrip, .deck-card:focus-within .cardgrip {
+  opacity: 0.5; transition-duration: var(--dur-reveal); transition-delay: var(--reveal-delay);
+}
 .listrow.draggable { position: relative; padding-left: 32px; }
-.listrow.draggable .cardgrip { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0; transition: opacity var(--dur-quick) var(--ease-standard); }
-.listrow.draggable:hover .cardgrip, .listrow.draggable:focus-within .cardgrip { opacity: 0.5; }
-.ctable .ct-grip .cardgrip { opacity: 0; transition: opacity var(--dur-quick) var(--ease-standard); }
-.ctable tr:hover .ct-grip .cardgrip, .ctable tr:focus-within .ct-grip .cardgrip { opacity: 0.5; }
+.listrow.draggable .cardgrip { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0; transition: opacity var(--dur-conceal) var(--ease-standard); }
+.listrow.draggable:hover .cardgrip, .listrow.draggable:focus-within .cardgrip {
+  opacity: 0.5; transition-duration: var(--dur-reveal); transition-delay: var(--reveal-delay);
+}
+.ctable .ct-grip .cardgrip { opacity: 0; transition: opacity var(--dur-conceal) var(--ease-standard); }
+.ctable tr:hover .ct-grip .cardgrip, .ctable tr:focus-within .ct-grip .cardgrip {
+  opacity: 0.5; transition-duration: var(--dur-reveal); transition-delay: var(--reveal-delay);
+}
 /* Drag feedback is one language on EVERY draggable surface (the Cards
    model): the dragged item dims, and an accent insertion mark shows where
    the drop will land - on the leading/trailing EDGE that matches the drag
@@ -413,7 +439,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md);
   box-shadow: var(--shadow-1); padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px;
   min-height: 96px; cursor: pointer; text-align: left; font: inherit; color: inherit;
-  transition: border-color var(--dur-quick) var(--ease-standard);
+  transition: border-color var(--dur-tint) var(--ease-standard), color var(--dur-tint) var(--ease-standard);
 }
 /* Hover firms the card's edge; it does NOT recolour its text (a card face is a
    button, and a hover that tints every word on it reads as "all of this is a
@@ -440,7 +466,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .box-contents { gap: 14px; }
 .gb-head { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-bottom: 5px; border-bottom: 1px solid var(--line-soft); font: 600 var(--text-lg) var(--font-ui); color: var(--ink); }
 .gb-head.rest { color: var(--muted); }
-.gb-head .linkbtn { border: 0; background: none; padding: 0; color: inherit; cursor: pointer; font: inherit; }
+.gb-head .linkbtn { border: 0; background: none; padding: 0; color: inherit; cursor: pointer; font: inherit; transition: color var(--dur-tint) var(--ease-standard); }
 .gb-head .linkbtn:hover { color: var(--accent); text-decoration: underline; }
 .gb-sub { font-weight: 400; font-size: var(--text-sm); font-style: italic; color: var(--muted); }
 .gb-n { font-weight: 400; font-size: var(--text-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -454,7 +480,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 /* The project name is a button (A13) and a DELIBERATE exception to "controls
    have edges": it is a title first and a door second, so it stays borderless
    and only takes the accent when reached for. Not `.btn`. */
-button.pname { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+button.pname { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; transition: color var(--dur-tint) var(--ease-standard); }
 button.pname:hover { color: var(--accent); }
 /* Where a server-backed project stands, beside its name: quieter again than the
    name, because it is a fact about the project and never a nag. */
@@ -503,7 +529,7 @@ button.chip { cursor: pointer; }
 .scard.ghost:hover, .deck-card.ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 .rowlist { display: flex; flex-direction: column; gap: 8px; }
-.listrow { position: relative; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.listrow { position: relative; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 .listrow:hover { background: var(--card); border-color: var(--accent); }
 .listrow.ghost { border-style: dashed; background: none; color: var(--muted); align-items: center; flex-direction: row; }
 .listrow.ghost:hover { border-color: var(--accent); color: var(--accent); }
@@ -551,7 +577,7 @@ button.chip { cursor: pointer; }
 .doc-panel + .doc-tab-note,
 .insp-note {
   opacity: 0;
-  transition: opacity var(--dur-quick) var(--ease-standard);
+  transition: opacity var(--dur-conceal) var(--ease-standard);
 }
 .doc-sect:hover .doc-sect-hint, .doc-sect:focus-within .doc-sect-hint,
 .cfg-row:hover .cfg-cap small, .cfg-row:focus-within .cfg-cap small,
@@ -559,6 +585,8 @@ button.chip { cursor: pointer; }
 .cfg-row:hover .insp-note, .cfg-row:focus-within .insp-note,
 .doc-sect:hover .insp-note, .doc-sect:focus-within .insp-note {
   opacity: 1;
+  transition-duration: var(--dur-reveal);
+  transition-delay: var(--reveal-delay);
 }
 /* The rule's own boundary, found by the antagonist audit (2026-08-29): the
    hover gate is right for FILLED panels and exactly wrong for EMPTY ones,
@@ -584,8 +612,8 @@ button.chip { cursor: pointer; }
 button.doc-collapsed { cursor: pointer; }
 button.doc-collapsed:hover { background: none; }
 button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-collapsed-plus { color: var(--accent); border-color: var(--accent); }
-.doc-collapsed-sum { font-size: var(--text-sm); color: var(--muted); }
-.doc-collapsed-plus { margin-left: auto; color: var(--muted); display: inline-flex; align-items: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 2px 6px; }
+.doc-collapsed-sum { font-size: var(--text-sm); color: var(--muted); transition: color var(--dur-tint) var(--ease-standard); }
+.doc-collapsed-plus { margin-left: auto; color: var(--muted); display: inline-flex; align-items: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 2px 6px; transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 /* Remove: a `.btn` in the danger ink, filling on hover; it names its object. */
 .insp-del { color: var(--danger); }
 .insp-del:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: var(--surface); }
@@ -614,7 +642,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .doc-row > select.insp-input { width: auto; justify-self: start; }
 .insp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .insp-exed { min-height: 30px; }
-.insp-add, .settings-add { align-self: flex-start; border: 1px dashed var(--line); color: var(--muted); background: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: var(--text-md); }
+.insp-add, .settings-add { align-self: flex-start; border: 1px dashed var(--line); color: var(--muted); background: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: var(--text-md); transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 
 
 /* The hoist nudge on a tag group: one quiet line under the Properties list,
@@ -630,7 +658,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* a gameId reads as a quiet value, not a typed-in field: derived from the title
    until pinned, and muted while it is (Patterpad's manner, no word for either).
    Click for the override popover. */
-.gid { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; padding: 5px 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: none; cursor: pointer; }
+.gid { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; padding: 5px 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: none; cursor: pointer; transition: background-color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 .gid:hover { border-color: var(--accent); background: var(--card); }
 .gid-value { font-family: var(--font-mono); font-size: var(--text-md); color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gid-auto .gid-value { color: var(--muted); font-style: italic; }
@@ -647,7 +675,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .outcome-item + .outcome-item { border-top: 1px solid var(--line-soft); }
 .outcome-item.open { background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1); margin: 6px 0; }
 .outcome-item.open + .outcome-item { border-top: 0; }
-.outcome-row { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 0; background: none; cursor: pointer; }
+.outcome-row { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 0; background: none; cursor: pointer; transition: background-color var(--dur-tint) var(--ease-standard); }
 .outcome-row:hover { background: var(--surface); }
 .outcome-item.open .outcome-row:hover { background: none; }
 .outcome-row.open { background: none; border-bottom: 1px solid var(--line-soft); }
@@ -766,6 +794,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .where-lead { gap: 10px; }
 .where-sentence { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font: var(--text-lg)/1.6 var(--font-read); color: var(--ink); }
 .where-chip { font-size: var(--text-md); padding: 2px 10px; color: var(--ink); }
+button.where-chip { transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .where-when { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .where-always { margin-left: -6px; }
@@ -805,7 +834,7 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .handcard-any .linkbtn:hover { text-decoration: underline; }
 /* "Which deck": Patterpad's jump picker, the family's anchored one-choice list. */
 .deckpick-list { display: flex; flex-direction: column; gap: 1.5px; max-height: 60vh; overflow: auto; }
-.deckpick-opt { font: var(--text-md) var(--font-ui); padding: 5px 7px; border-radius: var(--radius-sm); background: none; border: 0; text-align: left; color: var(--ink); cursor: pointer; }
+.deckpick-opt { font: var(--text-md) var(--font-ui); padding: 5px 7px; border-radius: var(--radius-sm); background: none; border: 0; text-align: left; color: var(--ink); cursor: pointer; transition: background-color var(--dur-tint) var(--ease-standard); }
 .deckpick-opt:hover, .deckpick-opt:focus-visible { background: color-mix(in oklab, var(--accent) 12%, transparent); outline: none; }
 .deckpick-opt.sel { background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--accent); font-weight: 600; }
 /* Several boxes' decks in one list (the zone panel's "+ New card here"): a caption per box. */
@@ -849,8 +878,19 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 /* The comment bubble in a document's topline: pencil = documentation,
    speech-bubble = conversation (a pairing Patterpad reserved before either was
    built, so the two never have to be told apart by position). */
-.doc-thread { opacity: 0.55; }
-.doc-thread:hover { opacity: 1; }
+/* It brightens on hover as a reveal does, a beat late and back slowly. It is a
+   `.btn`, so its transition restates the button's own tints (opacity first, to
+   match the reveal's timing lists). */
+.doc-thread {
+  opacity: 0.55;
+  transition: opacity var(--dur-conceal) var(--ease-standard),
+              color var(--dur-tint) var(--ease-standard), background-color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard);
+}
+.doc-thread:hover {
+  opacity: 1;
+  transition-duration: var(--dur-reveal), var(--dur-tint), var(--dur-tint), var(--dur-tint);
+  transition-delay: var(--reveal-delay), 0s, 0s, 0s;
+}
 .doc-thread.has { color: var(--accent); opacity: 1; }
 
 /* Notes, comments and identity are the shell's surfaces now (app-shell 0.12.0):
@@ -901,6 +941,7 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
   border: none; background: none; cursor: pointer;
   color: var(--muted); font: var(--text-sm) var(--font-mono); text-align: left;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color var(--dur-tint) var(--ease-standard);
 }
 /* Colour alone on hover. `width: fit-content` for the same reason: the house
    button rule paints a background, and a full-width block turned one quiet line
@@ -909,7 +950,7 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 /* a document's tab bar, under its identity heading, the tabs named for their
    contents (tab-grammar 3) */
 .doc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line-soft); }
-.doc-tab { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 14px; font-size: var(--text-md); color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; margin-bottom: -1px; background: none; cursor: pointer; }
+.doc-tab { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 14px; font-size: var(--text-md); color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; margin-bottom: -1px; background: none; cursor: pointer; transition: color var(--dur-tint) var(--ease-standard); }
 .doc-tab:hover { color: var(--ink); background: none; }
 .doc-tab.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: var(--weight-medium); }
 /* counts where a count is meaningful; a zero-count tab stays, muted, with
@@ -946,7 +987,7 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .set-note { margin: 2px 0 8px; font-size: var(--text-sm); line-height: 1.4; color: var(--muted); max-width: 52ch; }
 /* The picker beside a path field (Project Settings > General > Patter project,
    in the shell's `.shell-inline`). */
-.set-choose { font: inherit; font-size: var(--text-md); padding: 4px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; }
+.set-choose { font: inherit; font-size: var(--text-md); padding: 4px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 .set-choose:hover { color: var(--accent); border-color: var(--accent); }
 /* An inline link-shaped button inside a note (the Story page's pointer to
    Project Settings > World). */
@@ -974,7 +1015,7 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 
 /* The Live Link chip is the shell's (@wildwinter/app-shell/link-status.css). */
 
-.set-uses { font: var(--text-xs) var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 1.5px 9px; cursor: pointer; white-space: nowrap; }
+.set-uses { font: var(--text-xs) var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 1.5px 9px; cursor: pointer; white-space: nowrap; transition: color var(--dur-tint) var(--ease-standard), border-color var(--dur-tint) var(--ease-standard); }
 .set-uses:hover { color: var(--accent); border-color: var(--accent); }
 
 
@@ -993,7 +1034,12 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
    grid of swatches. The current one is ringed in ink; one another layer
    already wears carries a small dot, and can still be chosen. */
 .swatchpick-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; padding: 2px; }
-.swatchpick-opt { position: relative; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; }
+/* The ring is there at rest in transparent ink, as the layer swatch's is, so
+   the hover eases its colour in. */
+.swatchpick-opt {
+  position: relative; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  outline: 2px solid transparent; outline-offset: 2px; transition: outline-color var(--dur-tint) var(--ease-standard);
+}
 .swatchpick-opt:hover, .swatchpick-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .swatchpick-opt.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
 .swatchpick-opt.taken::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
@@ -1029,7 +1075,7 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 
 /* An extension's section, folded to the fields a node sets (app-shell's extensionFold): the caption is the
    disclosure, worded and weighted as every section caption. */
-.shell-fold-cap.ext-heading { font: 600 var(--text-sm)/1.2 var(--font-ui); color: var(--muted); }
+.shell-fold-cap.ext-heading { font: 600 var(--text-sm)/1.2 var(--font-ui); color: var(--muted); transition: color var(--dur-tint) var(--ease-standard); }
 .shell-fold-cap.ext-heading:hover { color: var(--ink); }
 .ext-section > .shell-fold-body { display: flex; flex-direction: column; gap: 6px; }
 .ext-section > .shell-fold-body:empty { display: none; }
