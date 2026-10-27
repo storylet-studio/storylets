@@ -17,7 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import "./canvas-controls.css";
-import { el, iconNode, tipWithKey, type Child } from "@wildwinter/app-shell";
+import { el, iconNode, tipWithKey, type Child, type IconName } from "@wildwinter/app-shell";
 
 /** The four the cluster draws, on the shell's grammar: the 24 grid, the
  *  2.571 stroke (1.5px at 14px), round caps and joins, currentColor, and the
@@ -46,6 +46,18 @@ export interface CanvasControlActions {
   actualSize: () => void;
 }
 
+/** A verb the cluster carries for its canvas, after the camera's own (Frame, Comment, Arrange): a drawn
+ *  icon, its tooltip, and whether it can be used now. The tooltip and the availability are read again
+ *  whenever the cluster updates, so a verb whose scope follows the selection says which it is. The
+ *  canvas's verbs used to sit in the strip under it, on another baseline from everything else there; the
+ *  October 2026 UI review moved them here, where a canvas's controls already are. */
+export interface CanvasVerb {
+  icon: IconName;
+  tip: () => string;
+  onClick: () => void;
+  disabled?: () => boolean;
+}
+
 /** What the cluster needs to know to say what is available. */
 export interface CanvasControlState {
   scale: number;
@@ -67,8 +79,8 @@ export function zoomLabel(scale: number): string {
   return `${Math.round(scale * 100)}%`;
 }
 
-/** Mount the cluster into a canvas host. */
-export function mountCanvasControls(host: HTMLElement, actions: CanvasControlActions): CanvasControls {
+/** Mount the cluster into a canvas host, with the canvas's own verbs after the camera's. */
+export function mountCanvasControls(host: HTMLElement, actions: CanvasControlActions, verbs: CanvasVerb[] = []): CanvasControls {
   // The cluster is placed against its host, so the host has to be a positioning
   // context. Every canvas host in the app is one already (they carry the open
   // chip too), but that rule lives in another stylesheet, and a surface mounted
@@ -108,6 +120,12 @@ export function mountCanvasControls(host: HTMLElement, actions: CanvasControlAct
   readout.textContent = zoomLabel(1);
 
   bar.append(fitAll, fitSel, el("span", { className: "canvasctl-sep" }), out, readout, inn);
+  const verbButtons = verbs.map((t) => {
+    const b = button(undefined, t.tip(), t.onClick);
+    b.append(iconNode(t.icon, 14));
+    return { verb: t, b };
+  });
+  if (verbButtons.length > 0) bar.append(el("span", { className: "canvasctl-sep" }), ...verbButtons.map((v) => v.b));
   host.append(bar);
 
   return {
@@ -120,6 +138,12 @@ export function mountCanvasControls(host: HTMLElement, actions: CanvasControlAct
       out.disabled = state.scale <= state.min * 1.001;
       inn.disabled = state.scale >= state.max * 0.999;
       readout.disabled = !state.hasItems;
+      for (const { verb, b } of verbButtons) {
+        const tip = verb.tip();
+        b.dataset["tip"] = tip;
+        b.setAttribute("aria-label", tip);
+        b.disabled = verb.disabled?.() === true;
+      }
     },
     destroy() { bar.remove(); },
   };

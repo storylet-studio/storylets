@@ -14,7 +14,8 @@
 import { el, plural } from "@wildwinter/app-shell";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface } from "./canvas-surface.js";
-import { sharedToolStrip, stripAddButton } from "./canvas-controls.js";
+import { sharedToolStrip } from "./canvas-controls.js";
+import { statusRow } from "./status-row.js";
 import { nodeCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
 import { readCanvasTokens, watchCanvasTokens } from "./canvas-tokens.js";
 import {
@@ -124,10 +125,12 @@ export function mountNodeView(
 ): MountedNodeView {
   const readOnly = opts.readOnly === true;
   const stage = el("div", { className: "nodestage" });
-  // `deckstrip`: this strip, unlike the map's, runs to the right edge of the
-  // centre and so can end under the shell's Live link control (shell.css).
-  const strip = el("div", { className: "nodestrip deckstrip" });
-  host.replaceChildren(stage, strip);
+  // What the canvas has to say goes in the window's status row (status-row.ts),
+  // on the same line as Live Link; the verbs are in the canvas's own cluster.
+  // There is no strip under the canvas any more (the October 2026 UI review).
+  const strip = el("div", { className: "canvas-status" });
+  host.replaceChildren(stage);
+  statusRow.replaceChildren(strip);
 
   // The cards come from the DeckDto: one truth for a card's face, and the deck's
   // order is the default layout's only input.
@@ -186,14 +189,12 @@ export function mountNodeView(
   // selection and "arrange" is not a command you want to guess the scope of.
   // No key of its own: the family has no bare-letter accelerators (the
   // October 2026 review), so Arrange is this button and the canvas's menu.
-  const tidy = el("button", {
-    className: "btn camerabtn", text: "Arrange all by links",
-    tip: "Arrange by what links the cards",
-    onClick: () => layOut(),
-  });
-  // Greyed, never removed: a control that vanishes leaves an author wondering
-  // what they did, and the notice above the canvas already says why.
-  tidy.disabled = readOnly;
+  // Arrange is the cluster's last verb (the tools below), greyed, never removed,
+  // on a canvas nobody may rearrange: a control that vanishes leaves an author
+  // wondering what they did, and the notice above the canvas already says why.
+  /** The surface, once mounted: Arrange's tooltip reads its selection, and the
+   *  cluster first asks during the mount, before `surface` below exists. */
+  let surfaceRef: CanvasSurface<NodeItem> | undefined;
   /** What the last layout had to say, if anything. Cleared by the next one. */
   let layoutNote: string | undefined;
   // What the arrows mean. Built once, like `tidy`, so a strip repaint does not
@@ -253,7 +254,6 @@ export function mountNodeView(
     // tracer uses, and the same comment and frame tools the map's strip offers.
     const shared = sharedToolStrip(comments, furniture);
     if (shared !== undefined) { strip.replaceChildren(...shared); return; }
-    tidy.textContent = surface.selection().length > 1 ? "Arrange by links" : "Arrange all by links";
     const note = layoutNote === undefined ? [] : [el("span", { className: "hint", text: layoutNote })];
     // The overlay names itself in the strip and DATES its evidence: a canvas
     // silently wearing an hour-old run is the one way this can mislead, so the
@@ -261,31 +261,12 @@ export function mountNodeView(
     const legend = actions.coverageOn()
       ? [el("span", { className: "hint cover-legend", text: coverageLegend(actions.coverage(), Date.now()) })]
       : [];
-    // THE MAP'S GRAMMAR, adopted (2026-08-15). The two canvases had drifted into
-    // opposite readings of the same strip: the map put its verbs first as real
-    // buttons and its status last, this one put status first and its verbs last
-    // as quiet camera controls. Frame and Comment are the SAME two verbs on both
-    // canvases, so they now look and sit the same on both, and the strip's
-    // drawn plus gives them the map's add affordance.
-    //
-    // "Arrange" stays at the far right, and that is not an oversight: the left
-    // group is things you ADD to the canvas, and rearranging what is already on
-    // it is a different kind of act. The map has no equivalent, which is why it
-    // ends at its status.
-    // A frame is furniture on the canvas, so it is arranging; a comment lands in
-    // the notes shard, which is the author's, so it is not.
-    const frame = stripAddButton("Frame", "Draw a titled frame behind a group of cards", () => furniture?.drawFrame());
-    frame.disabled = readOnly;
+    // The status, in the status row: what the canvas holds, what the last
+    // arrangement had to say, the overlay's dated legend, and the key to the
+    // arrows beside the status it explains, only when there are arrows to key.
     strip.replaceChildren(
-      el("div", { className: "striptools" },
-        frame,
-        stripAddButton("Comment", "Drop a comment on the canvas or on a card", () => comments?.arm()),
-      ),
       ...describe(deck, graph), ...note, ...legend,
-      // Beside the status it explains, and only when there are arrows to key.
       ...(graph.edges.length > 0 ? [key] : []),
-      el("span", { className: "stripgap" }),
-      tidy,
     );
   }
 
@@ -295,6 +276,20 @@ export function mountNodeView(
     tokens,
     grid: NODE_GRID,
     readOnly,
+    // The canvas's verbs, in its control cluster: the two it shares with the map
+    // (a frame is furniture, so it is arranging; a comment lands in the notes
+    // shard, which is the author's, so it is not), then Arrange, whose scope is
+    // the selection when there is one.
+    verbs: [
+      { icon: "frame", tip: () => "Frame: draw a titled frame behind a group of cards", onClick: () => furniture?.drawFrame(), disabled: () => readOnly },
+      { icon: "comment", tip: () => "Comment: drop one on the canvas or on a card", onClick: () => comments?.arm() },
+      {
+        icon: "arrange",
+        tip: () => ((surfaceRef?.selection().length ?? selected.length) > 1 ? "Arrange the selected cards by what links them" : "Arrange all the cards by what links them"),
+        onClick: () => layOut(),
+        disabled: () => readOnly,
+      },
+    ],
     draw: (item, ctx) => {
       if (isCard(item)) return drawCardNode(item, ctx);
       return drawFrame(item, ctx);
@@ -387,6 +382,7 @@ export function mountNodeView(
       if (moves.length > 0) actions.moved(moves);
     },
   });
+  surfaceRef = surface;
   furniture = createFurniture({
     surface: () => surface as unknown as CanvasSurface<CanvasItem>,
     container: () => stage,
@@ -469,6 +465,7 @@ export function mountNodeView(
       chip.destroy();
       unwatch();
       surface.destroy();
+      if (strip.parentElement === statusRow) strip.remove(); // the status row says nothing once the canvas goes
     },
   };
 }
@@ -482,7 +479,7 @@ function describeCycles(cycles: string[][], title: (id: string) => string): stri
       + cycles.map((c) => one(c)).join("; ") + ".";
 }
 
-/** The strip under the canvas. Quiet, and only ever says something worth saying:
+/** The canvas's status line. Quiet, and only ever says something worth saying:
  *  an empty canvas has to explain itself, because a deck with no internal links
  *  is perfectly normal (its cards answer to cards in other decks) and a blank
  *  board would read as a bug. */

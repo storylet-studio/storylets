@@ -238,10 +238,10 @@ export function projectLead(
   // spaced hyphen. The remote status is a separate, quieter span beside it (the
   // October 2026 UI review, 3-composition.md proposal 8).
   const button = el("button", {
-    className: "pname", tip: `The project overview\n${project.dir}`, onClick: go,
+    className: "pname shell-topbar-title", tip: `The project overview\n${project.dir}`, onClick: go,
   }, project.name);
   if (remote !== undefined && remote.edits > 0) {
-    button.append(el("span", { className: "pname-note", text: remote.status }));
+    button.append(el("span", { className: "pname-note shell-topbar-sub", text: remote.status }));
   }
   return button;
 }
@@ -330,7 +330,10 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     lead?: HTMLElement;
     mark?: HTMLElement;
   }): HTMLElement => {
-    const b = el("button", { className: `nav-row nav-d${opts.depth}${opts.sel ? " sel" : ""}${opts.path ? " on-path" : ""}${opts.cls ? ` ${opts.cls}` : ""}`, onClick: opts.onClick, ...(opts.tip !== undefined ? { tip: opts.tip } : {}) });
+    // `shell-nav-row`: the family's navigator row (app-shell 0.65), which draws the open document's row
+    // from `aria-current` as well as announcing it.
+    const b = el("button", { className: `nav-row shell-nav-row nav-d${opts.depth}${opts.sel ? " sel" : ""}${opts.path ? " on-path" : ""}${opts.cls ? ` ${opts.cls}` : ""}`, onClick: opts.onClick, ...(opts.tip !== undefined ? { tip: opts.tip } : {}) });
+    if (opts.sel) b.setAttribute("aria-current", "page");
     if (opts.vc) b.dataset["vc"] = opts.vc;
     if (opts.node) {
       const id = opts.node;
@@ -343,7 +346,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     if (opts.lead) b.append(opts.lead);
     b.append(el("span", { className: "nav-label", text: opts.label }));
     if (opts.mark) b.append(opts.mark);
-    if (opts.count !== undefined) b.append(el("span", { className: "nav-n", text: String(opts.count) }));
+    if (opts.count !== undefined) b.append(el("span", { className: "nav-n shell-nav-count", text: String(opts.count) }));
     return b;
   };
   // The project's own row opens its page (the boxes master); Settings
@@ -436,14 +439,14 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
         deckRow.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
         host.append(deckRow);
       }
-      host.append(el("button", { className: "nav-add nav-d2", onClick: () => actions.newDeck(box.id) }, iconNode("add", 12), "New deck"));
+      host.append(el("button", { className: "nav-add shell-nav-row shell-nav-add nav-d2", onClick: () => actions.newDeck(box.id) }, iconNode("add", 12), "New deck"));
     });
 
     collection("Hands", "hands", box.hands.length);
 
   }
 
-  host.append(el("button", { className: "nav-add nav-add-box nav-d0", onClick: () => actions.newBox() }, iconNode("add", 12), "New box"));
+  host.append(el("button", { className: "nav-add shell-nav-row shell-nav-add nav-add-box nav-d0", onClick: () => actions.newBox() }, iconNode("add", 12), "New box"));
 }
 
 // The delete guard's evidence for a card lives with the other deletes

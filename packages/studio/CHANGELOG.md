@@ -26,6 +26,9 @@ here is part of shipping, not a courtesy.
   switch sits beside the Cards tab it changes.
 - **The canvas is the page.** A deck's canvas fills the pane with no frame, shows only a faint grid until you
   drag a card, and no longer prints the deck's name on every card.
+- **The canvas's tools are with its zoom.** Frame, Comment, and Arrange are buttons in the canvas's control
+  group, beside fit and zoom, and what the canvas has to say (how its cards link, the coverage legend, the key
+  to its arrows) is in a status line at the foot of the window, beside Live Link.
 - **A quieter navigator and title.** Rows are listed at an even weight, the open one marked by a soft fill,
   and the top bar shows just the project's name.
 

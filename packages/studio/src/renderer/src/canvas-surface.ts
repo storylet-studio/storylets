@@ -33,7 +33,7 @@
 
 import Konva from "konva";
 import { hideTip, isEditableTarget, tipAt } from "@wildwinter/app-shell";
-import { mountCanvasControls, type CanvasControls } from "./canvas-controls.js";
+import { mountCanvasControls, type CanvasControls, type CanvasVerb } from "./canvas-controls.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
 import {
   DRAG_THRESHOLD_PX, allInView, boxBetween, centredCamera, clampScale, contentBounds, crossesFloor, frameCamera,
@@ -123,6 +123,8 @@ export interface CanvasSurfaceOptions<T extends CanvasItem> {
   draw: (item: T, ctx: DrawContext) => Konva.Group;
   /** Snap step in world units. 0 disables the grid and snapping. */
   grid?: number;
+  /** The canvas's own verbs, drawn in its control cluster after the camera's (canvas-controls.ts). */
+  verbs?: CanvasVerb[];
   /**
    * Nothing on this canvas may be MOVED.
    *
@@ -1574,7 +1576,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     zoomIn: () => zoomCentre(ZOOM_STEP),
     zoomOut: () => zoomCentre(1 / ZOOM_STEP),
     actualSize,
-  });
+  }, opts.verbs ?? []);
   refreshControls();
 
   return {

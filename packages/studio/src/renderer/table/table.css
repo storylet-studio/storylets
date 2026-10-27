@@ -30,7 +30,7 @@ body { background: var(--bg); font-size: var(--text-md); }
   background: var(--surface);
 }
 .tbargap { flex: 1 1 auto; }
-.swin-head .tname { font-family: var(--font-read); font-size: var(--text-md); color: var(--muted); }
+.swin-head .tname { font-family: var(--font-ui); font-size: var(--text-md); color: var(--muted); }
 /* The pin is the shared .swin-pin (app-shell tool-window.css). */
 .tbar .seed { font-size: var(--text-sm); color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 .tbar .seedin { width: 68px; font-family: var(--font-mono); font-size: var(--text-sm); }
@@ -147,7 +147,7 @@ body { background: var(--bg); font-size: var(--text-md); }
 .hhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; cursor: pointer; }
 /* The header is a button to the keyboard (Enter or Space selects the hand). */
 .hhead:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
-.hname { font-family: var(--font-read); font-weight: 600; font-size: var(--text-lg); }
+.hname { font-family: var(--font-ui); font-weight: var(--weight-strong); font-size: var(--text-md); } /* a hand's name is structure: the UI face */
 .htags { display: inline-flex; gap: 6px; }
 .hcards { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
 .hcard {
@@ -372,7 +372,7 @@ body { background: var(--bg); font-size: var(--text-md); }
 .j-meddle .jp { font-family: var(--font-mono); font-size: var(--text-xs); }
 .boardbox-head { display: flex; align-items: baseline; gap: 8px; margin: 10px 2px 2px; }
 .boardbox-head:first-child { margin-top: 0; }
-.bbname { font-family: var(--font-read); font-weight: 600; font-size: var(--text-lg); color: var(--ink); }
+.bbname { font-family: var(--font-ui); font-weight: var(--weight-strong); font-size: var(--text-md); color: var(--ink); } /* a box's name: the UI face */
 .bbadge { font-size: var(--text-xs); color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-pill); padding: 1px 8px; }
 .hcell.rippled { animation: ripple-pulse 1.1s ease-out 2; }
 @keyframes ripple-pulse {

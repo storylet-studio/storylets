@@ -33,6 +33,7 @@
 // that (design review 2026-08, A3 and A17).
 // ---------------------------------------------------------------------------
 
+import { statusRow } from "./status-row.js";
 import "./fonts.css"; // every face the windows draw, declared once
 import "./theme.css";
 import "./shell.css";
@@ -510,7 +511,8 @@ function mountShell(): void {
   shell.centre.addEventListener("click", () => vc.guardAfterClick(), true);
   // The walk's bar above the problems bar: a mode you entered outranks an
   // ambient one, and the pair keeps a stable order however they come and go.
-  workspace.append(shell.root, exchange.jobStrip, comments.reviewbar, problems.bar);
+  // And at the very foot, the status row (status-row.ts), with Live Link at its end.
+  workspace.append(shell.root, exchange.jobStrip, comments.reviewbar, problems.bar, statusRow);
   app.replaceChildren(welcomeHost, workspace);
 }
 
