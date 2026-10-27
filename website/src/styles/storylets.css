@@ -1,27 +1,15 @@
-/* Storylet Studio documentation: the brand palette, and nothing else.
+/* Storylet Studio documentation: the site's brand, and nothing else.
  *
- * This file is the site's tokens. It maps the brand onto Starlight's own tokens and then
- * declares the --chrome-* properties the shared chrome reads. The RULES that use them are in
- * src/chrome/chrome.css, which is generated from patterkit/site-chrome and identical on every
- * site in the family; nothing here is a rule, and nothing there is a colour.
+ * The colours are the family palette, the same as Storyletter's and Patterpad's since the
+ * October 2026 UI review: app-shell's Light and Dark with blue pencil as the one accent. They
+ * arrive in src/chrome/palette.css, generated from patterkit/site-chrome, which renders
+ * app-shell's palette and maps every Starlight and --chrome-* colour onto it. The RULES are in
+ * src/chrome/chrome.css, generated likewise. What stays here is the site's own: its faces, its
+ * measure, and the shape of the sidebar marker (the beat). The brand's own colours, plum and
+ * amber, live in its marks, as teal and ember do on the Patter side.
  *
- * BRAND (theme independent, branding/README.md's table): plum (the primary ink and the default
- * accent), plum deep (the compiled / dark ground and every code block), plum mid, plum tint
- * (accents on dark), amber (the beats: reserved for action, primary calls to action and runtime
- * contexts). Fonts load from the Google Fonts <link> in astro.config.mjs.
- *
- * LIGHT SURFACES are Storyletter's OWN default light theme, Chambray, rather than the brand's
- * cream. This follows what the Patter side already does: PatterKit's docs take their light
- * neutrals straight from Patterpad's default Paper theme (#f1ebe0 ground and all) and keep the
- * brand teal for the accent. Ours were cream #f3ede2, which is within a hair of Patter's
- * parchment #f1ebe0, so the two family sites read as the same site. Chambray's blue-grey is what
- * a reader meets the moment they open Storyletter, so the docs meet them with it too, and the
- * families are told apart at a glance: PatterKit warm, Storylet Studio cool.
- *
- * What does NOT move: the accent stays plum, the dark theme stays on the plum-deep ground, and
- * every band and code block that sits ON plum-deep keeps its cream ink. Patter draws the same
- * line, its docs' dark ground being the brand stage-black rather than Patterpad's dark theme.
- * Only the LIGHT neutrals follow the app.
+ * Nothing here is a rule, and nothing there is a brand. The faces are bundled by
+ * src/chrome/fonts.css.
  */
 
 :root {
@@ -30,135 +18,22 @@
   --sl-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Widen the central reading column (Starlight default 45rem) so the schema tables get room.
-   * Running prose is capped back to a comfortable measure by the chrome, so only tables,
-   * figures, code and diagrams use the extra width. */
+   * Running prose is capped back to a comfortable measure by the chrome (about 75 characters a
+   * line), so only tables, figures, code and diagrams use the extra width. */
   --sl-content-width: 54rem;
 
-  /* Brand reference tokens (theme independent), from branding/README.md. */
-  --sy-plum: #36284a;
-  --sy-plum-deep: #241a33;
-  --sy-plum-mid: #4a3866;
-  --sy-plum-tint: #9a89b5;
-  --sy-amber: #c8902f;
-  --sy-amber-light: #e0b463;
-  --sy-cream: #f3ede2;
-  --sy-paper: #faf6ee;
-  --sy-ink: #2a2431;
-
-  /* Storyletter's Chambray, the app's default LIGHT theme, verbatim from
-   * packages/studio/src/renderer/src/theme.css. That file is the source of truth; these are a
-   * copy, so a change there wants echoing here. */
-  --sy-cham-bg: #e6eaef;
-  --sy-cham-surface: #f4f6f9;
-  --sy-cham-card: #fbfcfe;
-  --sy-cham-ink: #161e28;
-  --sy-cham-muted: #4d5b6b;
-  --sy-cham-line: #c6ceda;
-
-  /* The chrome, where this site's answer is the same in both themes. The marker on the open
-     page is the beat: an amber dot, drawn as a mask like every other site's. */
+/* The chrome's shape for this site: the serif for page titles, the measure, and the sidebar
+     marker, which is the beat, a dot drawn as a mask. Its colour is the accent, from palette.css. */
+  /* The wordmark is part of the logo, so the landing header draws its second word in the brand's
+     plum, as the docs header's wordmark image does; the site's accent is the family's blue. */
+  --chrome-land-wordmark-accent: #36284a;
   --chrome-display: var(--sy-read);
-  --chrome-measure: 46rem;
-  --chrome-current-bg: var(--sy-plum);
-  --chrome-current-ink: var(--sy-cream);
+  --chrome-measure: 40rem;
   --chrome-marker-width: 7px;
   --chrome-marker-height: 7px;
   --chrome-marker-gap: 9px;
   --chrome-marker-shift: 1px;
-  --chrome-marker-ink: var(--sy-amber-light);
   --chrome-marker-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50'/%3E%3C/svg%3E");
-  /* Code blocks sit on plum deep in BOTH themes (the compiled surface). The syntax theme is
-     forced dark in astro.config so the tokens suit this ground. */
-  --chrome-code-bg: #241a33;
-}
-
-/* ------------------------------------------------------------------ */
-/* DARK (Starlight default): plum tint on the plum-deep ground         */
-/* ------------------------------------------------------------------ */
-:root,
-:root[data-theme="dark"] {
-  --sl-color-accent-low: #33265180;
-  --sl-color-accent: #7a66a0;
-  --sl-color-accent-high: #c3b4dd;
-  --sl-color-text-accent: #c3b4dd;
-
-  --sl-color-white: #f3ede2;
-  --sl-color-gray-1: #e8e1f0;
-  --sl-color-gray-2: #cabfdc;
-  --sl-color-gray-3: #9a89b5;
-  --sl-color-gray-4: #695a85;
-  --sl-color-gray-5: #3b2d52;
-  --sl-color-gray-6: #2b2040;
-  --sl-color-black: #1c1429;
-
-  --sl-color-bg: #241a33;
-  --sl-color-bg-nav: #2b2040;
-  --sl-color-bg-sidebar: #2b2040;
-  --sl-color-bg-inline-code: #33264a;
-
-  --chrome-aside-ink: var(--sy-plum-tint);
-  --chrome-aside-edge: var(--sy-plum-tint);
-  --chrome-caution-ink: var(--sy-amber-light);
-  --chrome-caution-edge: var(--sy-amber);
-  --chrome-danger-ink: #e0866f;
-  --chrome-danger-edge: #b8452f;
-  /* Primary button: plum tint with the dark ground as its ink (8.6:1). Amber stays where it
-     means something, the beat marker and a caution aside, and is not the call to action. */
-  --chrome-cta: #c3b4dd;
-  --chrome-cta-ink: #241a33;
-  --chrome-cta-hover: #d4c8e8;
-  --chrome-secondary-ink: var(--sy-plum-tint);
-  --chrome-code-ink: #c3b4dd;
-  --chrome-shot-edge: var(--sl-color-gray-4);
-  --chrome-shot-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-
-/* ------------------------------------------------------------------ */
-/* LIGHT: plum accent on Storyletter's Chambray blue-grey              */
-/* The neutrals are a ladder in Chambray's hue, anchored on the three   */
-/* app tokens that land on a Starlight step exactly: --ink at gray-1,   */
-/* --muted at gray-3, --line at gray-5. The rest are interpolated in    */
-/* the same family. The ACCENT stays plum: brand identity is not theme  */
-/* identity, and the same rule holds inside Storyletter, where the      */
-/* semantic and character colours survive a theme switch untouched.     */
-/* ------------------------------------------------------------------ */
-:root[data-theme="light"] {
-  --sl-color-accent-low: #e2dbee;
-  --sl-color-accent: #36284a;
-  --sl-color-accent-high: #241a33;
-  --sl-color-text-accent: #4a3866;
-
-  /* In Starlight's light mode the "white" and "black" tokens invert:
-     white = highest-contrast text, black = page background. */
-  --sl-color-white: #0f151d;
-  --sl-color-gray-1: #161e28;   /* = Chambray --ink */
-  --sl-color-gray-2: #2c3846;
-  --sl-color-gray-3: #4d5b6b;   /* = Chambray --muted */
-  --sl-color-gray-4: #8894a3;
-  --sl-color-gray-5: #c6ceda;   /* = Chambray --line */
-  --sl-color-gray-6: #eef1f5;
-  --sl-color-gray-7: #f7f9fb;
-  --sl-color-black: #e6eaef;    /* = Chambray --bg */
-
-  --sl-color-bg: #e6eaef;         /* = Chambray --bg */
-  --sl-color-bg-nav: #fbfcfe;     /* = Chambray --card, the lightest tier */
-  --sl-color-bg-sidebar: #f4f6f9; /* = Chambray --surface */
-  --sl-color-bg-inline-code: #e7e0ef;  /* plum tint: inline code is accent, not ground */
-
-  --chrome-aside-ink: var(--sy-plum);
-  --chrome-aside-edge: var(--sy-plum);
-  --chrome-caution-ink: #8e6413;
-  --chrome-caution-edge: var(--sy-amber);
-  --chrome-danger-ink: #9c3b2f;
-  --chrome-danger-edge: #b8452f;
-  /* Primary button: plum with white ink (13.5:1). */
-  --chrome-cta: #36284a;
-  --chrome-cta-ink: #ffffff;
-  --chrome-cta-hover: var(--sy-plum-mid);
-  --chrome-secondary-ink: var(--sy-plum);
-  --chrome-code-ink: var(--sy-plum);
-  --chrome-shot-edge: var(--sl-color-gray-5);
-  --chrome-shot-shadow: 0 1px 3px rgba(36, 26, 51, 0.08), 0 8px 24px rgba(36, 26, 51, 0.06);
 }
 
 /* The engine icon at the top of each runtime page sits inline beside the first paragraph,
@@ -167,6 +42,6 @@
 .sl-markdown-content img.sy-engine {
   float: left;
   margin: 0.15rem 0.9rem 0.4rem 0;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 .sl-markdown-content img.sy-engine + * { clear: none; }

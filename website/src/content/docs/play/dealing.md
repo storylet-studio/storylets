@@ -37,7 +37,7 @@ first one it fails:
   <defs>
     <marker id="sy-a-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--sl-color-gray-3)"/></marker>
   </defs>
-  <rect x="8" y="14" width="150" height="40" rx="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+  <rect x="8" y="14" width="150" height="40" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
   <text x="83" y="32" text-anchor="middle" fill="var(--sl-color-white)" font-size="13">hand condition</text>
   <text x="83" y="47" text-anchor="middle" fill="var(--sl-color-gray-3)" font-size="10.5">once, for the whole deal</text>
   <line x1="158" y1="34" x2="196" y2="34" stroke="var(--sl-color-gray-3)" marker-end="url(#sy-a-arrow)"/>
@@ -46,17 +46,17 @@ first one it fails:
   <text x="205" y="38" fill="var(--sl-color-gray-3)" font-size="11.5">nothing is dealt</text>
   <text x="8" y="92" fill="var(--sl-color-gray-2)" font-size="11.5">every card, in order:</text>
   <g font-size="12" text-anchor="middle">
-    <rect x="8" y="104" width="118" height="34" rx="7" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
+    <rect x="8" y="104" width="118" height="34" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="67" y="126" fill="var(--sl-color-white)">deck gate</text>
-    <rect x="140" y="104" width="106" height="34" rx="7" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
+    <rect x="140" y="104" width="106" height="34" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="193" y="126" fill="var(--sl-color-white)">cooldown</text>
-    <rect x="260" y="104" width="84" height="34" rx="7" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
+    <rect x="260" y="104" width="84" height="34" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="302" y="126" fill="var(--sl-color-white)">tags</text>
-    <rect x="358" y="104" width="106" height="34" rx="7" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
+    <rect x="358" y="104" width="106" height="34" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="411" y="126" fill="var(--sl-color-white)">condition</text>
-    <rect x="478" y="104" width="92" height="34" rx="7" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
+    <rect x="478" y="104" width="92" height="34" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="524" y="126" fill="var(--sl-color-white)">claims</text>
-    <rect x="584" y="104" width="128" height="34" rx="7" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 16%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
+    <rect x="584" y="104" width="128" height="34" rx="6" fill="color-mix(in oklab, var(--sl-color-accent) 8%, var(--sl-color-bg-sidebar))" stroke="var(--sl-color-accent)"/>
     <text x="648" y="126" fill="var(--sl-color-white)">ranked: the stock</text>
   </g>
   <g stroke="var(--sl-color-gray-3)" marker-end="url(#sy-a-arrow)">

@@ -14,7 +14,7 @@ pass, so this is something you can check, not something you hope for.
   <defs>
     <marker id="sy-c-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--sl-color-gray-3)"/></marker>
   </defs>
-  <rect x="306" y="16" width="148" height="44" rx="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+  <rect x="280" y="16" width="200" height="44" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
   <text x="380" y="37" text-anchor="middle" fill="var(--sl-color-white)" font-family="var(--sl-font-mono,monospace)" font-size="13">.storyletsc</text>
   <text x="380" y="52" text-anchor="middle" fill="var(--sl-color-gray-3)" font-size="10">one schema: storylets/bundle@N</text>
   <g stroke="var(--sl-color-gray-3)" fill="none">
@@ -24,10 +24,10 @@ pass, so this is something you can check, not something you hope for.
     <path d="M380 60 V84 H610 V102" marker-end="url(#sy-c-arrow)"/>
   </g>
   <g font-size="12.5" text-anchor="middle" fill="var(--sl-color-white)">
-    <rect x="60" y="104" width="140" height="40" rx="8" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><rect x="60" y="104" width="140" height="3" rx="1.5" fill="var(--sy-plum-tint,#9a89b5)"/><text x="130" y="129">JavaScript</text>
-    <rect x="220" y="104" width="140" height="40" rx="8" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><rect x="220" y="104" width="140" height="3" rx="1.5" fill="var(--sy-plum-tint,#9a89b5)"/><text x="290" y="129">Unity</text>
-    <rect x="380" y="104" width="140" height="40" rx="8" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><rect x="380" y="104" width="140" height="3" rx="1.5" fill="var(--sy-plum-tint,#9a89b5)"/><text x="450" y="129">Unreal</text>
-    <rect x="540" y="104" width="140" height="40" rx="8" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><rect x="540" y="104" width="140" height="3" rx="1.5" fill="var(--sy-plum-tint,#9a89b5)"/><text x="610" y="129">Godot</text>
+    <rect x="60" y="104" width="140" height="40" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><text x="130" y="129">JavaScript</text>
+    <rect x="220" y="104" width="140" height="40" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><text x="290" y="129">Unity</text>
+    <rect x="380" y="104" width="140" height="40" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><text x="450" y="129">Unreal</text>
+    <rect x="540" y="104" width="140" height="40" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/><text x="610" y="129">Godot</text>
   </g>
   <g stroke="var(--sl-color-gray-3)" fill="none">
     <path d="M130 144 V172 H380"/>
@@ -36,8 +36,7 @@ pass, so this is something you can check, not something you hope for.
     <path d="M610 144 V172 H380"/>
     <path d="M380 172 V194" marker-end="url(#sy-c-arrow)"/>
   </g>
-  <rect x="230" y="196" width="300" height="46" rx="8" fill="var(--sl-color-bg-sidebar)" stroke="var(--sy-plum-mid,#4a3866)"/>
-  <rect x="230" y="196" width="300" height="3" rx="1.5" fill="var(--sy-plum-mid,#4a3866)"/>
+  <rect x="230" y="196" width="300" height="46" rx="6" fill="color-mix(in oklab, var(--sl-color-accent) 8%, var(--sl-color-bg-sidebar))" stroke="var(--sl-color-accent)"/>
   <text x="380" y="217" text-anchor="middle" fill="var(--sl-color-white)" font-size="12.5">one shared test suite</text>
   <text x="380" y="233" text-anchor="middle" fill="var(--sl-color-gray-3)" font-size="10.5">the same cases, checked on every release</text>
   <text x="380" y="270" text-anchor="middle" fill="var(--sl-color-gray-3)" font-size="11.5">The same language-neutral cases, pinned so a conforming runtime reproduces them exactly.</text>

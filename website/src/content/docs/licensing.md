@@ -91,16 +91,16 @@ Scale them freely. Please don't recolour or redraw them.
 
 <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-start;margin:1rem 0;">
   <figure style="margin:0;">
-    <img src="/badges/storylet-studio-badge-cream.svg" width="360" height="112" alt="Story shaped with Storylet Studio badge, cream colour way" style="display:block;border-radius:8px;" />
-    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-cream.svg">SVG</a> · <a href="/badges/storylet-studio-badge-cream.png">PNG</a></figcaption>
+    <img src="/badges/storylet-studio-badge-light.svg" width="360" height="112" alt="Story shaped with Storylet Studio badge, light colour way" style="display:block;border-radius:8px;" />
+    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-light.svg">SVG</a>, <a href="/badges/storylet-studio-badge-light.png">PNG</a></figcaption>
   </figure>
   <figure style="margin:0;">
-    <img src="/badges/storylet-studio-badge-plum.svg" width="360" height="112" alt="Story shaped with Storylet Studio badge, deep plum colour way" style="display:block;border-radius:8px;" />
-    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-plum.svg">SVG</a> · <a href="/badges/storylet-studio-badge-plum.png">PNG</a></figcaption>
+    <img src="/badges/storylet-studio-badge-dark.svg" width="360" height="112" alt="Story shaped with Storylet Studio badge, dark colour way" style="display:block;border-radius:8px;" />
+    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-dark.svg">SVG</a>, <a href="/badges/storylet-studio-badge-dark.png">PNG</a></figcaption>
   </figure>
   <figure style="margin:0;">
     <img src="/badges/storylet-studio-badge-mono.svg" width="360" height="112" alt="Story shaped with Storylet Studio badge, one colour" style="display:block;border-radius:8px;" />
-    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-mono.svg">SVG</a> · <a href="/badges/storylet-studio-badge-mono.png">PNG</a></figcaption>
+    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-mono.svg">SVG</a>, <a href="/badges/storylet-studio-badge-mono.png">PNG</a></figcaption>
   </figure>
 </div>
 
@@ -108,16 +108,16 @@ Scale them freely. Please don't recolour or redraw them.
 
 <div style="display:flex;flex-direction:column;gap:0.8rem;align-items:flex-start;margin:1rem 0;">
   <figure style="margin:0;">
-    <img src="/badges/storylet-studio-line-cream.svg" width="298" height="38" alt="Story shaped with Storylet Studio line badge, cream colour way" style="display:block;" />
-    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-cream.svg">SVG</a> · <a href="/badges/storylet-studio-line-cream.png">PNG</a></figcaption>
+    <img src="/badges/storylet-studio-line-light.svg" width="330" height="38" alt="Story shaped with Storylet Studio line badge, light colour way" style="display:block;" />
+    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-light.svg">SVG</a>, <a href="/badges/storylet-studio-line-light.png">PNG</a></figcaption>
   </figure>
   <figure style="margin:0;">
-    <img src="/badges/storylet-studio-line-plum.svg" width="298" height="38" alt="Story shaped with Storylet Studio line badge, deep plum colour way" style="display:block;" />
-    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-plum.svg">SVG</a> · <a href="/badges/storylet-studio-line-plum.png">PNG</a></figcaption>
+    <img src="/badges/storylet-studio-line-dark.svg" width="330" height="38" alt="Story shaped with Storylet Studio line badge, dark colour way" style="display:block;" />
+    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-dark.svg">SVG</a>, <a href="/badges/storylet-studio-line-dark.png">PNG</a></figcaption>
   </figure>
   <figure style="margin:0;">
-    <img src="/badges/storylet-studio-line-mono.svg" width="298" height="38" alt="Story shaped with Storylet Studio line badge, one colour" style="display:block;" />
-    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-mono.svg">SVG</a> · <a href="/badges/storylet-studio-line-mono.png">PNG</a></figcaption>
+    <img src="/badges/storylet-studio-line-mono.svg" width="330" height="38" alt="Story shaped with Storylet Studio line badge, one colour" style="display:block;" />
+    <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-mono.svg">SVG</a>, <a href="/badges/storylet-studio-line-mono.png">PNG</a></figcaption>
   </figure>
 </div>
 

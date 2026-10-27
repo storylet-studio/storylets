@@ -23,16 +23,21 @@ export default defineConfig({
     starlight({
       title: "Storylet Studio",
       tagline: "Design playable stories.",
-      customCss: ["./src/chrome/fonts.css", "./src/styles/storylets.css", "./src/chrome/chrome.css"],
+      customCss: ["./src/chrome/fonts.css", "./src/styles/storylets.css", "./src/chrome/palette.css", "./src/chrome/chrome.css"],
       // Every docs page ends with the licence / author / home credit line. The landing page
       // carries the same credit separately, because it does not use Starlight chrome.
       components: { Footer: "./src/chrome/Footer.astro" },
-      // Code blocks sit on the plum-deep ground in BOTH site themes (the "compiled" surface in
-      // the brand palette). Force one dark syntax theme so the tokens always suit that ground,
-      // and pin the exact fill + hairline.
+      // Code follows the theme: a light block on a light page and a dark one on a dark page, on the
+      // chrome tier with a hairline and no shadow (the October 2026 UI review; until then a dark slab
+      // in both themes, which on a white page was the heaviest thing on it).
       expressiveCode: {
-        themes: ["github-dark"],
-        styleOverrides: { codeBackground: "#241a33", borderColor: "#3b2d52" },
+        themes: ["github-dark-default", "github-light-default"],
+        styleOverrides: {
+          codeBackground: "var(--chrome-code-bg)",
+          borderColor: "var(--sl-color-gray-5)",
+          borderRadius: "8px",
+          frames: { frameBoxShadowCssValue: "none" },
+        },
       },
       // Storylet Studio brand: the thread on plum as the favicon, the wordmark as the header
       // logo (light/dark variants, because the wordmark's ink is fixed dark and needs

@@ -28,38 +28,38 @@ an `assets/` folder at the root of the project.
 
 ### How they sit on disk
 
-<svg viewBox="0 0 620 356" role="img" aria-labelledby="sy-tree-title" style="width:100%;height:auto;font-family:var(--sl-font-mono,monospace)">
+<svg viewBox="0 0 650 356" role="img" aria-labelledby="sy-tree-title" style="width:100%;height:auto;font-family:var(--sl-font-mono,monospace)">
   <title id="sy-tree-title">A project folder: the .storyletproj file at the root, beside the project map's map.storyletmap, the project's notes.storyletnotes and an assets folder for the map's pictures; then one folder per box containing box.storyletbox, tags.storylettags, hands.storylethands, an optional view.storyletview and map.storyletmap, and a decks folder holding one .storyletdeck file per deck. Beside the project, a storylet-dist folder holds the compiled .storyletsc bundle.</title>
   <g font-size="12.5" fill="var(--sl-color-white)">
-    <rect x="8" y="10" width="252" height="26" rx="6" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+    <rect x="8" y="10" width="252" height="26" rx="4" fill="color-mix(in oklab, var(--sl-color-accent) 8%, var(--sl-color-bg-sidebar))" stroke="var(--sl-color-accent)"/>
     <text x="20" y="28">the-village.storylets/</text>
-    <text x="290" y="28" fill="var(--sl-color-gray-3)" font-size="11.5">the project: a folder, opened as one document</text>
+    <text x="330" y="28" fill="var(--sl-color-gray-3)" font-size="11.5">the project: a folder, opened as one document</text>
     <text x="40" y="60">the-village.storyletproj</text>
-    <text x="290" y="60" fill="var(--sl-color-gray-3)" font-size="11.5">settings, @world and @story, export config</text>
+    <text x="330" y="60" fill="var(--sl-color-gray-3)" font-size="11.5">settings, @world and @story, export config</text>
     <text x="40" y="82">map.storyletmap</text>
-    <text x="290" y="82" fill="var(--sl-color-gray-3)" font-size="11.5">the project map: zones, outlines, pictures</text>
+    <text x="330" y="82" fill="var(--sl-color-gray-3)" font-size="11.5">the project map: zones, outlines, pictures</text>
     <text x="40" y="104">notes.storyletnotes</text>
-    <text x="290" y="104" fill="var(--sl-color-gray-3)" font-size="11.5">comments on the project and its map</text>
+    <text x="330" y="104" fill="var(--sl-color-gray-3)" font-size="11.5">comments on the project and its map</text>
     <text x="40" y="126">assets/</text>
-    <text x="290" y="126" fill="var(--sl-color-gray-3)" font-size="11.5">the map's pictures</text>
-    <rect x="30" y="138" width="230" height="26" rx="6" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 16%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
+    <text x="330" y="126" fill="var(--sl-color-gray-3)" font-size="11.5">the map's pictures</text>
+    <rect x="30" y="138" width="230" height="26" rx="4" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="42" y="156">village/</text>
-    <text x="290" y="156" fill="var(--sl-color-gray-3)" font-size="11.5">one folder per box</text>
+    <text x="330" y="156" fill="var(--sl-color-gray-3)" font-size="11.5">one folder per box</text>
     <text x="62" y="184">box.storyletbox</text>
-    <text x="290" y="184" fill="var(--sl-color-gray-3)" font-size="11.5">card template, @box, ranking, uses the map</text>
+    <text x="330" y="184" fill="var(--sl-color-gray-3)" font-size="11.5">card template, @box, ranking, uses the map</text>
     <text x="62" y="206">tags.storylettags</text>
-    <text x="290" y="206" fill="var(--sl-color-gray-3)" font-size="11.5">the box's own tag groups</text>
+    <text x="330" y="206" fill="var(--sl-color-gray-3)" font-size="11.5">the box's own tag groups</text>
     <text x="62" y="228">hands.storylethands</text>
-    <text x="290" y="228" fill="var(--sl-color-gray-3)" font-size="11.5">hand templates and hands</text>
+    <text x="330" y="228" fill="var(--sl-color-gray-3)" font-size="11.5">hand templates and hands</text>
     <text x="62" y="250">view.storyletview</text>
-    <text x="290" y="250" fill="var(--sl-color-gray-3)" font-size="11.5">card positions and the box's colour</text>
+    <text x="330" y="250" fill="var(--sl-color-gray-3)" font-size="11.5">card positions and the box's colour</text>
     <text x="62" y="272">map.storyletmap</text>
-    <text x="290" y="272" fill="var(--sl-color-gray-3)" font-size="11.5">where this box's hands stand on the map</text>
+    <text x="330" y="272" fill="var(--sl-color-gray-3)" font-size="11.5">where this box's hands stand on the map</text>
     <text x="62" y="294">decks/</text>
     <text x="84" y="316">arrival.storyletdeck</text>
-    <text x="290" y="316" fill="var(--sl-color-gray-3)" font-size="11.5">one file per deck: the cards live inside</text>
+    <text x="330" y="316" fill="var(--sl-color-gray-3)" font-size="11.5">one file per deck: the cards live inside</text>
     <text x="8" y="344" fill="var(--sl-color-gray-2)">../storylet-dist/the-village.storyletsc</text>
-    <text x="290" y="344" fill="var(--sl-color-gray-3)" font-size="11.5">the compiled bundle your game loads</text>
+    <text x="330" y="344" fill="var(--sl-color-gray-3)" font-size="11.5">the compiled bundle your game loads</text>
   </g>
   <g stroke="var(--sl-color-gray-4)" fill="none">
     <path d="M22 42 V 150 M22 54 H 36 M22 76 H 36 M22 98 H 36 M22 120 H 36 M22 150 H 26"/>

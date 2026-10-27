@@ -29,39 +29,39 @@ valid right now. You play one, and the next hand might look completely different
   <g font-size="12">
     <text x="8" y="18" fill="var(--sl-color-white)" font-size="13" font-weight="600">The deck</text>
     <text x="8" y="34" fill="var(--sl-color-gray-3)">every storylet you have written</text>
-    <rect x="8" y="46" width="196" height="42" rx="6" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
+    <rect x="8" y="46" width="196" height="42" rx="4" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="20" y="64" fill="var(--sl-color-white)">if met the blacksmith</text>
     <text x="20" y="80" fill="var(--sl-color-gray-3)">The Forge at Night</text>
-    <rect x="8" y="96" width="196" height="42" rx="6" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
+    <rect x="8" y="96" width="196" height="42" rx="4" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-5)"/>
     <text x="20" y="114" fill="var(--sl-color-white)">if gold &gt;= 50</text>
     <text x="20" y="130" fill="var(--sl-color-gray-3)">Pay the Toll</text>
-    <rect x="8" y="146" width="196" height="42" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-4)" stroke-dasharray="4 3"/>
+    <rect x="8" y="146" width="196" height="42" rx="4" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-4)" stroke-dasharray="4 3"/>
     <text x="20" y="164" fill="var(--sl-color-gray-3)">if winter</text>
     <text x="20" y="180" fill="var(--sl-color-gray-3)">The Frozen Pass</text>
-    <rect x="8" y="196" width="196" height="42" rx="6" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-4)" stroke-dasharray="4 3"/>
+    <rect x="8" y="196" width="196" height="42" rx="4" fill="var(--sl-color-bg-sidebar)" stroke="var(--sl-color-gray-4)" stroke-dasharray="4 3"/>
     <text x="20" y="214" fill="var(--sl-color-gray-3)">if dragon woken</text>
     <text x="20" y="230" fill="var(--sl-color-gray-3)">The Reckoning</text>
     <text x="8" y="262" fill="var(--sl-color-gray-3)" font-size="11">dashed: waiting for the world to change</text>
-    <g stroke="var(--sy-amber,#c8902f)" fill="none" stroke-width="1.5">
+    <g stroke="var(--sl-color-accent)" fill="none" stroke-width="1.5">
       <path d="M216 120 H 292" marker-end="url(#sy-arrow)"/>
     </g>
-    <text x="222" y="110" fill="var(--sy-amber,#c8902f)" font-size="11">deal a hand</text>
+    <text x="222" y="110" fill="var(--sl-color-accent)" font-size="11">deal a hand</text>
     <text x="222" y="140" fill="var(--sl-color-gray-3)" font-size="11">only what holds</text>
     <text x="308" y="18" fill="var(--sl-color-white)" font-size="13" font-weight="600">Your hand</text>
     <text x="308" y="34" fill="var(--sl-color-gray-3)">what is playable right now</text>
-    <rect x="308" y="46" width="200" height="42" rx="6" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 16%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+    <rect x="308" y="46" width="200" height="42" rx="4" fill="color-mix(in oklab, var(--sl-color-accent) 8%, var(--sl-color-bg-sidebar))" stroke="var(--sl-color-accent)"/>
     <text x="320" y="64" fill="var(--sl-color-white)">The Forge at Night</text>
-    <text x="320" y="80" fill="var(--sy-amber,#c8902f)" font-size="11">condition met</text>
-    <rect x="308" y="96" width="200" height="42" rx="6" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 16%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+    <text x="320" y="80" fill="var(--sl-color-accent)" font-size="11">condition met</text>
+    <rect x="308" y="96" width="200" height="42" rx="4" fill="color-mix(in oklab, var(--sl-color-accent) 8%, var(--sl-color-bg-sidebar))" stroke="var(--sl-color-accent)"/>
     <text x="320" y="114" fill="var(--sl-color-white)">Pay the Toll</text>
-    <text x="320" y="130" fill="var(--sy-amber,#c8902f)" font-size="11">condition met</text>
+    <text x="320" y="130" fill="var(--sl-color-accent)" font-size="11">condition met</text>
     <text x="308" y="166" fill="var(--sl-color-gray-3)" font-size="11">play one, the world shifts,</text>
     <text x="308" y="182" fill="var(--sl-color-gray-3)" font-size="11">and the next hand is dealt</text>
     <text x="308" y="198" fill="var(--sl-color-gray-3)" font-size="11">against what is true then</text>
   </g>
   <defs>
     <marker id="sy-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--sy-amber,#c8902f)"/>
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--sl-color-accent)"/>
     </marker>
   </defs>
 </svg>
@@ -94,38 +94,38 @@ different stories:
   <g font-size="12" fill="var(--sl-color-white)">
     <text x="8" y="16" font-weight="600">Linear</text>
     <text x="8" y="32" fill="var(--sl-color-gray-3)" font-size="11">each beat unlocks the next</text>
-    <circle cx="20" cy="56" r="9" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <circle cx="80" cy="56" r="9" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <circle cx="140" cy="56" r="9" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <circle cx="200" cy="56" r="9" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+    <circle cx="20" cy="56" r="9" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
+    <circle cx="80" cy="56" r="9" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
+    <circle cx="140" cy="56" r="9" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
+    <circle cx="200" cy="56" r="9" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
     <g stroke="var(--sl-color-gray-4)" fill="none">
       <path d="M29 56 H 71"/><path d="M89 56 H 131"/><path d="M149 56 H 191"/>
     </g>
     <text x="8" y="106" font-weight="600">Parallel threads</text>
     <text x="8" y="122" fill="var(--sl-color-gray-3)" font-size="11">advanced independently</text>
-    <circle cx="20" cy="146" r="8" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 34%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
-    <circle cx="76" cy="146" r="8" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 34%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
-    <circle cx="132" cy="146" r="8" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 34%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
-    <circle cx="20" cy="180" r="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <circle cx="76" cy="180" r="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <circle cx="132" cy="180" r="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+    <circle cx="20" cy="146" r="8" fill="color-mix(in oklab, var(--app-char-9) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-9)"/>
+    <circle cx="76" cy="146" r="8" fill="color-mix(in oklab, var(--app-char-9) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-9)"/>
+    <circle cx="132" cy="146" r="8" fill="color-mix(in oklab, var(--app-char-9) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-9)"/>
+    <circle cx="20" cy="180" r="8" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
+    <circle cx="76" cy="180" r="8" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
+    <circle cx="132" cy="180" r="8" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
     <g stroke="var(--sl-color-gray-4)" fill="none">
       <path d="M28 146 H 68"/><path d="M84 146 H 124"/>
       <path d="M28 180 H 68"/><path d="M84 180 H 124"/>
     </g>
     <text x="350" y="16" font-weight="600">Interwoven</text>
     <text x="350" y="32" fill="var(--sl-color-gray-3)" font-size="11">a beat in one opens a beat in another</text>
-    <circle cx="362" cy="70" r="8" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 34%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
-    <circle cx="438" cy="70" r="8" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 34%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
-    <circle cx="514" cy="70" r="8" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 34%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
-    <circle cx="362" cy="150" r="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <circle cx="438" cy="150" r="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <circle cx="514" cy="150" r="8" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 30%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
+    <circle cx="362" cy="70" r="8" fill="color-mix(in oklab, var(--app-char-9) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-9)"/>
+    <circle cx="438" cy="70" r="8" fill="color-mix(in oklab, var(--app-char-9) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-9)"/>
+    <circle cx="514" cy="70" r="8" fill="color-mix(in oklab, var(--app-char-9) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-9)"/>
+    <circle cx="362" cy="150" r="8" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
+    <circle cx="438" cy="150" r="8" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
+    <circle cx="514" cy="150" r="8" fill="color-mix(in oklab, var(--app-char-2) 22%, var(--sl-color-bg-sidebar))" stroke="var(--app-char-2)"/>
     <g stroke="var(--sl-color-gray-4)" fill="none">
       <path d="M370 70 H 430"/><path d="M446 70 H 506"/>
       <path d="M370 150 H 430"/><path d="M446 150 H 506"/>
     </g>
-    <g stroke="var(--sy-amber,#c8902f)" fill="none" stroke-dasharray="4 3">
+    <g stroke="var(--sl-color-gray-3)" fill="none" stroke-dasharray="4 3">
       <path d="M438 78 V 142"/><path d="M514 142 V 78"/>
     </g>
     <text x="350" y="190" fill="var(--sl-color-gray-3)" font-size="11">dashed: one thread changing what the other can reach</text>

@@ -1,53 +1,27 @@
 /* Storylet Studio landing page (the marketing home: a standalone Astro page, NOT the docs
- * chrome). Light-only by design. Brand colours come from the shared tokens in storylets.css
- * (--sy-plum / --sy-plum-mid / --sy-plum-tint / --sy-amber / --sy-ink); the neutral scale is
- * declared once here and is Storyletter's own default light theme, Chambray. See
- * storylets.css's header for why.
+ * chrome). Light-only by design. The colours are the family palette (src/chrome/palette.css,
+ * generated from patterkit/site-chrome out of app-shell's palette): the same white page,
+ * hairlines and blue pencil as Storyletter's Light, named here for what the landing does with
+ * them. The header and footer are the shared chrome, and their colours are in palette.css too.
  *
  * What this sheet does not do, on purpose: nothing is rotated, nothing glows, nothing is a
- * gradient, nothing lifts on hover (colour change only), nothing fades in on scroll, and
- * monospace is for code, file names and the rules on the card faces, never for labels.
- * Every text colour below was checked against the Chambray ground at AA (4.5:1) or better.
+ * gradient, nothing lifts on hover (colour change only), nothing fades in on scroll, no section
+ * is a band of its own colour (whitespace separates them), and monospace is for code, file names
+ * and the rules on the card faces, never for labels.
  */
 
 .sy-landing {
-  /* The light-only neutral scale, from the brand palette. */
-  --l-page: #e6eaef;          /* Chambray --bg: the page ground (also the docs' ground) */
-  --l-paper: #eef1f5;         /* section tint */
-  --l-paper-2: #f7f9fb;       /* the card faces in the deck picture */
-  --l-ink: #161e28;           /* Chambray --ink: headings; 13.9:1 on the ground */
-  --l-ink-2: #1e2733;         /* strong body ink; 12.5:1 */
-  --l-body: #38465a;          /* body text; 7.9:1 */
-  --l-muted: #4d5b6b;         /* Chambray --muted; 5.8:1, the lightest text on the ground */
-  --l-hair: #d5dde6;          /* hairline */
-  --l-hair-3: #c6ceda;        /* Chambray --line: a stronger hairline */
-  --l-cta-ink: #ffffff;       /* on plum, 13.5:1 */
-
-  /* The header and the footer are the shared chrome (src/chrome/chrome.css, generated from
-     patterkit/site-chrome). These are the values it reads: the page's hairline and inks for the
-     header, the plum-deep ground and its four inks for the footer, and the seven the sign-up
-     field needs on that ground. */
-  --chrome-land-rule: var(--l-hair);
-  --chrome-land-wordmark-ink: var(--l-ink);
-  --chrome-land-nav-ink: var(--l-body);
-  --chrome-land-nav-hover: var(--sy-plum);
-  --chrome-land-btn-ink: var(--sy-plum);
-  --chrome-land-btn-hover: #e7e0ef;
-
-  --chrome-foot-bg: #1c1429;
-  --chrome-foot-ink: #b3a5c9;
-  --chrome-foot-rule: #2e2340;
-  --chrome-foot-brand-ink: #f3ede2;
-  --chrome-foot-link: #d9d0e8;
-  --chrome-foot-link-hover: #ffffff;
-
-  --chrome-nl-text: #9d8fb8;
-  --chrome-nl-strong: #f3ede2;
-  --chrome-nl-field: #251b35;
-  --chrome-nl-field-ink: #f3ede2;
-  --chrome-nl-hair: #392b4f;
-  --chrome-nl-hair-strong: #574372;
-  --chrome-nl-accent: #e0b463;
+  --l-page: var(--app-card);        /* page ground: white */
+  --l-paper-2: var(--app-card);     /* the card faces in the deck picture */
+  --l-ground: var(--app-bg);        /* the canvas under the flow half: the desk */
+  --l-ink: var(--app-ink);          /* headings */
+  --l-ink-2: var(--app-ink);        /* strong body ink */
+  --l-body: var(--app-ink-read);    /* body text */
+  --l-muted: var(--app-muted);      /* muted text */
+  --l-hair: var(--app-line);        /* hairline */
+  --l-rule: var(--app-warn);        /* a card's rule and an edge that fails: Storyletter's amber */
+  --l-accent: var(--app-accent);
+  --l-accent-deep: color-mix(in oklab, var(--app-accent) 85%, var(--app-ink)); /* hover */
 
   color: var(--l-ink-2);
   background: var(--l-page);
@@ -55,42 +29,43 @@
   -webkit-font-smoothing: antialiased;
 }
 .sy-landing *, .sy-landing *::before, .sy-landing *::after { box-sizing: border-box; }
-.sy-landing ::selection { background: color-mix(in srgb, var(--sy-amber) 26%, transparent); }
+.sy-landing ::selection { background: var(--app-accent-soft); }
 
 .sy-wrap { max-width: 1120px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }
 
 /* ---- Type ------------------------------------------------------------------- */
-/* One display weight on the whole site: Newsreader 600, the same as the docs' H1. */
+/* The serif, light and large: 400 for the opening line, 450 for a section (the October 2026
+   review, 6-sites.md section 2). */
 .sy-h1 {
-  font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 600;
-  font-size: clamp(2.1rem, 4vw, 3rem); line-height: 1.12; letter-spacing: -0.01em;
+  font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 400;
+  font-size: clamp(2.5rem, 5vw, 3.75rem); line-height: 1.06; letter-spacing: -0.02em;
   color: var(--l-ink); margin: 0; text-wrap: balance;
 }
 .sy-h2 {
-  font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 600;
-  font-size: 1.7rem; line-height: 1.2; letter-spacing: -0.01em; color: var(--l-ink); margin: 0;
+  font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 450;
+  font-size: 2rem; line-height: 1.15; letter-spacing: -0.015em; color: var(--l-ink); margin: 0;
 }
 .sy-landing p { margin: 0; }
-.sy-landing section p a { color: var(--sy-plum); text-decoration: underline; text-underline-offset: 0.15em; }
-.sy-landing section p a:hover { color: var(--sy-plum-mid); }
+.sy-landing section p a { color: var(--l-accent); text-decoration: underline; text-underline-offset: 0.15em; }
+.sy-landing section p a:hover { color: var(--l-accent-deep); }
 .sy-landing code {
-  font-family: var(--sl-font-mono); font-size: 0.92em; color: var(--sy-plum);
-  background: #e7e0ef; padding: 1px 5px; border-radius: 4px;
+  font-family: var(--sl-font-mono); font-size: 0.92em; color: var(--l-ink);
+  background: var(--l-ground); padding: 1px 5px; border-radius: 4px;
 }
 
 /* ---- Buttons and links ----------------------------------------------------- */
 /* Controls have edges: the bordered shape is `.chrome-btn` from the shared chrome, and the
-   primary is that shape with plum filled in. Hover changes colour and nothing else. */
-.sy-btn-primary { background: var(--sy-plum); color: var(--l-cta-ink); border-color: var(--sy-plum); }
-.sy-btn-primary:hover { background: var(--sy-plum-mid); border-color: var(--sy-plum-mid); color: var(--l-cta-ink); }
+   primary is that shape with the accent filled in. Hover changes colour and nothing else. */
+.sy-btn-primary { background: var(--l-accent); color: var(--app-on-accent); border-color: var(--l-accent); }
+.sy-btn-primary:hover { background: var(--l-accent-deep); border-color: var(--l-accent-deep); color: var(--app-on-accent); }
 .sy-link {
-  color: var(--sy-plum); font-weight: 500; font-size: 15px;
+  color: var(--l-accent); font-weight: 500; font-size: 15px;
   text-decoration: underline; text-underline-offset: 0.2em; text-decoration-thickness: 1px;
 }
-.sy-link:hover { color: var(--sy-plum-mid); }
+.sy-link:hover { color: var(--l-accent-deep); }
 
 /* ---- Opening ---------------------------------------------------------------- */
-.sy-open-grid { display: grid; grid-template-columns: 1fr 1.05fr; gap: 56px; align-items: center; padding-top: 72px; padding-bottom: 72px; }
+.sy-open-grid { display: grid; grid-template-columns: 1fr 1.05fr; gap: 56px; align-items: center; padding-top: 72px; padding-bottom: 0; }
 .sy-lead { font-size: 17.5px; line-height: 1.6; color: var(--l-body); max-width: 34em; margin: 22px 0 0; }
 .sy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; margin-top: 28px; }
 .sy-open-copy p.sy-note { font-size: 14.5px; color: var(--l-muted); margin: 32px 0 0; } /* outranks the copy column's paragraph reset */
@@ -99,33 +74,32 @@
    tool derived bottom-right. Two <g> elements clipped to complementary triangles, so the seam
    is exact and neither half can drift from the other. Static; it is a drawing, not a demo. */
 .sy-deck { margin: 0; min-width: 0; }
-.sy-both { display: block; width: 100%; height: auto; background-color: #f9fbfc; border: 1px solid var(--l-hair-3); border-radius: 6px; }
+.sy-both { display: block; width: 100%; height: auto; background-color: var(--l-paper-2); border: 1px solid var(--l-hair); border-radius: 8px; }
 .sy-deck-caption { margin: 12px 0 0; font-size: 14px; line-height: 1.5; color: var(--l-muted); max-width: 40em; }
 
 /* the card faces */
-.sy-flow-ground { fill: #eaeef3; }
-.sy-gc rect { fill: var(--l-paper-2); stroke: var(--l-hair-3); stroke-width: 1.5; }
+.sy-flow-ground { fill: var(--l-ground); }
+.sy-gc rect { fill: var(--l-paper-2); stroke: var(--l-hair); stroke-width: 1; }
 .sy-gc-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 12.5px; fill: var(--l-ink); }
 /* The rule on a card is code-like content, so it keeps the mono. */
-.sy-gc-r { font-family: var(--sl-font-mono); font-size: 10px; fill: #7a5510; }
+.sy-gc-r { font-family: var(--sl-font-mono); font-size: 10px; fill: var(--l-rule); }
 
 /* the same cards as a flow */
-.sy-fn rect { fill: var(--l-paper-2); stroke: var(--l-hair-3); stroke-width: 1.5; }
-.sy-fn-sel rect { stroke: var(--sy-plum-tint); stroke-width: 2; }
+.sy-fn rect { fill: var(--l-paper-2); stroke: var(--l-hair); stroke-width: 1; }
+.sy-fn-sel rect { stroke: var(--l-accent); stroke-width: 1.5; }
 .sy-fn-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 14px; fill: var(--l-ink); }
 .sy-fe path { fill: none; stroke-width: 1.75; }
 .sy-fe text { font-family: var(--sl-font, "Inter", sans-serif); font-weight: 500; font-size: 10.5px; text-anchor: middle; }
-.sy-fe-on path { stroke: var(--sy-plum-tint); }
-.sy-fe-on text { fill: var(--sy-plum-mid); }
-.sy-fe-off path { stroke: var(--sy-amber); }
-.sy-fe-off text { fill: #7a5510; }
+.sy-fe-on path { stroke: var(--l-accent); }
+.sy-fe-on text { fill: var(--l-accent); }
+.sy-fe-off path { stroke: var(--l-rule); }
+.sy-fe-off text { fill: var(--l-rule); }
 
 /* the cut */
-.sy-seam { fill: none; stroke: var(--sy-plum-tint); stroke-width: 1.25; stroke-dasharray: 5 5; opacity: 0.75; }
+.sy-seam { fill: none; stroke: var(--l-muted); stroke-width: 1; stroke-dasharray: 5 5; opacity: 0.6; }
 
 /* ---- Where you'd use it ------------------------------------------------------ */
-.sy-uses { border-top: 1px solid var(--l-hair); }
-.sy-uses .sy-wrap { padding-top: 56px; padding-bottom: 56px; }
+.sy-uses .sy-wrap { padding-top: 96px; }
 .sy-uses-lead { margin: 14px 0 0; font-size: 16.5px; line-height: 1.55; color: var(--l-body); max-width: 44em; }
 /* A plain list: the browser's own bullets, two columns where there is room. */
 .sy-uses-list {
@@ -133,26 +107,25 @@
   font-size: 15.5px; line-height: 1.5; color: var(--l-body);
 }
 .sy-uses-list li { break-inside: avoid; margin: 0 0 8px; padding-right: 8px; }
-.sy-uses-list a { color: var(--sy-plum); }
+.sy-uses-list a { color: var(--l-accent); }
 
 /* ---- The Board -------------------------------------------------------------- */
-.sy-board { border-top: 1px solid var(--l-hair); background: var(--l-paper); }
-.sy-board-grid { display: grid; grid-template-columns: 0.42fr 1fr; gap: 48px; align-items: start; padding-top: 56px; padding-bottom: 64px; }
+/* The copy, then the screenshot at the full width under it, big enough to read. */
+.sy-board-grid { display: grid; grid-template-columns: 1fr; gap: 32px; padding-top: 96px; }
+.sy-board-copy { max-width: 40em; }
 .sy-board-copy p { margin: 14px 0 0; font-size: 16px; line-height: 1.6; color: var(--l-body); }
-/* The real screenshot, square and unframed. Its dark ground is its own edge. */
-.sy-board-shot { display: block; width: 100%; height: auto; min-width: 0; }
+/* The real screenshot, square and unframed but for a hairline, so its white page keeps an edge. */
+.sy-board-shot { display: block; width: 100%; height: auto; min-width: 0; border: 1px solid var(--l-hair); }
 
 /* ---- The tools -------------------------------------------------------------- */
-.sy-tools { border-top: 1px solid var(--l-hair); }
-.sy-tools-inner { padding-top: 56px; padding-bottom: 56px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
+.sy-tools-inner { padding-top: 96px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
 .sy-tool p { margin: 12px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--l-body); }
 .sy-engines { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px 28px; }
-.sy-engines li { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--l-ink); }
+.sy-engines li { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 400; color: var(--l-ink); }
 .sy-engines img { display: block; width: 30px; height: 30px; border-radius: 6px; }
 
 /* ---- Downloads -------------------------------------------------------------- */
-.sy-downloads { border-top: 1px solid var(--l-hair); background: var(--l-paper); }
-.sy-downloads-inner { padding-top: 56px; padding-bottom: 64px; max-width: 760px; margin-left: auto; margin-right: auto; }
+.sy-downloads-inner { padding-top: 96px; max-width: 760px; margin-left: auto; margin-right: auto; }
 .sy-downloads-inner > p { margin: 14px 0 0; font-size: 16px; line-height: 1.6; color: var(--l-body); }
 /* The Downloads component sits on Starlight's light tokens, which storylets.css provides on
    this page too. The list is the shared chrome's; only the top margin is set here. */
@@ -168,5 +141,5 @@
 }
 @media (max-width: 640px) {
   .sy-wrap { padding-left: 20px; padding-right: 20px; }
-  .sy-open-grid { padding-top: 44px; padding-bottom: 48px; }
+  .sy-open-grid { padding-top: 44px; }
 }
