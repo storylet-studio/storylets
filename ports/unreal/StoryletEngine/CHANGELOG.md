@@ -123,6 +123,14 @@
 
 ### Fixed
 
+- **A refitting load keeps "none chosen".** When a game loads the shared registry itself with refit on
+  (`Registry.load(Blob, false, true)`), as a game that also runs Patterplay may, a saved `""` on an enum whose own
+  default is `""` (none chosen) now comes back as saved, instead of being reported as a misfit that never happened.
+  It's the rule a host write already follows. That covers every Storylet Engine declaration in the registry: `@world`
+  and any other game scope, `@story`, and each box's, deck's, hand's and value's own properties. Any other enum still
+  refits `""`. The engine's own loads don't refit, so a game on the Storylet Engine alone sees no change. The registry
+  corpus checks it in every runtime.
+
 - **A host write that doesn't fit its declaration is refused.** `SetProperty` on an engine or a flow
   refuses a string for a number, a value an enum or quality doesn't list, a flag a flags property
   doesn't, or an undeclared `@world` name, saying what the property takes, and leaves the value

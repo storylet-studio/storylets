@@ -93,6 +93,14 @@ the same version number always means the same runtime behaviour.
 
 ### Fixed
 
+- **A refitting load keeps "none chosen".** When a game loads the shared registry itself with refit on
+  (`registry.load(blob, {"refit": true})`), as a game that also runs Patterplay may, a saved `""` on an enum whose own
+  default is `""` (none chosen) now comes back as saved, instead of being reported as a misfit that never happened.
+  It's the rule a host write already follows. That covers every Storylet Engine declaration in the registry: `@world`
+  and any other game scope, `@story`, and each box's, deck's, hand's and value's own properties. Any other enum still
+  refits `""`. The engine's own loads don't refit, so a game on the Storylet Engine alone sees no change. The registry
+  corpus checks it in every runtime.
+
 - **What a game is handed is its own.** A dealt card's fields, an outcome's, and a field's structured default are
   copies: a game that changed one used to change it in the bundle for every later deal, in every engine on that
   bundle. Extension values are the exception, as in Patter: they're the extension's own data, handed out uncopied and

@@ -160,7 +160,7 @@ namespace StoryletStudio.CombinedProof
             var file = new JObject
             {
                 ["registry"] = _saver.SaveRegistry(g.Registry),
-                ["patter"] = P.PatterSave.Envelope(g.Patter.SaveGame()),
+                ["patter"] = P.PatterSave.SaveState(g.Patter),
                 ["storylets"] = S.StoryletSave.ToJson(g.Storylets.SaveGame()),
             }.ToString(Formatting.None);
             return JObject.Parse(file);

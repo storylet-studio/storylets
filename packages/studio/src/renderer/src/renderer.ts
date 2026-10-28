@@ -77,7 +77,7 @@ import { listenMenuKey } from "./menu-key.js";
 import { createProjectSettings } from "./project-settings.js";
 import { setSettingsOpener } from "./solo-pointer.js";
 import { setPlayRung } from "./play-ladder.js";
-import { setGameScopes, setPropertyNavigator } from "./expr-panels.js";
+import { setCardChoices, setGameScopes, setPropertyNavigator } from "./expr-panels.js";
 import { askLeave, settleLeave } from "./server-dialog.js";
 import { flash, flashError, ok } from "./results.js";
 import { INITIAL_STATE, remember } from "./session.js";
@@ -442,6 +442,7 @@ function applyResult(result: OpenResult): void {
   // The game's shared scopes folder, for the expression editors' dialect: seeded on every
   // result, since sharing the project's scopes comes back through here.
   setGameScopes(result.project.gameScopes, result.project.hostTokens);
+  setCardChoices(result.project);
   // The lead carries the unpushed count, and every write moves it: redrawn here
   // rather than only on a full workspace render, which a keystroke does not do.
   renderProjectLead();

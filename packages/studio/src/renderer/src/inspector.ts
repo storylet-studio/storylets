@@ -1334,9 +1334,11 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   mountChanges(changeHost, { changes: o.changes, properties: catalogue, onChange: (c) => { o.changes = c; save(); } });
   // B11: the hint named the restriction without explaining it, so an author who
   // wanted "add one to gold" learned the rule inside the expression editor -
-  // while debugging, which is the worst place to meet it. The idiom is the
-  // second half of the sentence the hint was already starting.
-  body.append(bare("Changes", "what it sets (a change replaces the value, so add one with @story.gold + 1)", changeHost));
+  // while debugging, which is the worst place to meet it. It used to give the
+  // idiom as an expression, which the value box's number field refused (the
+  // hands-on review, 2026-10); the box now leads with Change by, so the hint
+  // names that instead.
+  body.append(bare("Changes", "what it sets (a change replaces the value; to add to a number, pick it and use Change by)", changeHost));
 
   body.append(el("button", { className: "btn insp-del small outcome-remove", text: "Remove outcome", onClick: remove }));
   return body;

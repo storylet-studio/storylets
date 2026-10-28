@@ -6,10 +6,10 @@
 // ---------------------------------------------------------------------------
 
 import { mountEffectsEditor, mountExpressionEditor, renderConditionPreview, renderEffectsPreview } from "@wildwinter/expr-editor";
-import type { EditorEffect, EffectsEditorHandle, ExpressionEditorHandle } from "@wildwinter/expr-editor";
+import type { EditorEffect, EffectsEditorHandle, ExpressionEditorHandle, StringArgChoices } from "@wildwinter/expr-editor";
 import type { Dialect } from "@wildwinter/expr";
 import { storyletsDialect, storyletsDialectWith, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
-import type { ConditionProperty, GameScopesDto, HostTokensDto } from "../../shared/api.js";
+import type { ConditionProperty, GameScopesDto, HostTokensDto, ProjectDto } from "../../shared/api.js";
 import { catalogueFrom, schemaFrom, SCOPE_ORDER, storyletFunctions } from "./expr-shared.js";
 
 /**
@@ -43,6 +43,20 @@ export function setGameScopes(scopes: GameScopesDto | undefined, hosts?: HostTok
   };
 }
 
+/**
+ * The project's cards, offered for the card a `count_played("...")` or
+ * `turns_since_played("...")` names: picked by title, written as the Game ID
+ * (the hands-on review, 2026-10: there was no picker, so the author typed a
+ * Game ID from memory). Registered with the project, like the scopes above.
+ */
+let cardChoices: StringArgChoices = {};
+export function setCardChoices(project: ProjectDto | undefined): void {
+  const cards = (project?.boxes ?? []).flatMap((b) => b.decks.flatMap((d) => d.cards))
+    .map((c) => ({ value: c.gameId, ...(c.title ? { label: c.title } : {}) }));
+  const list = { choices: cards, placeholder: "pick a card…" };
+  cardChoices = cards.length > 0 ? { count_played: list, turns_since_played: list } : {};
+}
+
 /** A dialect-aware, non-interactive pill strip for a condition (read-only surfaces). */
 export function previewCondition(src: string, properties: ConditionProperty[]): HTMLElement {
   return renderConditionPreview(src, {
@@ -52,6 +66,7 @@ export function previewCondition(src: string, properties: ConditionProperty[]): 
     scopeOrder: SCOPE_ORDER,
     // Another engine's scope (`@patter.visits`) is that engine's to check: an ordinary pill.
     otherEngineScopes: shared.otherEngineScopes,
+    stringArgChoices: cardChoices,
   });
 }
 
@@ -91,6 +106,7 @@ export function mountCondition(host: HTMLElement, opts: {
     nullLabel: "always",
     onChange: opts.onChange,
     propertyActions,
+    stringArgChoices: cardChoices,
   });
 }
 
@@ -115,5 +131,6 @@ export function mountChanges(host: HTMLElement, opts: {
       next.flatMap((e) => (e.kind === "set" ? [{ target: e.target, value: e.value }] : [])),
     ),
     propertyActions,
+    stringArgChoices: cardChoices,
   });
 }

@@ -17,7 +17,7 @@ import { askMapUpgrade, upgradeReport } from "./map-upgrade-dialog.js";
 import { resetDocTabMemory } from "./inspector.js";
 import { setCameFrom } from "./views.js";
 import { setPlayRung } from "./play-ladder.js";
-import { setGameScopes } from "./expr-panels.js";
+import { setCardChoices, setGameScopes } from "./expr-panels.js";
 import { flash, ok } from "./results.js";
 import { placeUsable } from "./navigation.js";
 import { EXAMPLE_KITS, PROJECT_KITS, openNewProject } from "./kits.js";
@@ -201,6 +201,7 @@ export function createLifecycle(ctx: LifecycleContext) {
     setBoxColours(result.project.boxes);
     session.remote = result.remote;
     setGameScopes(result.project.gameScopes, result.project.hostTokens);
+    setCardChoices(result.project);
     setPlayRung(result.project.play);
     problems.reset(result.problems);
     ctx.liveLink(true);   // Live Link: the control is available once a project is open

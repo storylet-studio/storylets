@@ -12,6 +12,12 @@ here is part of shipping, not a courtesy.
 
 ### Added
 
+- **Change by.** Setting a number property in an outcome's Changes now offers ＋ add or － take away and a
+  "by" field, so adding 1 to reputation is a few clicks instead of building `reputation + 1` term by term. The
+  Set it to row still sets a plain number, and says why when it's given something else.
+- **Pick a card for count_played.** A condition that asks how often a card was played (`count_played`,
+  `turns_since_played`) picks the card from a searchable list of the project's cards by title, and the
+  condition shows the title. It used to want the card's Game ID typed from memory.
 - **Weight, In one hand, and Across hands, in place of Copies.** A card's Dealing tab sets how often it comes up
   beside cards of equal rank, how many slots of one hand it can fill (a pickup that comes up three times), and
   whether several hands can offer it at once. `storyletengine format` moves an old Copies across.
