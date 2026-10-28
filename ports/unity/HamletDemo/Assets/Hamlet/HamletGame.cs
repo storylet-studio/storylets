@@ -243,6 +243,6 @@ namespace StoryletStudio.Hamlet
             return true;
         }
 
-        public string WorldLine() => string.Join(" · ", World.Values.Select(kv => kv.Value is bool b ? (b ? kv.Key : null) : kv.Value?.ToString()).Where(s => !string.IsNullOrEmpty(s)));
+        public string WorldLine() => string.Join(", ", World.Values.Select(kv => kv.Value is bool b ? (b ? kv.Key : null) : kv.Value?.ToString()).Where(s => !string.IsNullOrEmpty(s)));
     }
 }

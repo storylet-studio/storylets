@@ -247,4 +247,4 @@ func world_line() -> String:
 		var v = world[k]
 		if v is bool: (parts.append(k) if v else null)
 		else: parts.append(str(v))
-	return " · ".join(parts)
+	return ", ".join(parts)

@@ -267,7 +267,7 @@ function fromEnvelope(p) {
 function render() {
     // The whole shared @world, as one line: what BOTH engines currently see.
     $("clock").textContent = Object.entries(world.save())
-        .map(([k, v]) => (typeof v === "boolean" ? (v ? k : "") : String(v))).filter(Boolean).join(" · ");
+        .map(([k, v]) => (typeof v === "boolean" ? (v ? k : "") : String(v))).filter(Boolean).join(", ");
     $("places").replaceChildren(...places.map((p) => {
         const b = document.createElement("button");
         b.textContent = p.title;

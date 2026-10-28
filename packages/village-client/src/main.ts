@@ -106,7 +106,7 @@ async function start(): Promise<void> {
   // authored name is not compiled in even at `metadata: full`. So the game's
   // title is the game's own, as a shipped game's title always is.
   const about = describeBundle(bundle);
-  $("build").textContent = `v${about.identity.version} · ${about.identity.hash} · ${about.hands.length} places`;
+  $("build").textContent = `v${about.identity.version} (${about.identity.hash}), ${about.hands.length} places`;
 
   world = mountMap($("map"), maps, go);
 

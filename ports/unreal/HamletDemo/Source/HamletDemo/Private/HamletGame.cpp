@@ -38,7 +38,7 @@ FString FHamletWorld::Line() const
 		if (v.Kind == EStoryletValueKind::Boolean) { if (v.bBool) Parts.Add(Name); }
 		else Parts.Add(v.Display);
 	}
-	return FString::Join(Parts, TEXT(" · "));
+	return FString::Join(Parts, TEXT(", "));
 }
 
 // --- setup ------------------------------------------------------------------

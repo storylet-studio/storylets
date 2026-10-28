@@ -116,7 +116,7 @@ describe("the Village client", () => {
     expect(art.length).toBeGreaterThan(0);
     expect(art.every((h) => h!.startsWith("assets/"))).toBe(true);
     // And the bundle says which build this is, which is what a bug report needs.
-    expect(text(doc, "#build")).toMatch(/^v\d+\.\d+\.\d+ · \w+ · 13 places$/);
+    expect(text(doc, "#build")).toMatch(/^v\d+\.\d+\.\d+ \(\w+\), 13 places$/);
   });
 
   it("plays from a double-click, where the browser refuses every fetch", async () => {

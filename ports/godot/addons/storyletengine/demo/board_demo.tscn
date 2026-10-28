@@ -27,7 +27,7 @@ theme_override_constants/separation = 10
 
 [node name="Header" type="Label" parent="Layout"]
 layout_mode = 2
-text = "Storylet Engine · The Board"
+text = "Storylet Engine: The Board"
 
 [node name="BoardScroll" type="ScrollContainer" parent="Layout"]
 layout_mode = 2
