@@ -1,5 +1,5 @@
 {
-  "version": 21,
+  "version": 24,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -8286,131 +8286,6 @@
             "take",
             "leave"
           ]
-        },
-        {
-          "op": "scribble",
-          "from": "h_q"
-        },
-        {
-          "op": "assertCardExtensions",
-          "from": "h_q",
-          "expect": {
-            "c_full": {
-              "other": {
-                "flag": true
-              },
-              "probe": {
-                "act": "turn",
-                "beats": [
-                  {
-                    "at": 3,
-                    "id": "b2"
-                  },
-                  {
-                    "at": 1,
-                    "id": "b1"
-                  }
-                ],
-                "body": "First line.\nSecond line.",
-                "cue": {
-                  "gain": 0.5,
-                  "sound": "bell"
-                },
-                "loud": true,
-                "marks": [
-                  "night",
-                  "rain"
-                ],
-                "next": "c_default",
-                "note": "lights down",
-                "perf": {
-                  "v_docks": "frown",
-                  "v_market": "smile"
-                },
-                "tone": "tense",
-                "weight": 4,
-                "words": [
-                  "salt",
-                  "rope"
-                ]
-              }
-            },
-            "c_default": {
-              "probe": {
-                "act": "setup",
-                "weight": 1
-              }
-            },
-            "c_bare": {}
-          }
-        },
-        {
-          "op": "assertOutcomeExtensions",
-          "card": "c_full",
-          "from": "h_q",
-          "expect": {
-            "take": {
-              "probe": {
-                "line": "Taken."
-              }
-            },
-            "leave": {}
-          }
-        },
-        {
-          "op": "assertBoxExtensions",
-          "expect": {
-            "box": {
-              "probe": {
-                "theme": "harbour"
-              }
-            }
-          }
-        },
-        {
-          "op": "assertNodeExtensions",
-          "kind": "card",
-          "address": "full",
-          "expect": {
-            "other": {
-              "flag": true
-            },
-            "probe": {
-              "act": "turn",
-              "beats": [
-                {
-                  "at": 3,
-                  "id": "b2"
-                },
-                {
-                  "at": 1,
-                  "id": "b1"
-                }
-              ],
-              "body": "First line.\nSecond line.",
-              "cue": {
-                "gain": 0.5,
-                "sound": "bell"
-              },
-              "loud": true,
-              "marks": [
-                "night",
-                "rain"
-              ],
-              "next": "c_default",
-              "note": "lights down",
-              "perf": {
-                "v_docks": "frown",
-                "v_market": "smile"
-              },
-              "tone": "tense",
-              "weight": 4,
-              "words": [
-                "salt",
-                "rope"
-              ]
-            }
-          }
         }
       ]
     },
@@ -12310,6 +12185,1089 @@
               "c_any",
               "c_war"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a second host scope, @player, is self-backed from its defaults, read in a condition, written by an outcome, and saved",
+      "bundle": {
+        "schema": "storylets/bundle@2",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "scopeRegistry": {
+          "version": 1,
+          "scopes": [
+            {
+              "token": "world",
+              "declarations": [
+                {
+                  "name": "alarm",
+                  "type": "number",
+                  "default": 0
+                }
+              ]
+            },
+            {
+              "token": "player",
+              "declarations": [
+                {
+                  "name": "hp",
+                  "type": "number",
+                  "default": 10
+                },
+                {
+                  "name": "rank",
+                  "type": "quality",
+                  "stages": [
+                    "novice",
+                    "adept"
+                  ],
+                  "default": "novice"
+                }
+              ]
+            }
+          ]
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_adept",
+                    "gameId": "adept",
+                    "condition": {
+                      "src": "@player.rank >= \"adept\"",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "sv",
+                          "player",
+                          "rank"
+                        ],
+                        [
+                          "s",
+                          "adept"
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_strong",
+                    "gameId": "strong",
+                    "condition": {
+                      "src": "@player.hp > 5",
+                      "ast": [
+                        "bin",
+                        ">",
+                        [
+                          "sv",
+                          "player",
+                          "hp"
+                        ],
+                        [
+                          "n",
+                          5
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_hurt",
+                        "gameId": "hurt",
+                        "changes": {
+                          "@player.hp": {
+                            "src": "@player.hp - 6",
+                            "ast": [
+                              "bin",
+                              "-",
+                              [
+                                "sv",
+                                "player",
+                                "hp"
+                              ],
+                              [
+                                "n",
+                                6
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "c_weak",
+                    "gameId": "weak",
+                    "condition": {
+                      "src": "@player.hp <= 5",
+                      "ast": [
+                        "bin",
+                        "<=",
+                        [
+                          "sv",
+                          "player",
+                          "hp"
+                        ],
+                        [
+                          "n",
+                          5
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_strong"
+            ]
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 10,
+            "player.rank": "novice",
+            "world.alarm": 0
+          }
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "player.hp",
+          "expect": 10
+        },
+        {
+          "op": "play",
+          "card": "c_strong",
+          "outcome": "hurt",
+          "from": "h_q",
+          "expectTrace": [
+            "write @player.hp player.hp"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 4
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_weak"
+            ]
+          }
+        },
+        {
+          "op": "saveLoad"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 4
+          }
+        },
+        {
+          "op": "setState",
+          "host": {
+            "player": {
+              "rank": "adept"
+            }
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_weak",
+              "c_adept"
+            ]
+          }
+        },
+        {
+          "op": "setState",
+          "host": {
+            "player": {
+              "hp": "lots"
+            }
+          },
+          "expectRefused": [
+            "player.hp",
+            "a number"
+          ]
+        },
+        {
+          "op": "setState",
+          "host": {
+            "player": {
+              "mana": 1
+            }
+          },
+          "expectRefused": [
+            "@player.mana"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "@player bound through hostScopes: the game's store is what the story reads and writes",
+      "bundle": {
+        "schema": "storylets/bundle@2",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "scopeRegistry": {
+          "version": 1,
+          "scopes": [
+            {
+              "token": "player",
+              "declarations": [
+                {
+                  "name": "hp",
+                  "type": "number",
+                  "default": 10
+                }
+              ]
+            }
+          ]
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_strong",
+                    "gameId": "strong",
+                    "condition": {
+                      "src": "@player.hp > 5",
+                      "ast": [
+                        "bin",
+                        ">",
+                        [
+                          "sv",
+                          "player",
+                          "hp"
+                        ],
+                        [
+                          "n",
+                          5
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_weak",
+                    "gameId": "weak",
+                    "condition": {
+                      "src": "@player.hp <= 5",
+                      "ast": [
+                        "bin",
+                        "<=",
+                        [
+                          "sv",
+                          "player",
+                          "hp"
+                        ],
+                        [
+                          "n",
+                          5
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_heal",
+                        "gameId": "heal",
+                        "changes": {
+                          "@player.hp": {
+                            "src": "@player.hp + 5",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "player",
+                                "hp"
+                              ],
+                              [
+                                "n",
+                                5
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "hostScopes": {
+        "player": {
+          "hp": 3
+        }
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_weak"
+            ]
+          }
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "player.hp",
+          "expect": 3
+        },
+        {
+          "op": "play",
+          "card": "c_weak",
+          "outcome": "heal",
+          "from": "h_q",
+          "expectTrace": [
+            "write @player.hp player.hp"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 8
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_strong"
+            ]
+          }
+        },
+        {
+          "op": "saveLoad"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 8
+          }
+        },
+        {
+          "op": "setState",
+          "host": {
+            "player": {
+              "hp": 1
+            }
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_weak"
+            ]
+          }
+        },
+        {
+          "op": "setState",
+          "host": {
+            "player": {
+              "hp": true
+            }
+          },
+          "expectRefused": [
+            "player.hp",
+            "a number"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a token the bundle doesn't declare is reported as set-up, naming the declared spelling when only the case differs",
+      "bundle": {
+        "schema": "storylets/bundle@2",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "scopeRegistry": {
+          "version": 1,
+          "scopes": [
+            {
+              "token": "player",
+              "declarations": [
+                {
+                  "name": "hp",
+                  "type": "number",
+                  "default": 10
+                }
+              ]
+            }
+          ]
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_strong",
+                    "gameId": "strong",
+                    "condition": {
+                      "src": "@player.hp > 5",
+                      "ast": [
+                        "bin",
+                        ">",
+                        [
+                          "sv",
+                          "player",
+                          "hp"
+                        ],
+                        [
+                          "n",
+                          5
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_weak",
+                    "gameId": "weak",
+                    "condition": {
+                      "src": "@player.hp <= 5",
+                      "ast": [
+                        "bin",
+                        "<=",
+                        [
+                          "sv",
+                          "player",
+                          "hp"
+                        ],
+                        [
+                          "n",
+                          5
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "hostScopes": {
+        "Player": {
+          "hp": 1
+        },
+        "weather": {}
+      },
+      "expectSetupErrors": [
+        {
+          "node": "Player",
+          "message": "binds \"Player\", which this bundle doesn't declare: it declares \"player\", and a scope's token is case-sensitive"
+        },
+        {
+          "node": "weather",
+          "message": "binds \"weather\", which this bundle doesn't declare"
+        }
+      ],
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_strong"
+            ]
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "an opaque host scope declares no names, so it takes any name and any value",
+      "bundle": {
+        "schema": "storylets/bundle@2",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "scopeRegistry": {
+          "version": 1,
+          "scopes": [
+            {
+              "token": "fx"
+            }
+          ]
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_glow",
+                    "gameId": "glow",
+                    "condition": {
+                      "src": "@fx.glow == 3",
+                      "ast": [
+                        "bin",
+                        "==",
+                        [
+                          "sv",
+                          "fx",
+                          "glow"
+                        ],
+                        [
+                          "n",
+                          3
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_spark",
+                        "gameId": "spark",
+                        "changes": {
+                          "@fx.spark": {
+                            "src": "true",
+                            "ast": [
+                              "b",
+                              true
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "host": {
+            "fx": {
+              "glow": 3,
+              "mood": "anything"
+            }
+          }
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "fx.mood",
+          "expect": "anything"
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_glow"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_glow",
+          "outcome": "spark",
+          "from": "h_q",
+          "expectTrace": [
+            "write @fx.spark fx.spark"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "fx.spark": true,
+            "fx.glow": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "a host scope's own writable: false makes every name read-only to the story unless it says otherwise; the host still may",
+      "bundle": {
+        "schema": "storylets/bundle@2",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "scopeRegistry": {
+          "version": 1,
+          "scopes": [
+            {
+              "token": "player",
+              "writable": false,
+              "declarations": [
+                {
+                  "name": "hp",
+                  "type": "number",
+                  "default": 10
+                },
+                {
+                  "name": "xp",
+                  "type": "number",
+                  "default": 0,
+                  "writable": true
+                }
+              ]
+            }
+          ]
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_hit",
+                    "gameId": "hit",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_hit",
+                        "gameId": "hit",
+                        "changes": {
+                          "@player.hp": {
+                            "src": "@player.hp - 1",
+                            "ast": [
+                              "bin",
+                              "-",
+                              [
+                                "sv",
+                                "player",
+                                "hp"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "c_learn",
+                    "gameId": "learn",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_learn",
+                        "gameId": "learn",
+                        "changes": {
+                          "@player.xp": {
+                            "src": "@player.xp + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "player",
+                                "xp"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_learn",
+              "c_hit"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_hit",
+          "outcome": "hit",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 10
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_learn",
+          "outcome": "learn",
+          "from": "h_q"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.xp": 1
+          }
+        },
+        {
+          "op": "setState",
+          "host": {
+            "player": {
+              "hp": 3
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "player.hp": 3
           }
         }
       ]

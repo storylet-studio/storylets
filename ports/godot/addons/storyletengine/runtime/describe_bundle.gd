@@ -26,6 +26,8 @@ class_name StoryletBundleInspector
 ## The scope kinds a declaration block can belong to. Tag declarations compose
 ## into @hand for any ask that binds the tag (schema 3.6).
 const SCOPE_WORLD := "world"
+## A host scope other than @world (`@player`), its token the "owner".
+const SCOPE_HOST := "host"
 const SCOPE_STORY := "story"
 const SCOPE_BOX := "box"
 const SCOPE_DECK := "deck"
@@ -49,12 +51,19 @@ const SCOPE_TAG := "tag"
 ##              "counts": {"decks", "cards", "hands", "templates", "tagGroups"}}],
 ##   "hands": [{"gameId", "title"?, "box", "slots" (INF = unbounded), "template"?,
 ##              "movable"?: [{"group", "from"}]}],
-##   "properties": [{"scope", "owner", "box"?, "group"?,
+##   "properties": [{"scope", "owner", "opaque"?: true (a host scope that
+##                   declares no names, so takes any), "box"?, "group"?,
 ##                   "properties": [{"name", "type", "default", "values"?,
 ##                                   "durable"? (true only, 4.2), "purpose"?}]}],
 ##   "map"?: {"group", "tags": [gameId], "boxes": [gameId], "zones", "backgrounds",
 ##            "sites": {boxGameId: int}} (absent when the bundle has no project map),
 ## }
+##
+## "properties" lists the host scopes in bundle order (world, and any others
+## such as player, each "host" with its token the "owner"), story, then per
+## box: the box, its decks, its hands, its tags; then the project map's zones,
+## once. World and story always show, so their absence reads as "this bundle
+## declares none" (an undeclared world shows first, empty).
 ##
 ## A zone of the project map is a "tag" scope with "group" and NO "box": it
 ## belongs to none. totals.tagGroups counts the project group once.
@@ -72,12 +81,23 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 	}
 	var boxes: Array = []
 	var hands: Array = []
-	var properties: Array = [
-		{"scope": SCOPE_WORLD, "owner": "",
-			"properties": _summarise(bundle.get("world", {}).get("properties", []))},
-		{"scope": SCOPE_STORY, "owner": "",
-			"properties": _summarise(bundle.get("story", {}).get("properties", []))},
-	]
+	var properties: Array = []
+	var hosts := StoryletBundle.host_scopes(bundle)
+	var has_world := false
+	for h in hosts:
+		has_world = has_world or str(h.get("token", "")) == SCOPE_WORLD
+	if not has_world:
+		properties.append({"scope": SCOPE_WORLD, "owner": "", "properties": []})
+	for h in hosts:
+		var token := str(h.get("token", ""))
+		var row := {"scope": SCOPE_WORLD, "owner": ""} if token == SCOPE_WORLD else {"scope": SCOPE_HOST, "owner": token}
+		var decls = h.get("declarations")
+		if not (decls is Array):
+			row["opaque"] = true
+		row["properties"] = _summarise(decls if decls is Array else [])
+		properties.append(row)
+	properties.append({"scope": SCOPE_STORY, "owner": "",
+		"properties": _summarise(bundle.get("story", {}).get("properties", []))})
 
 	for box in bundle.get("boxes", []):
 		var box_game_id := StoryletBundle.effective_game_id(box)

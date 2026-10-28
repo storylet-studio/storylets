@@ -17,6 +17,8 @@ export type {
 } from "./project.js";
 export {
   STORYLETS_OWNER, STORYLETS_SCOPES_FILE, STORYLETS_TOKEN, fromScopeDeclaration, gameTokens, sameDeclarations,
-  scopesFilePath, sharedWorld, storyletsScopesFile, toScopeDeclaration, worldDeclarations,
+  hostScopeDeclarations, projectHostScopes, scopesFilePath, sharedHostScope, sharedWorld, storyletsScopesFile, toScopeDeclaration,
+  worldDeclarations,
 } from "./game-scopes.js";
+export type { ProjectHostScope } from "./game-scopes.js";
 export { boxMapOf, usesProjectMap } from "./project.js";

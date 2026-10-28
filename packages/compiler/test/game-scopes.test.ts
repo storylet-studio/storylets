@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
+import { hostScopeDecls } from "@storylet-studio/model";
 import { mergeScopes, parseScopesFile } from "@wildwinter/scoperegistry/scopes";
 import type { ScopesFile } from "@wildwinter/scoperegistry/scopes";
 import { storyletsDialectWith, storyletsDialect } from "@storylet-studio/dialect";
@@ -163,7 +164,7 @@ describe("@world from game.scopes.json (decision 2)", () => {
   it("the shared declarations are the bundle's world and what conditions are checked against", () => {
     const result = compileProject(withScopes(project("@world.is_night", {}, SYNCED_WORLD)));
     expect(result.issues).toEqual([]);
-    expect(result.bundle!.world.properties).toEqual([
+    expect(hostScopeDecls(result.bundle!, "world")).toEqual([
       { name: "is_night", type: "boolean", default: false },
       { name: "clock", type: "number", default: 0, writable: false },
     ]);
@@ -176,7 +177,7 @@ describe("@world from game.scopes.json (decision 2)", () => {
     expect(warnings(result.issues)).toEqual([
       "the project's @world declarations differ from ../game-scopes/game.scopes.json, which wins: save the project in Storyletter to bring its copy up to date",
     ]);
-    expect(result.bundle!.world.properties.map((d) => d.name)).toEqual(["is_night", "clock"]);
+    expect(hostScopeDecls(result.bundle!, "world").map((d) => d.name)).toEqual(["is_night", "clock"]);
     // A name only the stale copy has is not @world any more.
     expect(errors(compileProject(withScopes(project("@world.is_day", {}, stale))).issues).length).toBeGreaterThan(0);
   });

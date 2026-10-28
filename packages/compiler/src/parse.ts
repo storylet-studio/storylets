@@ -310,6 +310,7 @@ function foldCaseOnlyPropertyNames(project: SourceProject): void {
   };
   fold(project.project.story?.properties);
   fold(project.project.world?.properties);
+  for (const scope of project.project.scopeRegistry?.scopes ?? []) fold(scope.declarations as PropertyDecl[] | undefined);
   for (const box of project.boxes) {
     fold(box.box.box.properties);
     for (const group of box.tags.groups) for (const tag of group.tags) fold(tag.properties);

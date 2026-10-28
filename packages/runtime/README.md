@@ -21,7 +21,8 @@ PRNG is involved (mulberry32, `src/prng.ts`).
 Every property value lives in a `ScopeRegistry` (`@wildwinter/scoperegistry`), one per
 game. Pass the game's as `new Engine(bundle, { registry })` to share it with any other engine
 (Patter, say): the engine registers `@story` under `story` and every other bag under a key
-starting `storylets/`, `@world` is the game's to register, and `saveGame()` leaves the values
-to the game, which saves the registry once. Without one the engine makes its own registry, self-backs
-`@world`, and `saveGame()` carries every value, so one call is still the whole run. Version 1
+starting `storylets/`, the host scopes the bundle declares (`@world`, `@player`, ...) are the game's
+to register, and `saveGame()` leaves the values to the game, which saves the registry once. Without
+one the engine makes its own registry, self-backs every host scope you don't bind through
+`hostScopes`, and `saveGame()` carries every value, so one call is still the whole run. Version 1
 envelopes still load. See [Running it with Patter](https://storylets.dev/play/with-patter/#one-registry).

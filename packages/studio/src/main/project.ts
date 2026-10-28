@@ -5,6 +5,7 @@
 // tests headlessly against the example project.
 // ---------------------------------------------------------------------------
 
+import { plannedColours } from "./box-colours.js";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { boxColourOf, contractNotes, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
@@ -14,9 +15,9 @@ import type { HoleDecls, Issue, LoadedProject, PatterReport, PatterScenes, Place
 import { writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, walkProjectFiles, worldDeclarations } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
-import type { Bundle, Card, CardDefaults, CoverageDriver, Hand, HandTemplate, PlayRung, VcsKind } from "@storylet-studio/model";
+import type { Bundle, Card, CardDefaults, CoverageDriver, Hand, HandTemplate, PlayRung, PropertyDecl, VcsKind } from "@storylet-studio/model";
 import type { SourceBox, SourceExtension, SourceProject } from "@storylet-studio/compiler";
-import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
+import { boardScopes, gameScopesDto, hostTokensDto, settingsHostScopes, worldFileLabel } from "./game-scopes.js";
 import type {
   BoardPatterDto, BoardScopesDto, BoxDto, CardDefaultsDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectKit, ProjectSettingsDto,
   RemoteDto, ShardVcDto, VcStatusDto,
@@ -123,6 +124,7 @@ const cardDto = (box: SourceBox, card: Card<string>, patter?: PatterScenes): Car
   return {
     id: card.id,
     gameId: effectiveGameId(card),
+    ...(reached !== undefined ? { patterScene: reached.scene } : {}),
     ...(!blank(card.gameId) ? { gameIdPinned: card.gameId } : {}),
     ...(card.title !== undefined ? { title: card.title } : {}),
     ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
@@ -208,6 +210,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
   // card's scene reaches it. Read through ops' cache, so an unchanged bundle costs a stat.
   const patterScenes = readPatterLink(loaded).link?.scenes;
   const extensions = extensionDtos(source);
+  // A box on the map with no colour stored yet shows the one the map will
+  // store for it, so its first draw changes nothing (box-colours.ts).
+  const planned = new Map([...plannedColours(source)].map(([b, c]) => [b.box.box.id, c]));
   return {
     ...(extensions !== undefined ? { extensions, extensionNodes: extensionNodeChoices(source), projectNode: source.project.project.id } : {}),
     dir: loaded.dir,
@@ -231,6 +236,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
     // The game's shared scopes folder, for the expression editors' dialect (the catalogue
     // itself travels with each card, as every property does).
     ...(() => { const g = gameScopesDto(loaded); return g !== undefined ? { gameScopes: g } : {}; })(),
+    ...(() => { const h = hostTokensDto(source); return h !== undefined ? { hostTokens: h } : {}; })(),
     boxes: source.boxes
       .map((box, i) => ({ box: boxWithMap(source, box), o: box.box.box.order ?? i }))
       .sort((a, b) => a.o - b.o)
@@ -251,7 +257,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
       ...(box.box.box.turn !== undefined
         ? { turn: box.box.box.turn.seconds !== undefined ? { seconds: box.box.box.turn.seconds } : {} } : {}),
       cardDefaults: cardDefaultsDto(box.box.box.cardDefaults),
-      ...(boxColourOf(box) !== undefined ? { colour: boxColourOf(box)! } : {}),
+      ...(() => { const c = boxColourOf(box) ?? planned.get(box.box.box.id); return c !== undefined ? { colour: c } : {}; })(),
       fields: (box.box.box.fields ?? []).map(fieldDeclDto),
       // Absent on every box that declares none, which is every box older than
       // 2026-09-13; an empty list is what the editor draws for that.
@@ -686,9 +692,15 @@ export function projectSettings(session: ProjectSession): ProjectSettingsDto {
   return {
     name: p.project.name,
     version: p.project.version,
-    // @world from the game's shared file when there is one: the dialog edits the source,
-    // and a save writes it there first and copies it into the project.
-    world: worldDeclarations(session.loaded.source!).map(declDto),
+    // The host scopes, @world first: from the game's shared file where it declares them, since
+    // the dialog edits the source, and a save writes it there first and copies it into the project.
+    hostScopes: settingsHostScopes(session.loaded.source!).map((h) => ({
+      token: h.token,
+      savedAs: h.token,
+      ...(h.writable !== undefined ? { writable: h.writable } : {}),
+      ...(h.declarations === undefined ? { opaque: true } : {}),
+      declarations: ((h.declarations ?? []) as PropertyDecl[]).map(declDto),
+    })),
     ...(() => { const f = worldFileLabel(session.loaded.source!); return f !== undefined ? { worldFile: f } : {}; })(),
     story: p.story.properties.map(declDto),
     drivers: driverDtos(p.coverage?.drivers),

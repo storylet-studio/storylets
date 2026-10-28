@@ -186,7 +186,7 @@ bool FStoryletRegistryTest::RunTest(const FString& Parameters)
 	}
 
 	// Standalone, the envelope carries the values itself.
-	UStoryletEngine* Plain = UStoryletEngine::Create(Bundle);
+	UStoryletEngine* Plain = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("standalone engine"), Plain)) return false;
 	TestTrue(TEXT("its own registry"), Plain->GetRegistry() && Plain->GetRegistry() != Registry);
 	Plain->OpenFlow(TEXT("main"));
@@ -218,7 +218,7 @@ bool FStoryletRegistryTest::RunTest(const FString& Parameters)
 		AddExpectedErrorPlain(
 			TEXT("this content names @patter, which no engine on this registry registered: give every engine the game's one registry"),
 			EAutomationExpectedErrorFlags::Contains, 2);
-		UStoryletEngine* Alone = UStoryletEngine::Create(Patron);
+		UStoryletEngine* Alone = UStoryletEngine::Create(Patron, {});
 		if (!TestNotNull(TEXT("a standalone engine"), Alone)) return false;
 		TestNull(TEXT("the open is refused"), Alone->OpenFlow(TEXT("main")));
 		TestNull(TEXT("and leaves no flow behind"), Alone->GetFlow(TEXT("main")));

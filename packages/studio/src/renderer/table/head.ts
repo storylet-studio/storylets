@@ -14,7 +14,7 @@ import { el, followButton, pinButton, toolWindowHead } from "@wildwinter/app-she
 import { escapeSnapshot } from "../tool-window/escape.js";
 import type { Board, BoardState } from "./board-state.js";
 import { mapZoneGroup } from "./map-stage.js";
-import { closeBoard } from "./session.js";
+import { closeBoard, putBack } from "./session.js";
 
 /** What Escape found as it went down: the selected hand, and the map's
  *  selected zone as the tag group it filters. */
@@ -83,7 +83,8 @@ export function boardHead(b: Board): BoardHead {
       switch (step.take) {
         case "dialog": return true;
         case "pending": s.pending = undefined; break;
-        case "open": s.open = undefined; break;
+        // Asks first when the card's scene has changed something (putBack).
+        case "open": void putBack(b); return true;
         case "snapshots": s.snapPanel = undefined; break;
         case "hand": s.selectedHand = undefined; break;
         case "zone": delete s.filters[step.group]; break;

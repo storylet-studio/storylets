@@ -69,6 +69,12 @@ describe("the journal's rows", () => {
     expect(rowsOf(log, ["play"])).toEqual([]);
   });
 
+  it("tells what a card's Patter scene wrote as the scene's, riding the wrote chip", () => {
+    const log: BoardLogEntry[] = [{ type: "sceneWrite", seq: 0.5, scene: "c_ambush", label: "@story.heat", prev: 1, value: 3 }];
+    expect(rowsOf(log).map(journalRowText)).toEqual(["--\tscene wrote\t@story.heat 1 -> 3 (“Ambush”’s scene)"]);
+    expect(rowsOf(log, ["write"])).toEqual([]);
+  });
+
   it("leaves a quiet refresh out: a deal that dealt nothing is not a beat", () => {
     expect(rowsOf(L([{ type: "deal", hand: "docks-street", cards: [{ id: "c_ambush", verdict: "capped" }] }]))).toEqual([]);
   });

@@ -8,6 +8,21 @@ the same version number always means the same runtime behaviour.
 
 ### Added
 
+- **Any game scope, not only `@world`.** A project can declare its own scopes beside `@world` (`@player`, say), in
+  Patter's shape: a token, a scope-level `writable`, and declarations, or none for an opaque scope that takes any
+  name. The bundle carries them as `scopeRegistry`, and an engine on its own backs each one from its defaults,
+  stores it, saves it and reseeds it on a reset, as it did `@world`. Every `@world` path works for any of them:
+  `get_property` and `set_property` on `player.hp`, `list_properties` rows, the host-write check, and a story write
+  refused on a read-only name, the scope's own `writable: false` included. `describe_bundle` lists each (`"scope":
+  "host"`, the token as `"owner"`, `"opaque": true` for a scope with no declarations), and
+  `StoryletBundle.host_scopes(bundle)`, `host_scope_spec` and `host_scope_decls` read them off any bundle. The
+  conformance corpus (version 23) checks it in every runtime.
+- **Set-up reports.** `"on_error"` hears how the engine was set up as `create` ends, as `{"flow": "", "kind":
+  "setup", "node", "message"}`: a `"host_scopes"` token the bundle doesn't declare (naming the declared spelling
+  when only the case differs, since a token is case-sensitive) and an option `create` doesn't take. Patterplay's
+  report, word for word. Without an `"on_error"`, a `push_warning` says it, and a logging engine's run log carries
+  it as a `"diagnostic"` with `"where": "setup"`.
+
 - **The game hears of a condition that failed.** A new `"on_error"` option to `StoryletEngine.create` takes a
   `Callable(error: Dictionary)`, told of every card, deck, hand or outcome condition the engine could not evaluate
   (a host value of the wrong type, a division by zero) and counted as false, whether or not anything is tracing:
@@ -32,6 +47,28 @@ the same version number always means the same runtime behaviour.
 
 ### Changed
 
+- **The `"world"` option has gone: bind your game's scopes through `"host_scopes"`.** One Dictionary of token to
+  resolver, `StoryletEngine.create(bundle, {"host_scopes": {"world": {"get": ..., "set": ...}}})`, binds `@world`
+  and any other scope the bundle declares, named and shaped as Patterplay's option. A scope you leave out is backed
+  by the engine as before. Passing `"world"` is reported (`the engine option "world" has gone: bind the scope as
+  "host_scopes": {"world": ...}`) and binds nothing, and any other key `create` doesn't take is reported and
+  ignored where it used to make `create` return null; a known option of the wrong shape still does. The engine's
+  `@world` seam is now one per scope: `host_get(token, name)`, `host_set(token, name, value, host)`,
+  `host_can_set(token)` and `host_read_only(token, name)` replace `world_get`, `world_set`, `world_can_set` and
+  `world_read_only`.
+- **Bundles are `storylets/bundle@2`.** The game's scopes are `scopeRegistry`, and the `world` block is gone.
+  `@1` and `@0` bundles still load, their `world.properties` read as the scope `world` (an empty block, none);
+  `StoryletBundle.BUNDLE_SCHEMA` is `@2` and `BUNDLE_SCHEMA_V1` names `@1`. An older runtime refuses an `@2`
+  bundle by its schema rather than misreading it.
+- **Refusals the game can see.** GDScript can't usefully throw, so every refusal is `push_error`'d and handed to the
+  game as well, as Patterplay's are. A setter returns it (`""` on success): `set_property` and `play` already did,
+  `discard` does, and `advance_turns` now returns a String where it returned nothing. A call that already returns
+  something (`deal`, `deal_many`, `peek`, `outcomes`, `board`, `turn`, `get_property`, the `list_` calls and
+  `save_durable` on a flow; `open_flow`, `get_property`, `hot_swap`, `save_flow`, `load_durable`, `preview_load` and
+  `load_game` on the engine) returns its empty shape as before and keeps the message for a new `last_error()`, on the
+  engine and on the flow, cleared to `""` by the next such call that succeeds. `StoryletSave.load_state` and
+  `deserialize_state` keep theirs on the engine, and `load_state` now returns null when `load_game` refuses the
+  envelope, where it handed back the file's `@world` values as if it had loaded.
 - **A deal makes the hand right.** Every hand a deal reaches is re-ranked whole, full or not: everything eligible,
   the cards it holds included, and the hand becomes the top of that ranking. A held card wins a tie, so an equal card
   never displaces it, and keeps its place; a card a better one displaces goes back to the stock with an `"evict"`
@@ -56,10 +93,11 @@ the same version number always means the same runtime behaviour.
 
 ### Fixed
 
-- **What a game is handed is its own.** A dealt card's fields and extension values, an outcome's, a box's, a field's
-  structured default and `extensions_of`'s values are copies: a game that changed one used to change it in the bundle
-  for every later deal, in every engine on that bundle. The conformance corpus (version 17) checks it in every
-  runtime.
+- **What a game is handed is its own.** A dealt card's fields, an outcome's, and a field's structured default are
+  copies: a game that changed one used to change it in the bundle for every later deal, in every engine on that
+  bundle. Extension values are the exception, as in Patter: they're the extension's own data, handed out uncopied and
+  read-only by contract, because they can be large and a copy per deal would cost every game. The conformance
+  corpus checks it in every runtime.
 - **What a game hands in is checked.** `set_property`, on the engine or a flow, refuses a value that doesn't fit its
   declaration, saying what it takes (`"story.gold" takes a number; "5" doesn't fit`), and refuses a `@world` name the
   content never declared; another engine's scope is that engine's to check. An enum whose own default is `""` (none

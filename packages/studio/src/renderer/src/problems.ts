@@ -36,10 +36,32 @@ export function resolveDeckProblem(p: Problem, box: BoxDto) {
   const stem = baseName(p.path).replace(/\.storyletdeck$/, "");
   const deck = box.decks.find((d) => d.gameId === stem);
   if (!deck) return undefined;
+  const mark = unresolvedMarkAt(p);
+  if (mark) {
+    const card = mark.card !== undefined ? deck.cards.find((c) => c.id === mark.card) : undefined;
+    const outcome = card && mark.outcome !== undefined ? card.outcomes.find((o) => o.id === mark.outcome) : undefined;
+    return { deck, card, outcome, field: mark.field };
+  }
   const [cardRef, outcomeRef] = (p.where ?? "").split("/");
   const card = cardRef ? deck.cards.find((c) => c.gameId === cardRef) : undefined;
   const outcome = card && outcomeRef ? card.outcomes.find((o) => o.gameId === outcomeRef) : undefined;
-  return { deck, card, outcome };
+  return { deck, card, outcome, field: p.field };
+}
+
+/** Where an unresolved merge mark sits (`ops`' unresolvedMarkIssues): the
+ *  message carries the mark's path, `cards[c_id].outcomes[o_id].title`, keyed
+ *  by the stable ids, so Go to issue lands on the clash and not on the deck
+ *  (the hands-on review, 2026-10, foundation 9). */
+export function unresolvedMarkAt(p: Problem): { card?: string; outcome?: string; field?: string } | undefined {
+  if (p.field !== "unresolved") return undefined;
+  const path = /^unresolved merge at (\S+):/.exec(p.message)?.[1];
+  if (path === undefined) return {};
+  const card = /^cards\[([^\]]+)\]/.exec(path)?.[1];
+  const outcome = /\.outcomes\[([^\]]+)\]/.exec(path)?.[1];
+  // The field is the first plain key after the card (or its outcome).
+  const rest = path.replace(/^cards\[[^\]]+\]/, "").replace(/^\.outcomes\[[^\]]+\]/, "");
+  const field = /^\.(\w+)/.exec(rest)?.[1];
+  return { ...(card !== undefined ? { card } : {}), ...(outcome !== undefined ? { outcome } : {}), ...(field !== undefined ? { field } : {}) };
 }
 
 /** The problem bar's voice: titles, never storage paths, wherever the project
@@ -81,7 +103,8 @@ export function problemNames(p: Problem, boxes: Boxes): ProblemNames | undefined
  *  layout, so the two can change independently. */
 export function cardTabFor(field: string | undefined): string | undefined {
   switch (field) {
-    case "condition": case "priority": case "copies": case "sharedCopies": case "tags": return "dealing";
+    case "condition": case "priority": case "weight": case "inOneHand": case "acrossHands": case "copies": case "sharedCopies":
+    case "redraw": case "tags": return "dealing";
     case "fields": return "fields";
     // An outcome's fields are edited inside the outcome, so the box's outcome
     // template sends the author to the Outcomes tab rather than to Fields,
@@ -128,7 +151,7 @@ export function problemTarget(p: Problem, boxes: Boxes): ProblemTarget | undefin
       // An unknown field leaves the sticky tab alone, deliberately: the card's
       // name, gameId and purpose sit ABOVE the tabs and are on every one of
       // them, so moving for those would be motion without an answer.
-      const tab = outcome ? "outcomes" : cardTabFor(p.field);
+      const tab = outcome ? "outcomes" : cardTabFor(named.field);
       return { kind: "card", box: box.id, deck: deck.id, card: card.id, ...(tab ? { tab } : {}), ...(outcome ? { outcome: outcome.id } : {}) };
     }
     return { kind: "deck", box: box.id, deck: deck.id };
@@ -304,7 +327,8 @@ export function createProblems(ctx: ProblemsContext) {
   function goToDeclaration(fix: { scope: string; owner: string }): void {
     const actions = ctx.actions();
     if (fix.scope === "story") { actions.focus({ kind: "story" }); return; }
-    if (fix.scope === "world") { ctx.openSettings(fix.scope); return; }
+    // Any host scope (@world, @player, ...): Project Settings > Game scopes, whose id is "world".
+    if (fix.scope !== "box" && fix.scope !== "deck" && fix.scope !== "hand") { ctx.openSettings("world"); return; }
     const project = session.project;
     if (!project) return;
     if (fix.scope === "box") {

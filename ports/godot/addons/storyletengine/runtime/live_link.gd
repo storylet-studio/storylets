@@ -232,7 +232,7 @@ func close() -> void:
 ## the game's registry the old engine hands its keys to the replacement (and is
 ## spent), which a plain save and load into a second engine cannot do, since
 ## the two would clash. The engine remembers the options it was built with
-## (seed, log, world), so `opts` is only for overriding one of them for the
+## (seed, log, host_scopes), so `opts` is only for overriding one of them for the
 ## replacement.
 static func apply_live_bundle(engine: StoryletEngine, data: String, opts: Dictionary = {}) -> Dictionary:
 	var loaded := StoryletBundle.load_from_string(data)

@@ -359,3 +359,34 @@ export function isAdditive(e: Mods, mac: boolean): boolean {
 export function isContextPress(e: Mods, mac: boolean): boolean {
   return e.button === 2 || (mac && e.button === 0 && e.ctrlKey);
 }
+
+/**
+ * Where an arrow key goes from `from`: the nearest item whose centre lies that
+ * way, scored as the distance along the arrow plus twice the distance across
+ * it, so the item straight ahead beats a nearer one off to the side (the
+ * spatial navigation every node editor and TV menu settles on). With nothing
+ * to start from, the first item in reading order, top row first. Undefined
+ * when nothing lies that way: the place stays where it is rather than wrapping
+ * round a board that has no order of its own.
+ */
+export function stepTo<R extends Rect & { id: string }>(
+  from: Rect | undefined, items: readonly R[], dir: "left" | "right" | "up" | "down",
+): string | undefined {
+  if (from === undefined) {
+    const first = [...items].sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    return first?.id;
+  }
+  const cx = from.x + from.width / 2;
+  const cy = from.y + from.height / 2;
+  let best: { id: string; score: number } | undefined;
+  for (const item of items) {
+    const dx = item.x + item.width / 2 - cx;
+    const dy = item.y + item.height / 2 - cy;
+    const along = dir === "right" ? dx : dir === "left" ? -dx : dir === "down" ? dy : -dy;
+    const across = dir === "right" || dir === "left" ? Math.abs(dy) : Math.abs(dx);
+    if (along <= 0.5) continue;
+    const score = along + 2 * across;
+    if (best === undefined || score < best.score) best = { id: item.id, score };
+  }
+  return best?.id;
+}

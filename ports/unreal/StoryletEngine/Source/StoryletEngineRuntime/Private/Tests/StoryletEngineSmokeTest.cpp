@@ -13,6 +13,7 @@
 #include "StoryletCompiledBundle.h"
 #include "StoryletLiveLink.h"
 #include "StoryletEngine.h"
+#include "StoryletLog.h"
 #include "StoryletSave.h"
 #include "StoryletTypes.h"
 
@@ -151,7 +152,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 		}
 	}
 
-	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, 1, /*bRetainLog=*/true);
+	UStoryletEngine* Engine = UStoryletEngine::CreateWithOptions(Bundle, FStoryletEngineOptions{ 1, true }, {});
 	if (!TestNotNull(TEXT("engine creates"), Engine)) return false;
 	// All play happens on a flow (design/flows.md); there is no default one.
 	UStoryletFlow* MainFlow = Engine->OpenFlow(TEXT("main"));
@@ -203,6 +204,8 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	// A played unknown outcome errors instead of throwing across the boundary.
 	{
 		FString BadError;
+		// Every refusal is logged (the convention in StoryletEngine.h).
+		AddExpectedError(TEXT("Storylet Engine: Play - "), EAutomationExpectedErrorFlags::Contains, 1);
 		TestFalse(TEXT("bad play fails"), MainFlow->Play(TEXT("two"), TEXT("nope"), TEXT("board"), BadError));
 		TestFalse(TEXT("bad play carries an error"), BadError.IsEmpty());
 	}
@@ -337,7 +340,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("with the engine envelope inside"), SaveJson.Contains(TEXT("storylets/save@3")));
 	TestFalse(TEXT("naming the hand by its Game ID, not its id"), SaveJson.Contains(TEXT("h_board")));
 
-	UStoryletEngine* RestoredEngine = UStoryletEngine::Create(Bundle, 0);
+	UStoryletEngine* RestoredEngine = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("second engine creates"), RestoredEngine)) return false;
 	// A wrapper taken BEFORE the load must survive it, re-bound by name - the
 	// contract a Blueprint variable holding a flow depends on.
@@ -435,7 +438,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 
 	if (!HasAnyErrors())
 	{
-		UE_LOG(LogTemp, Display, TEXT("STORYLETSMOKE: PASS"));
+		UE_LOG(LogStoryletEngine, Display, TEXT("STORYLETSMOKE: PASS"));
 	}
 	return true;
 }

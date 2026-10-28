@@ -19,15 +19,15 @@
 // ---------------------------------------------------------------------------
 
 import { defaultFor } from "@wildwinter/scoperegistry";
-import { effectiveGameId, groupsOfBox, isHoleRef } from "@storylet-studio/model";
+import { bundleHostScopes, effectiveGameId, groupsOfBox, isHoleRef } from "@storylet-studio/model";
 import type {
-  Box, Bundle, Expression, Hand, PropertyDecl, PropertyType, ScalarValue,
+  Box, Bundle, Expression, Hand, HostScopeDecl, PropertyDecl, PropertyType, ScalarValue,
 } from "@storylet-studio/model";
 
 /** What bundle this is: the staleness/identity triple plus the schema tag. */
 export interface BundleIdentity {
-  /** The bundle schema tag ("storylets/bundle@1", or "@0" from before the
-   *  project map). */
+  /** The bundle schema tag ("storylets/bundle@2"; "@1" from before host
+   *  scopes, "@0" from before the project map). */
   schema: string;
   /** content.project - the project name a save must agree with. */
   project: string;
@@ -126,16 +126,20 @@ export interface PropertySummary {
 }
 
 /** The scope a declaration block belongs to. `tag` declarations compose into
- *  @hand for any ask that binds the tag (schema 3.6). */
-export type PropertyScopeKind = "world" | "story" | "box" | "deck" | "hand" | "tag";
+ *  @hand for any ask that binds the tag (schema 3.6). `host` is a host scope
+ *  other than @world (`@player`), its token the `owner`. */
+export type PropertyScopeKind = "world" | "host" | "story" | "box" | "deck" | "hand" | "tag";
 
 /** One scope's declared properties. `owner` is the owning entity's gameId
- *  (empty for world / story); `box` names its box; `group` names a tag's
- *  group. A zone of the project map is a `tag` scope with `group` and NO
- *  `box`: it belongs to none. */
+ *  (empty for world / story), or a host scope's token; `box` names its box;
+ *  `group` names a tag's group. A zone of the project map is a `tag` scope
+ *  with `group` and NO `box`: it belongs to none. */
 export interface PropertyScopeSummary {
   scope: PropertyScopeKind;
   owner: string;
+  /** A host scope that declares no names, so takes any (`world` or `host`
+   *  only). Absent for every other scope. */
+  opaque?: true;
   box?: string;
   group?: string;
   properties: PropertySummary[];
@@ -181,17 +185,19 @@ export interface BundleDescription {
   boxes: BoxSummary[];
   /** Every hand in the bundle, box by box: the deal() surface. */
   hands: HandSummary[];
-  /** world, story, then per box: the box, its decks, its hands, its tags;
-   *  then the project map's zones, once. Scopes that declare nothing are omitted (world and story always show,
-   *  so their absence reads as "this bundle declares none"). */
+  /** The host scopes in bundle order (world, and any others such as player),
+   *  story, then per box: the box, its decks, its hands, its tags; then the
+   *  project map's zones, once. Scopes that declare nothing are omitted (world
+   *  and story always show, so their absence reads as "this bundle declares
+   *  none"; an undeclared world shows first, empty). */
   properties: PropertyScopeSummary[];
   /** The project map, when the bundle has one. Absent is the bundle with no
    *  map at all. */
   map?: MapSummary;
 }
 
-const summarise = (decls: PropertyDecl[]): PropertySummary[] =>
-  decls.map((d) => ({
+const summarise = (decls: readonly (PropertyDecl | HostScopeDecl)[]): PropertySummary[] =>
+  decls.map((d: PropertyDecl) => ({
     name: d.name,
     type: d.type,
     default: defaultFor(d),
@@ -251,8 +257,14 @@ const handSlots = (hand: Hand<Expression>, box: Box<Expression>): number | "unbo
 export function describeBundle(bundle: Bundle): BundleDescription {
   const boxes: BoxSummary[] = [];
   const hands: HandSummary[] = [];
+  const hosts = bundleHostScopes(bundle);
   const properties: PropertyScopeSummary[] = [
-    { scope: "world", owner: "", properties: summarise(bundle.world.properties) },
+    ...(hosts.some((h) => h.token === "world") ? [] : [{ scope: "world" as const, owner: "", properties: [] }]),
+    ...hosts.map((h): PropertyScopeSummary => ({
+      ...(h.token === "world" ? { scope: "world" as const, owner: "" } : { scope: "host" as const, owner: h.token }),
+      ...(h.declarations === undefined ? { opaque: true as const } : {}),
+      properties: summarise(h.declarations ?? []),
+    })),
     { scope: "story", owner: "", properties: summarise(bundle.story.properties) },
   ];
   const totals = { boxes: 0, decks: 0, cards: 0, hands: 0, templates: 0, tagGroups: 0 };

@@ -243,11 +243,18 @@ See [Live Link](/play/live-link/).
   `vcs-setup.md` and ignore rules, in one step you can undo. A project made before the setting
   shows **Not set**, and Storyletter finds its system from the folders above it (see [Version
   control](/setup/version-control/#choosing-a-system)).
-- **World** holds the `@world` property declarations (your game's state), and the
+- **Game scopes** holds your game's own state: `@world` first, then any other scope the
+  game provides, such as `@player`, and the
   [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
-  for them during a test run. Where the game shares its scopes (below), these are the
-  game's: saving writes them to `game-scopes/game.scopes.json` first, leaving every other
-  scope in that file as it was, and then copies them into the project.
+  for them during a test run. **+ Add scope** adds one; give it a name, and declare its
+  properties, or turn on **Any name, unchecked** when the game decides what it holds.
+  **Read-only to the story** on a scope makes every property in it one the story can read but
+  not set. Renaming a scope carries the new name into every card and driver that uses it, so
+  `@player.hp` becomes `@hero.hp`, in one step you can undo. `@world` is always there and
+  can't be renamed or removed. Where the game shares
+  its scopes (below), these are the game's: saving writes them to
+  `game-scopes/game.scopes.json` first, leaving every other scope in that file as it was, and
+  then copies them into the project.
 - **Publish** holds the bundle path (by default a `storylet-dist/` folder beside the
   project, never inside it), whether metadata is `full` or `stripped`, **Include the maps**
   (whether the zone shapes and pictures ship with the bundle, for a game that draws its own
@@ -263,8 +270,8 @@ with your `@story` declarations, and `game.scopes.json` with your `@world`. The 
 its own copy of `@world`. If the folder is somewhere the tools wouldn't find it by looking up
 from the project, the project file records where it is.
 
-From then on, every save brings `storylets.scopes.json` up to date, the World settings edit
-`game.scopes.json`, the condition and outcome editors offer the other tools' properties (with
+From then on, every save brings `storylets.scopes.json` up to date, the Game scopes settings
+edit `game.scopes.json`, the condition and outcome editors offer the other tools' properties (with
 who declares each in the pill's tip), and the Board plays cards that name them.
 
 ### Play: how much of the app you see

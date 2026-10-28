@@ -10,11 +10,11 @@
 // any other edit.
 // ---------------------------------------------------------------------------
 
-import { worldDeclarations } from "@storylet-studio/compiler";
+import { hostScopeDeclarations, sharedHostScope } from "@storylet-studio/compiler";
 import { newId, proposeCoverage } from "@storylet-studio/ops";
-import { effectiveGameId, isValidGameId } from "@storylet-studio/model";
+import { bundleHostScopes, effectiveGameId, isValidGameId, setHostScopeDecls } from "@storylet-studio/model";
 import type { CoverageConfig, Outcome, PropertyDecl, ScalarValue } from "@storylet-studio/model";
-import { gameWorldWrite } from "../game-scopes.js";
+import { gameScopeWrite } from "../game-scopes.js";
 import type { ProjectSession } from "../project.js";
 import type { OpenResult } from "../../shared/api.js";
 import { commit, commitMaking, freshKey } from "./write-path.js";
@@ -43,14 +43,31 @@ export async function declareProperty(
     ? { name, type: guess.type, default: guess.default }
     : { name, type: "number", default: 0 };
 
-  if (scope === "story" || scope === "world") {
-    const holder = scope === "story" ? source.project.story : source.project.world;
-    // @world, where the game shares it, is declared in the game's file first and copied
-    // into the project, exactly as the World settings do it.
-    if (scope === "world") holder.properties = [...worldDeclarations(source)];
-    if (holder.properties.some((p) => p.name === name)) return { error: `"${name}" is already declared` };
-    holder.properties.push(decl);
-    const shared = scope === "world" ? gameWorldWrite(source, holder.properties) : [];
+  if (scope === "story") {
+    const properties = source.project.story.properties;
+    if (properties.some((p) => p.name === name)) return { error: `"${name}" is already declared` };
+    properties.push(decl);
+    return commit(session, `Declare @${scope}.${name}`, freshKey(), [projectWrite(session)]);
+  }
+
+  if (scope !== "box" && scope !== "deck" && scope !== "hand") {
+    // A host scope (`@world`, `@player`, ...). Only one the game has: @world always, or a
+    // scope the project or the game's scopes folder declares, so a mistyped token is not
+    // quietly made a scope of its own.
+    const known = scope === "world" || bundleHostScopes(source.project).some((h) => h.token === scope)
+      || source.gameScopes?.merged.spec.scopes.some((s) => s.token === scope) === true;
+    if (!known) return { error: `@${scope} isn't one of the game's scopes: add it in Project Settings first` };
+    if (bundleHostScopes(source.project).some((h) => h.token === scope && h.declarations === undefined)) {
+      return { error: `@${scope} is declared opaque, so any name is already accepted` };
+    }
+    // Where the game shares its scopes, declared in the game's file first and copied into
+    // the project, exactly as the Host scopes settings do it.
+    const own = bundleHostScopes(source.project).some((h) => h.token === scope) || scope === "world";
+    const properties = [...(own ? hostScopeDeclarations(source, scope) : sharedHostScope(source, scope)?.decls ?? [])];
+    if (properties.some((p) => p.name === name)) return { error: `"${name}" is already declared` };
+    properties.push(decl);
+    setHostScopeDecls(source.project, scope, properties);
+    const shared = gameScopeWrite(source, scope, properties);
     if ("error" in shared) return shared;
     return commit(session, `Declare @${scope}.${name}`, freshKey(), [...shared, projectWrite(session)]);
   }

@@ -66,6 +66,9 @@ export interface BoardState {
   /** The open card's Patter scene, while the Board performs it (performance.ts). Keyed to the card:
    *  a different open card starts its own. */
   performing: Performance | undefined;
+  /** How many properties the open card's scene has changed so far: Put it
+   *  back asks first when it is more than none (session.ts putBack). */
+  performingWrote: number;
   /** One-shot: focus Continue after the render that shows the confirm step. */
   focusPending: boolean;
   /** Where this run has been: the live position and its trail (run-marks.ts).
@@ -182,7 +185,7 @@ export function createBoardState(): BoardState {
   return {
     table: undefined, seed: 0, name: "", builtStamp: "",
     noProject: false, loadError: "", runError: "", stale: undefined, openedAt: 0, asking: false,
-    board: [], filters: {}, open: undefined, pending: undefined, performing: undefined, focusPending: false,
+    board: [], filters: {}, open: undefined, pending: undefined, performing: undefined, performingWrote: 0, focusPending: false,
     marks: runMarks(), selectedHand: undefined, pulsed: new Set(), pulseStamp: 0,
     snapPanel: undefined, snapshots: [], snapshotsOf: undefined,
     journalHidden: new Set(), railTab: "journal", scrollKeys: { list: "", panel: "" },

@@ -11,7 +11,7 @@ The ninth, the installation contract, is written by a venue's server.
 
 | File | Name | Holds |
 |---|---|---|
-| project | `<name>.storyletproj` | settings, `@world` and `@story` declarations, coverage drivers, export config |
+| project | `<name>.storyletproj` | settings, host scope (`@world`, ...) and `@story` declarations, coverage drivers, export config |
 | project map | `map.storyletmap`, at the root | the project map: its zone group, each zone's outline, the zone properties, the pictures and the frames |
 | box | `box.storyletbox` | the card template, `@box` properties, the ranking toggle, whether the box is timed, and whether it uses the project map |
 | tags | `tags.storylettags` | the box's own tag groups: their tags and each tag's properties |
@@ -132,6 +132,25 @@ One per project, at the root. It holds everything that isn't specific to a box.
     bundle: "../storylet-dist/the-hamlet.storyletsc",
     metadata: "full",
   },
+  scopeRegistry: {
+    scopes: [
+      {
+        declarations: [
+          {
+            default: "day",
+            name: "time_of_day",
+            type: "enum",
+            values: [
+              "day",
+              "night",
+            ],
+          },
+        ],
+        token: "world",
+      },
+    ],
+    version: 1,
+  },
   settings: {
     playAdvancesTurns: 1,
   },
@@ -150,38 +169,30 @@ One per project, at the root. It holds everything that isn't specific to a box.
     ],
   },
   templates: {},
-  world: {
-    properties: [
-      {
-        default: "day",
-        name: "time_of_day",
-        type: "enum",
-        values: [
-          "day",
-          "night",
-        ],
-      },
-    ],
-    registry: {},
-  },
 }
 ```
 
-**`world`** declares your game's state surface and, in `registry`, who owns each part of
-it, whether the storylet engine holds `@world` itself (when it plays on its own) or your host does. **`story`**
-declares the story's own globals.
+**`scopeRegistry`** declares your game's own state, its **host scopes**, in the shape Patter
+uses: each scope a `token` (`world`, or another such as `player`, which content reads as
+`@world.x` and `@player.x`) and its `declarations`. A scope may carry `writable: false`, which
+makes every property in it read-only to the story unless the property says otherwise. A scope
+with no `declarations` is opaque: any name, unchecked. A token can't be one of the engine's own
+(`story`, `box`, `deck`, `hand`) or another engine's. Leave the block out when the game has none.
+A project written before host scopes has a `world` block instead (`world: { properties: [...] }`),
+which still loads and compiles as the scope `world`; `storyletengine format` moves it into
+`scopeRegistry`. **`story`** declares the story's own globals.
 
-A declaration anywhere except `@world` may also carry **`shared`**, the sharing axis for
+A declaration anywhere except a host scope may also carry **`shared`**, the sharing axis for
 projects that run [several flows](/play/world-state/#shared-or-per-flow). `true` is one value
 across every flow, and `false` is a copy per flow. Absent means the scope default (`@story`
-shared; box, deck, hand, and tag properties per-flow). `@world` takes no flag, because it is
-the game's own state and always shared, and the compiler refuses the flag there.
+shared; box, deck, hand, and tag properties per-flow). A host scope takes no flag, because it
+is the game's own state and always shared, and the compiler refuses the flag there.
 
 Beside it, and independent of it, **`durable`** says the value
 [outlives a run](/play/world-state/#durable-state-that-outlives-a-run), meaning the
 installation's memory when it's also shared, and one player's pocket when it isn't. The
 engine never reads it. Whoever runs the engine lifts and restores durable values at a run
-boundary. `@world` takes no flag here either, and for the same reason.
+boundary. A host scope takes no flag here either, and for the same reason.
 
 **`settings.play`** is `"solo"`, `"shared"`, or `"venue"` (absent means `"solo"`). It sets the
 [play ladder](/storyletter/workspace/#play-how-much-of-the-app-you-see), which decides how much
@@ -198,8 +209,9 @@ bundle (see [the bundle](/format/bundle/#the-drawing-when-you-ask-for-it)), and
 **`settings.playAdvancesTurns`** is the default number of turns a play advances its box's
 clock. A host can override it per call.
 
-**`coverage.drivers`** configures the coverage harness, keyed by property reference. Only
-`@world` is drivable, because every other scope is written by play itself. A driver's `kind`
+**`coverage.drivers`** configures the coverage harness, keyed by property reference. Only a
+host scope's properties (`@world.x`, `@player.x`) are drivable, because every other scope is
+written by play itself. A driver's `kind`
 is `initial` (rolled once per playthrough) or `recurring` (re-rolled per turn at its
 `cadence`), and `values` is the pool it draws from. This block never reaches the bundle.
 
@@ -229,8 +241,9 @@ nothing reads. It's off unless set, because content is often written ahead of th
 will read it. The other half, a condition reading state nothing writes, always warns. It never
 reaches the bundle.
 
-Where the game shares its scopes and its `game.scopes.json` declares `@world`, the project's
-**`world`** declarations are a synced copy of those. Storyletter rewrites the copy from the
+Where the game shares its scopes and its `game.scopes.json` declares `@world` (or another scope
+the project declares), the project's declarations of it in **`scopeRegistry`** are a synced copy
+of those. Storyletter rewrites the copy from the
 shared file whenever it saves, so the project still compiles when it's packed or checked out
 on its own. The shared file wins, and `validate` warns if the two ever differ.
 
@@ -667,9 +680,9 @@ without one.
 | `default` | optional: left out, the type's own holds (`false`, `0`, `""`, the first enum value, no flags, the first stage), and `build` writes it into the bundle, so a declared property always has a value. One you give must fit the type |
 | `values` | for `enum` and `flags`. On a TAG, `values` means something else: this tag's starting values for the properties its group declares |
 | `stages` | for `quality`: the ladder, in order, lowest first; at least two, each named once, and a `default`, when given, must be one of them |
-| `shared` | not on `@world`. `true` is one value across every flow, `false` a copy per flow; absent takes the scope default |
-| `durable` | not on `@world`. The value [outlives a run](/play/world-state/#durable-state-that-outlives-a-run); the engine never reads it |
-| `writable` | `@world` only. `false` makes the property read-only to the story: a condition may read it, an outcome that writes it is a compile error. The game still moves it through its resolver. Default `true` |
+| `shared` | not on a host scope. `true` is one value across every flow, `false` a copy per flow; absent takes the scope default |
+| `durable` | not on a host scope. The value [outlives a run](/play/world-state/#durable-state-that-outlives-a-run); the engine never reads it |
+| `writable` | host scopes (`@world`, ...) only. `false` makes the property read-only to the story: a condition may read it, an outcome that writes it is a compile error. The game still moves it through its resolver. Default: its scope's `writable`, else `true` |
 | `purpose` | author metadata |
 
 Card template fields use the same shape. The difference is what they're for. A property is

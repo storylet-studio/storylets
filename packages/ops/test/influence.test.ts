@@ -216,6 +216,31 @@ describe("enable and disable: the load-bearing pair", () => {
 // 10): a write of exactly the threshold satisfies `>=` and `<=`, so it enables
 // them. Every comparison was read as strict, so a write of 10 against `>= 10`
 // was drawn as a disable.
+// Playing a card is the write `count_played` reads (the hands-on review,
+// 2026-10: the graph drew no link for it).
+describe("count_played", () => {
+  it("links the card counted to a reader that wants it played, and shuts one that wants it never played", () => {
+    const g = analyseInfluence(project({
+      cards: [
+        { id: "c_gate", outcomes: [{ id: "o_in", gameId: "in", changes: {} }] },
+        { id: "c_after", condition: 'count_played("gate") > 0' },
+        { id: "c_once", condition: 'count_played("gate") == 0' },
+        { id: "c_never", condition: 'not (count_played("gate") > 0)' },
+      ],
+    }));
+    expect(edge(g, "c_gate", "c_after")).toBe("enable");
+    expect(via(g, "c_gate", "c_after")).toEqual(['count_played("gate")']);
+    expect(edge(g, "c_gate", "c_once")).toBe("influence");
+    expect(edge(g, "c_gate", "c_never")).toBe("disable");
+    expect(g.warnings.filter((w) => w.kind === "unknown-builtin")).toEqual([]);
+  });
+
+  it("draws nothing for a card that isn't in the project", () => {
+    const g = analyseInfluence(project({ cards: [{ id: "c_r", condition: 'count_played("ghost") > 0' }] }));
+    expect(g.edges).toEqual([]);
+  });
+});
+
 describe("the boundary of a threshold", () => {
   const at = (condition: string): EdgeClass | undefined => edge(analyseInfluence(project({
     story: [{ name: "gold", type: "number", default: 0 }],

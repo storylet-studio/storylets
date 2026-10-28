@@ -81,7 +81,8 @@ describe("what a key does", () => {
   it("hands any other plain letter to the caller, lowercased", () => {
     expect(canvasKey(key("N"), idle)).toEqual({ letter: "n" });
     expect(canvasKey(key("n", { meta: true }), idle)).toBeUndefined();
-    expect(canvasKey(key("ArrowLeft"), idle)).toBeUndefined();
+    // The arrows are the canvas's own now (the keyboard's way round its items).
+    expect(canvasKey(key("ArrowLeft"), idle)).toEqual({ step: "left" });
   });
 });
 

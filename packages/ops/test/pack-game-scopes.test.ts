@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
+import { hostScopeDecls, setHostScopeDecls } from "@storylet-studio/model";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -248,7 +249,7 @@ describe("unpack --merge: the snapshot never comes back; a World edit does", () 
    *  project: the game's file (the recipient's snapshot) and the project's copy. */
   function editWorld(theirs: string): void {
     const decls = [{ name: "danger", type: "number", default: 0 }, { name: "tide", type: "number", default: 3 }];
-    edit(projectFile(theirs), (v) => { v.world.properties = decls; });
+    edit(projectFile(theirs), (v) => { setHostScopeDecls(v, "world", decls as never); });
     const file: ScopesFile = { ...GAME, scopes: GAME.scopes.map((s) => (s.token === "world" ? { ...s, declarations: decls as never } : s)) };
     writeFileSync(join(theirs, "game-scopes", "game.scopes.json"), json(file));
   }
@@ -303,7 +304,7 @@ describe("unpack --merge: the snapshot never comes back; a World edit does", () 
 
   it("with no folder here, a World edit merges into the project and nothing else", async () => {
     const { root, project, sent, returned } = await roundTrip((theirs) => {
-      edit(projectFile(theirs), (v) => { v.world.properties.push({ name: "tide", type: "number", default: 3 }); });
+      edit(projectFile(theirs), (v) => { hostScopeDecls(v, "world").push({ name: "tide", type: "number", default: 3 }); });
     }, false);
     const result = await runUnpackMerge(returned, sent, project);
     expect(result.gameWorld).toBeUndefined();

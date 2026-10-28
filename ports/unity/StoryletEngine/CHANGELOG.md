@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Any game scope, not only `@world`.** A project can declare its own scopes beside `@world` (`@player`, say), in
+  Patter's shape: a token, a scope-level `Writable`, and declarations, or none for an opaque scope that takes any
+  name. The bundle carries them as `ScopeRegistry` (`HostScopeRegistry`, `HostScopeSpec`, `HostScopeDecl`), and an
+  engine on its own backs each one from its defaults, stores it, saves it and reseeds it on a reset, as it did
+  `@world`. Every `@world` path works for any of them: `GetProperty` and `SetProperty` on `player.hp`,
+  `ListProperties` rows, the host-write check, and a story write refused on a read-only name. `DescribeBundle` lists
+  each (`PropertyScopeKinds.Host`, the token as `Owner`, `Opaque` for a scope that declares no names).
+  `Model.BundleHostScopes(bundle)` and `Model.HostScopeDecls(bundle, token)` read a bundle's scopes whatever its
+  schema. The conformance corpus (version 23) checks it in every runtime.
+- **`PlayError.Kind` "setup".** `OnError` hears how the engine was set up as the constructor ends: a host scope the
+  bundle doesn't declare, naming the declared spelling when only the case differs, since a token is case-sensitive.
+  Patterplay's report, word for word (`HostScopes binds "Player", which this bundle doesn't declare: it declares
+  "player", and a scope's token is case-sensitive`).
 - **`EngineOptions.OnError`** is told of every condition the engine couldn't evaluate and counted as false, as a
   `PlayError` (`Flow`, `Kind`, `Node` such as `card lantern`, `Source`, `Message`), whether or not anything is
   tracing. Left unset, each goes to `Engine.DefaultOnError`, a warning that the Unity layer points at
@@ -23,6 +36,17 @@
 
 ### Changed
 
+- **`EngineOptions.World` has gone: bind your game's scopes through `HostScopes`.** One dictionary of token to
+  resolver, `HostScopes = new Dictionary<string, IHostScope> { ["world"] = myWorld }`, binds `@world` and any other
+  scope the bundle declares, named and shaped as Patterplay's option. `IHostScope` is an `IScopeResolver` (`Get`,
+  `CanSet`, `Set`), so a resolver you bound as `World` binds unchanged once it says so, and one object can be
+  Patter's `IHostScope` too. A scope you leave out is backed by the engine as before.
+- **Bundles are `storylets/bundle@2`.** The game's scopes are `ScopeRegistry`, and the `world` block is gone. `@1`
+  and `@0` bundles still load, their `world.properties` read as the scope `world`; an older runtime refuses an `@2`
+  bundle by its schema rather than misreading it. `Bundle.World` is null on an `@2` bundle the loader reads.
+- **A deal allocates far less.** `DealMany` reuses its evaluation contexts and working lists from one deal to the
+  next, sorts without LINQ, and builds trace and diagnostic text only while something is tracing: The Hamlet's deal
+  went from about 58 KB to about 5 KB, and what it deals is unchanged.
 - **A deal makes the hand right.** A deal ranks everything eligible, including what the hand holds, and the hand
   becomes the top of that ranking, full or not. A better card that has become eligible takes the place of a worse
   one, which goes back to the stock (an `EvictEvent`, reason `outranked`); a held card wins a tie, so an equal card
@@ -58,10 +82,11 @@
   alike; `PreviewLoad` and `LoadGame` refuse an envelope that isn't a save, has an unknown schema or has no content,
   before reading anything else. The conformance corpus (versions 18 and 19) checks it in every runtime.
 
-- **What a game is handed is its own.** A dealt card's fields and extension values, an outcome's, a box's, a field's
-  structured default and `ExtensionsOf`'s values are copies: a game that changed one used to change it in the bundle
-  for every later deal, in every engine on that bundle, and in Unity in the cached asset across play sessions. The conformance corpus (version 17) checks it in every
-  runtime.
+- **What a game is handed is its own.** A dealt card's fields, an outcome's, and a field's structured default are
+  copies: a game that changed one used to change it in the bundle for every later deal, in every engine on that
+  bundle, and in Unity in the cached asset across play sessions. Extension values are the exception, as in Patter:
+  they're the extension's own data, handed out uncopied and read-only by contract, because they can be large and a
+  copy per deal would cost every game. The conformance corpus checks it in every runtime.
 
 ## [0.14.0] - 2026-10-21
 

@@ -129,7 +129,8 @@ Men is the worked case, where paying the debt off needs a reputation you may not
 
 Both engines keep their properties in one **registry**, a `ScopeRegistry` from
 [`@wildwinter/scoperegistry`](https://www.npmjs.com/package/@wildwinter/scoperegistry). Your game
-makes it, registers `@world` in it, and hands it to both engines:
+makes it, registers its host scopes in it (`@world`, and any others such as `@player`), and
+hands it to both engines:
 
 ```ts
 import { ScopeRegistry } from "@wildwinter/scoperegistry";
@@ -157,11 +158,13 @@ or loading a save is refused, naming the token, before anything changes. A tool 
 engine alone, such as a preview or a coverage run, refuses that content for the same reason,
 unless the game shares its scopes, when it stands the other engine in.
 
-Declare the same `@world` properties in both projects, with the same names and types, or share
-your scopes and declare them once. If your game keeps `@world`
-in its own state instead, register it as a foreign scope with your resolver
-(`registry.defineForeign("world", resolver, worldDeclarations)`), and neither the registry nor
-either engine saves it.
+Declare the same host scopes in both projects, with the same names and types, or share your
+scopes and declare them once. If your game keeps one in its own state instead, register it as a
+foreign scope with your resolver (`registry.defineForeign("world", resolver, worldDeclarations)`),
+and neither the registry nor either engine saves it. With a registry of your game's, neither
+engine backs a host scope by itself: each one is yours to register. Running one engine alone,
+you bind them through its `hostScopes` option instead, one map of token to resolver, the same
+option in both engines.
 
 There are two ways to make a value read-only, and they mean different things. `writable: false`
 on the declaration is the story's own promise. Both compilers refuse a write in that project,
@@ -204,14 +207,17 @@ with `gameScopes` in its project file (see [the format](/format/shards/#the-proj
 values or stages, default, read-only, and purpose. It's written whenever you save the project
 in Storyletter or run `storyletengine export`, and only when it changed, always in the same
 canonical form, so a diff shows real changes. `game.scopes.json` belongs to the game rather
-than to either tool. Any tool's World settings edit its `@world`, re-reading it before each
-write and leaving its other scopes alone.
+than to either tool. Any tool's World settings edit the game's scopes there, re-reading the file
+before each write and leaving the scopes they didn't change alone.
 
-**`@world` has one home.** Where `game.scopes.json` declares it, that is `@world` for every
-project in the game. The compiler checks against it and copies it into the bundle, so a
-standalone engine still backs it from the right defaults. Each project keeps a synced copy of
-its own, rewritten on every save, so it still compiles when it's packed or checked out alone.
-If the two ever differ (someone edited one by hand), `validate` warns and the shared file wins.
+**Each game scope has one home.** Where `game.scopes.json` declares `@world`, that is `@world`
+for every project in the game, and the same goes for any other scope a project declares
+(`@player`). The compiler checks against it and copies it into the bundle, so a standalone
+engine still backs it from the right defaults. Each project keeps a synced copy of its own,
+rewritten on every save, so it still compiles when it's packed or checked out alone. If the two
+ever differ (someone edited one by hand), `validate` warns and the shared file wins. A scope in
+`game.scopes.json` that a project doesn't declare is checked like another tool's: a warning,
+never an error, and never in that project's bundle.
 
 **Checking is warnings.** With `patter.scopes.json` in the folder, `@patter.vists` is a
 warning naming the file that should declare it, and so are a type mismatch

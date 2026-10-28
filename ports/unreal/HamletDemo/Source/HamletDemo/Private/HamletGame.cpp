@@ -51,8 +51,11 @@ bool FHamletGame::Setup(const FString& StoryletJson, const FString& PatterJson, 
 		FString BundleError;
 		StoryletBundle.Reset(UStoryletBundle::LoadFromJsonString(StoryletJson, BundleError));
 		if (!StoryletBundle) { OutError = TEXT("the storylets bundle did not load: ") + BundleError; return false; }
-		// ONE world, both engines: ours takes it at Create, through the plugin's own seam.
-		Storylets.Reset(UStoryletEngine::Create(StoryletBundle.Get(), static_cast<int32>(Seed), false, World.Store.Get()));
+		// ONE world, both engines: ours takes it at Create as the host scope "world",
+		// through the plugin's own seam.
+		FStoryletEngineOptions Options;
+		Options.Seed = static_cast<int32>(Seed);
+		Storylets.Reset(UStoryletEngine::CreateWithOptions(StoryletBundle.Get(), Options, { { TEXT("world"), World.Store.Get() } }));
 		if (!Storylets) { OutError = TEXT("the storylet engine did not start"); return false; }
 
 		PatterBundle.Reset(UPatterBundle::LoadFromString(PatterJson));

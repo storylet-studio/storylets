@@ -69,9 +69,11 @@ import {
 } from "./views.js";
 import {
   renderCardWorkspace, renderTemplateWorkspace, renderHandWorkspace, renderTagGroupWorkspace,
-  renderBoxTabBody, renderDeckTabBody, refreshGameIds, setDocTab,
+  renderBoxTabBody, renderDeckTabBody, recountDocTabs, refreshGameIds, setDocTab,
 } from "./inspector.js";
 import { keepPlace } from "./keep-place.js";
+import { watchFocusReturn } from "./focus-return.js";
+import { listenMenuKey } from "./menu-key.js";
 import { createProjectSettings } from "./project-settings.js";
 import { setSettingsOpener } from "./solo-pointer.js";
 import { setPlayRung } from "./play-ladder.js";
@@ -439,7 +441,7 @@ function applyResult(result: OpenResult): void {
   session.remote = result.remote;
   // The game's shared scopes folder, for the expression editors' dialect: seeded on every
   // result, since sharing the project's scopes comes back through here.
-  setGameScopes(result.project.gameScopes);
+  setGameScopes(result.project.gameScopes, result.project.hostTokens);
   // The lead carries the unpushed count, and every write moves it: redrawn here
   // rather than only on a full workspace render, which a keystroke does not do.
   renderProjectLead();
@@ -759,6 +761,8 @@ function repaintAfterSave(): void {
     || ins?.kind === "hand" || ins?.kind === "tagGroup"
     || ins?.kind === "deck" || f?.kind === "box" || f?.kind === "story";
   if (!editing) renderCentre();
+  // A page being edited isn't redrawn, but its tab counts follow the save.
+  else recountDocTabs(shell.centre);
 }
 
 /** A freshly made thing asks to be named: its title is focused and selected on
@@ -772,6 +776,26 @@ function focusNewTitle(): void {
   // unrelated render to act on.
   clearTimeout(focusTitleTimer);
   focusTitleTimer = setTimeout(() => { pendingFocusTitle = false; }, 2000);
+}
+
+/**
+ * Spend a pending title request, if the page now draws a title: true when the
+ * title took the focus. Only once it really has: a box made from the kit
+ * gallery lands while the modal gallery is still playing its exit, and the
+ * page behind a modal cannot take the focus (the hands-on review, 2026-10,
+ * foundation 8: the focus fell to the top of the window). The request then
+ * waits for the gallery to go (focus-return.ts asks again).
+ */
+function takeTitleFocus(): boolean {
+  if (!pendingFocusTitle) return false;
+  const t = shell.centre.querySelector<HTMLInputElement>(".doc-title");
+  if (!t || t.disabled) return false;
+  t.focus();
+  if (document.activeElement !== t) return false;
+  t.select();
+  pendingFocusTitle = false;
+  clearTimeout(focusTitleTimer);
+  return true;
 }
 
 function renderWorkspace(): void {
@@ -793,10 +817,7 @@ function renderWorkspace(): void {
   // for the first render that draws a title, since a setup document's detail
   // arrives a moment after the navigation; once taken, later redraws of the
   // same document keep the focus and the selection themselves (keep-place.ts).
-  if (pendingFocusTitle) {
-    const t = shell.centre.querySelector<HTMLInputElement>(".doc-title");
-    if (t && !t.disabled) { t.focus(); t.select(); pendingFocusTitle = false; clearTimeout(focusTitleTimer); }
-  }
+  takeTitleFocus();
   nav.rememberPlace();
   tellDeckFocused(nav.focus?.kind === "deck");
 }
@@ -838,7 +859,8 @@ function landOn(within: ParentNode, name: string): void {
 
 setPropertyNavigator({
   goToDefinition(ref) {
-    if (ref.scope === "world") {
+    // Any host scope (@world, @player, ...) is declared in Project Settings > Game scopes.
+    if (ref.scope === "world" || session.project?.hostTokens?.tokens.includes(ref.scope) === true) {
       projectSettingsPanel.open("world");
       landOn(document.querySelector(".settings-dialog") ?? document, ref.name);
       return;
@@ -955,6 +977,11 @@ async function boot(): Promise<void> {
   // The OS asked the running app to open something else.
   studio.onProjectOpened((result) => void exchange.arrive(result));
   commands.listen();
+  // The right-click menus from the keyboard (ContextMenu, Shift+F10), and the
+  // focus given back to whatever opened a picker once it closes, or to a new
+  // thing's title that was waiting for it.
+  listenMenuKey();
+  watchFocusReturn({ claim: takeTitleFocus });
   // Persist pending edits when leaving or closing the editor window (so the
   // Board reads current disk, and a close never drops the last keystrokes).
   window.addEventListener("blur", () => { if (session.project) void saves.flush(); });

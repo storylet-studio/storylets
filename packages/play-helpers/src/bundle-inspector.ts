@@ -48,10 +48,11 @@ export function formatPropertySummary(p: PropertySummary): string {
   return `${p.name}: ${p.type} = ${showVal(p.default)}${options}${durable}`;
 }
 
-/** The scope label a declaration block files under ("world", "box box",
- *  "tag docks (zone)"). */
+/** The scope label a declaration block files under ("world", "player", "box box",
+ *  "tag docks (zone)"). A host scope is named by its token, as @world is. */
 export function formatScopeLabel(scope: PropertyScopeSummary): string {
   if (scope.scope === "world" || scope.scope === "story") return scope.scope;
+  if (scope.scope === "host") return scope.owner;
   const group = scope.group !== undefined ? ` (${scope.group})` : "";
   return `${scope.scope} ${scope.owner}${group}`;
 }

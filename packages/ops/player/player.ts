@@ -18,7 +18,7 @@
 // ---------------------------------------------------------------------------
 /// <reference lib="dom" />
 
-import { SAVE_SCHEMA } from "@storylet-studio/model";
+import { SAVE_SCHEMA, bundleHostScopes, hostScopeDecls } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, SaveEnvelope } from "@storylet-studio/model";
 import { Engine, describeBundle } from "@storylet-studio/runtime";
 import type { DealtCard, Flow, OutcomeView } from "@storylet-studio/runtime";
@@ -76,7 +76,7 @@ let session: Flow;
 let worldValues: PropertyBag = {};
 const freshWorld = (): void => {
   worldValues = {};
-  for (const d of bundle.world.properties) worldValues[d.name] = defaultFor(d);
+  for (const d of hostScopeDecls(bundle, "world")) worldValues[d.name] = defaultFor(d);
 };
 const worldResolver = {
   get: (n: string) => worldValues[n],
@@ -86,7 +86,7 @@ const worldResolver = {
 //
 // A page exported from a project paired with Patter plays its performed boxes' cards as their
 // scenes (@storylet-studio/with-patter, the Board's own code). Both engines then share ONE
-// registry, the page's, which holds @world too: the combined game's arrangement.
+// registry, the page's, which holds the host scopes too: the combined game's arrangement.
 let pagePatter: PagePatter | undefined;
 let registry: ScopeRegistry | undefined;
 let patter: PatterEngineType | undefined;
@@ -100,13 +100,20 @@ const freshEngine = (): void => {
   freshWorld();
   const Patterplay = (window as unknown as { Patterplay?: PatterplayGlobal }).Patterplay;
   if (pagePatter && Patterplay) {
-    registry = new ScopeRegistry().defineOwned("world", bundle.world.properties as unknown as ScopeDeclaration[],
-      { normalise: (name) => name, pathPrefix: "world.", owner: "Game" });
+    registry = new ScopeRegistry();
+    for (const host of bundleHostScopes(bundle)) {
+      registry.defineOwned(host.token, (host.declarations ?? []).map((d) => {
+        const writable = d.writable ?? host.writable;
+        return { ...d, ...(writable !== undefined ? { writable } : {}) } as ScopeDeclaration;
+      }), { normalise: (name) => name, pathPrefix: `${host.token}.`, owner: "Game" });
+    }
     engine = new Engine(bundle, { seed: SEED, registry });
     patter = new Patterplay.Engine(pagePatter.bundle, { registry, seed: SEED });
     performer = new Performer(patter, new Set(pagePatter.boxes));
   } else {
-    engine = new Engine(bundle, { seed: SEED, world: worldResolver });
+    // The page keeps @world itself; any other host scope the engine self-backs, and saves.
+    const declaresWorld = bundleHostScopes(bundle).some((h) => h.token === "world");
+    engine = new Engine(bundle, { seed: SEED, ...(declaresWorld ? { hostScopes: { world: worldResolver } } : {}) });
   }
   performing = undefined;
   session = engine.openFlow("main");

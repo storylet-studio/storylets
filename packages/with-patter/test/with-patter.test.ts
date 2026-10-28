@@ -18,8 +18,8 @@ const patterBundle = JSON.parse(readFileSync(`${examples}patter-dist/the_hamlet.
 function game() {
   const values: Record<string, unknown> = { time_of_day: "day", knows_road: false };
   const world = { get: (n: string) => values[n] as never, set: (n: string, v: unknown) => { values[n] = v; } };
-  const storylets = new StoryletEngine(storyletBundle, { seed: 7, world });
-  const patter = new PatterEngine(patterBundle, { seed: 7, world });
+  const storylets = new StoryletEngine(storyletBundle, { seed: 7, hostScopes: { world } });
+  const patter = new PatterEngine(patterBundle, { seed: 7, hostScopes: { world } });
   const story = storylets.openFlow("main");
   story.dealMany();
   return { storylets, patter, story, performer: new Performer(patter, new Set(["village"])) };

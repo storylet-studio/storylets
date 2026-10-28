@@ -116,7 +116,7 @@ bool FStoryletProjectMapTest::RunTest(const FString& Parameters)
 		}
 	}
 
-	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("engine created"), Engine)) return false;
 	UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
 	if (!TestNotNull(TEXT("flow opened"), Flow)) return false;
@@ -150,7 +150,7 @@ bool FStoryletProjectMapTest::RunTest(const FString& Parameters)
 		UStoryletBundle* NoMap = UStoryletBundle::LoadFromJsonString(NoMapBundleJson, NoMapError);
 		if (TestNotNull(TEXT("the no-map asset compiles"), NoMap))
 		{
-			TestNull(TEXT("Create refuses a box on a map that is not there"), UStoryletEngine::Create(NoMap));
+			TestNull(TEXT("Create refuses a box on a map that is not there"), UStoryletEngine::Create(NoMap, {}));
 		}
 	}
 

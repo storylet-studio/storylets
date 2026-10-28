@@ -79,11 +79,13 @@ export function journalRows(plan: readonly JournalItem[], ctx: JournalContext): 
         return { stamp, kind: "warning", warning: true, cls: "j-warn", parts: [`${e.where}: ${e.message}`] };
       case "meddle":
         return { stamp, kind: "meddled", cls: "j-meddle", parts: [`${e.label} `, ...change(e.prev, e.value)] };
+      case "sceneWrite":
+        return { stamp, kind: "scene wrote", cls: "j-write", parts: [`${e.label} `, ...change(e.prev, e.value), ` (${quote(e.scene)}’s scene)`] };
     }
   };
 
   // The chips gate kinds: a play's group rides the played chip, its writes also
-  // honour wrote, and meddles ride wrote too (both are state changes).
+  // honour wrote, and meddles and a scene's writes ride wrote too (all state changes).
   const rows: JournalRow[] = [];
   for (const item of plan) {
     if (item.kind === "play") {
@@ -109,7 +111,7 @@ export function journalRows(plan: readonly JournalItem[], ctx: JournalContext): 
         ? { stamp: `T${item.uniform}`, kind: "turn", cls: "j-turn", parts: ["every box", BECOMES, String(item.uniform)] }
         : { stamp: "", kind: "turn", cls: "j-turn", parts: ["every box +1"] });
     } else {
-      const gate = item.entry.type === "meddle" ? "write" : item.entry.type;
+      const gate = item.entry.type === "meddle" || item.entry.type === "sceneWrite" ? "write" : item.entry.type;
       if (ctx.hidden.has(gate)) continue;
       const row = entryRow(item.entry);
       if (row) rows.push(row);

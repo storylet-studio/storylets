@@ -86,8 +86,8 @@ export function renderStoryCentre(host: HTMLElement, ctx: StoryPageContext, rest
       });
     })();
     const foot = el("p", { className: "set-note" },
-      el("span", { text: "Your game’s own state (@world) is a contract the principal designer keeps. It lives in " }),
-      el("button", { className: "linklike", text: "Project settings ▸ World", onClick: () => ctx.openSettings("world") }),
+      el("span", { text: "Your game’s own state (@world, and any other scope the game provides) is a contract the principal designer keeps. It lives in " }),
+      el("button", { className: "linklike", text: "Project settings ▸ Game scopes", onClick: () => ctx.openSettings("world") }),
       el("span", { text: "." }));
     page.replaceChildren(trail, head, list, foot);
     restore?.();

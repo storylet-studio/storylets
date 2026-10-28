@@ -23,7 +23,7 @@
 // ---------------------------------------------------------------------------
 
 import { boxColourOf, planBoxColour } from "@storylet-studio/ops";
-import type { SourceBox } from "@storylet-studio/compiler";
+import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
 import { VIEW_SCHEMA } from "@storylet-studio/model";
 import type { FileState } from "./history.js";
 import type { ProjectSession } from "./project.js";
@@ -43,7 +43,10 @@ export function nextColour(taken: readonly number[]): number {
 
 /** The boxes on the project map, in the project's display order. */
 export function boxesOnMap(session: ProjectSession): SourceBox[] {
-  const source = session.loaded.source;
+  return boxesOnMapOf(session.loaded.source);
+}
+
+function boxesOnMapOf(source: SourceProject | undefined): SourceBox[] {
   if (!source || source.map === undefined) return [];
   return byDisplay(source.boxes.map((b, i) => ({ b, order: b.box.box.order ?? i })))
     .map(({ b }) => b)
@@ -71,19 +74,33 @@ export function colourWrite(session: ProjectSession, box: SourceBox, colour: num
 }
 
 /**
+ * The colour each box on the map with none stored yet WILL take, in project
+ * order, without writing anything. The project's DTO carries these, so a box
+ * shows the colour the map is going to store from the start, and doesn't
+ * change colour the first time the Map is drawn (the hands-on review, 2026-10).
+ */
+export function plannedColours(source: SourceProject | undefined): Map<SourceBox, number> {
+  const on = boxesOnMapOf(source);
+  const taken = on.map((b) => boxColourOf(b)).filter((c): c is number => c !== undefined);
+  const planned = new Map<SourceBox, number>();
+  for (const box of on) {
+    if (boxColourOf(box) !== undefined) continue;
+    const colour = nextColour(taken);
+    taken.push(colour);
+    planned.set(box, colour);
+  }
+  return planned;
+}
+
+/**
  * Give every box on the map that has no colour yet its colour, in project
  * order, and write each one ONCE. The writes that need making, for the caller
  * to apply: empty, which is every call but the first, when every box already
  * has one.
  */
 export function missingColours(session: ProjectSession): FileState[] {
-  const on = boxesOnMap(session);
-  const taken = on.map((b) => boxColourOf(b)).filter((c): c is number => c !== undefined);
   const writes: FileState[] = [];
-  for (const box of on) {
-    if (boxColourOf(box) !== undefined) continue;
-    const colour = nextColour(taken);
-    taken.push(colour);
+  for (const [box, colour] of plannedColours(session.loaded.source)) {
     const w = colourWrite(session, box, colour);
     if (w) writes.push(w);
   }

@@ -1,8 +1,9 @@
 // The shared world: ONE object, handed to BOTH engines.
 //
 // Both engines speak the one expression kernel's value type (Wildwinter.Expr),
-// so a single Get and Set serve the Storylet Engine's resolver and Patter's
-// host scope alike; this holds plain C# values once and converts at the door.
+// so a single Get and Set serve both engines' host scope (each binds it under
+// HostScopes, as "world"); this holds plain C# values once and converts at the
+// door.
 // The GAME's read-only policy lives here too: a story that tries to move a
 // read-only value is refused loudly.
 using System;
@@ -13,7 +14,7 @@ using Wildwinter.Expr;
 
 namespace StoryletStudio.Hamlet
 {
-    public sealed class HamletWorld : IScopeResolver, IHostScope
+    public sealed class HamletWorld : StoryletStudio.StoryletEngine.IHostScope, Patterkit.Patterplay.IHostScope
     {
         public readonly Dictionary<string, object> Values = new Dictionary<string, object>();
         private readonly HashSet<string> _readOnly;

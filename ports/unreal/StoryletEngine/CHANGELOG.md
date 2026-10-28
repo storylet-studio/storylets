@@ -4,6 +4,27 @@
 
 ### Added
 
+- **Any game scope, not only `@world`.** A project can declare its own scopes beside `@world`
+  (`@player`, say), in Patter's shape: a token, a scope-level `writable`, and declarations, or none for
+  an opaque scope that takes any name. The bundle carries them as `scopeRegistry`, and an engine on its
+  own backs each one from its defaults, stores it, saves it and reseeds it on a reset, as it did
+  `@world`. Every `@world` path works for any of them: `GetProperty*` and `SetProperty*` on
+  `player.hp`, `ListProperties` rows, the host-write check, and a story write refused on a read-only
+  name, whether the name or its whole scope says `writable: false`. `DescribeBundle` lists each
+  (`EStoryletScopeKind::Host`, the token as `Owner`, `bOpaque` for a scope that declares no names).
+  The conformance corpus (version 23) checks it in every runtime.
+- **`GetHostScope(Token)`** on `UStoryletEngine`: the container bound at Create under that token, or
+  null when none is. Case-sensitive, as the engine matches a token. Patterplay's `GetHostScope`.
+- **`CreateWithOptions(Bundle, Options, HostScopes)`** and **`FStoryletEngineOptions`** (`Seed`,
+  `bLog`): how an engine plays, as Patterplay's `CreateWithOptions` and `FPatterEngineOptions`.
+- **Set-up reports.** `FStoryletPlayError::Kind` can now be `setup`: a host scope bound under a token
+  the bundle doesn't declare is reported, naming the declared spelling when only the case differs
+  (`hostScopes binds "Player", which this bundle doesn't declare: it declares "player", and a scope's
+  token is case-sensitive`), Patterplay's text word for word. One found while the engine is made comes
+  before `OnError` can be bound, so it's logged as a Warning at once, recorded in the retained log, and
+  delivered to `OnError` on the first `OpenFlow`, as in Patterplay. In the core: `PlayError::kind`
+  `"setup"`, reported through `EngineOptions::onError` as the constructor ends.
+
 - **`OnError` on the engine.** A condition the engine can't evaluate (a host value of the wrong type,
   a resolver that throws, a division by zero) still counts as false, and now the game hears of it
   whether or not anything is tracing: `UStoryletEngine::OnError` fires with an `FStoryletPlayError`
@@ -23,12 +44,44 @@
   back; a `never` card is gone for good, for everyone when it's shared. It emits a `discard` trace
   event (`EStoryletLogKind::Discard`), the examiner's log prints `discard <card> from <hand>` under
   Play, and the Live Link sends a board after it.
+- **Refusals the game can see.** A Blueprint can't catch what the core throws, so the wrapper hands
+  every refusal back, by one convention shared with Patterplay. The setters return it:
+  `SetPropertyNumber`, `SetPropertyBool`, `SetPropertyString` and `SetPropertyFlags`, on the engine
+  and on a flow, and a flow's `AdvanceTurns`, now return an `FString`, empty when the call landed and
+  the refusal otherwise (`"story.gold" takes a number; "5" doesn't fit`), with nothing changed. Every
+  other refusing call, which already returns something, keeps the message for `GetLastError()`, new
+  on `UStoryletEngine` and `UStoryletFlow`: set on a refusal and cleared by the next call that
+  succeeds. On a flow that's `Deal`, `DealMany`, `DealAllHands`, `Peek`, `PeekAll`, `Outcomes`,
+  `Play`, `PlayAdvancing`, `Discard`, `SaveDurableToJson`, `ClearLog` and `Close`; on the engine the
+  opens (`OpenFlow`, `OpenFlowSeeded`, `OpenFlowFromJson`, `OpenFlowWithDurableJson` and its seeded
+  form), `SaveFlowToJson`, `PreviewFlowRestoreJson`, `SaveDurableToJson`, `LoadDurableFromJson`,
+  `CloseFlow`, `Reset`, `ApplyLiveBundle` and `UStoryletSave`'s four, which keep theirs on the engine
+  they were given. `Play`, `Discard` and `ApplyLiveBundle` still fill `OutError` too. Reads
+  (`GetProperty*`, `Board`, `GetTurn`) don't touch it. Every refusal is logged at Error, a `Play` or
+  `Discard` refusal now included, to the plugin's own category, `LogStoryletEngine` (in
+  `StoryletLog.h`), in place of `LogTemp`, so a game can filter or silence it. A game that called
+  a setter or `AdvanceTurns` as a statement needs no change.
 - **The game's clock.** A box's `turn` may now come without `seconds`: the game moves that clock (a
   calendar, its own beat), so a play there advances nothing, as in a timed box. The bundle reader,
   `describeBundle` (`gameClock`) and the Blueprint box summary (`bGameClock`) carry it, and the
   bundle's details panel says `turn = the game's clock`.
 
 ### Changed
+
+- **Bind your game's scopes through `HostScopes`.** `UStoryletEngine::Create(Bundle, HostScopes)` takes
+  one map of token (without the `@`) to `UStoryletWorld`, `{ { TEXT("world"), World } }` for `@world`,
+  and binds any scope the bundle declares the same way; a scope you leave out is self-backed as
+  before. The signatures are Patterplay's: `Create(Bundle, HostScopes)`, `CreateWithOptions(Bundle,
+  Options, HostScopes)`, and, in C++ only, `CreateWithRegistry(Bundle, Registry, HostScopes = {},
+  Options = {})`. The old `Create(Bundle, Seed, bRetainLog, World)` and `CreateWithRegistry(Bundle,
+  Registry, Seed, bRetainLog, World)` have gone, since a Blueprint node can't keep its name with new
+  pins: `Create(Bundle, {})` is the plain engine, and the seed and log move to
+  `FStoryletEngineOptions`. `GetBoundWorld()` is kept, deprecated, as `GetHostScope("world")`, and
+  `UStoryletWorld::MakeResolver` as `MakeHostScope`. In the core, `EngineOptions::world` is now
+  `EngineOptions::hostScopes`, a `std::map` of token to `HostScope` (`WorldResolver` is kept as its old
+  name).
+- **Bundles are `storylets/bundle@2`.** The game's scopes are `scopeRegistry`, and the `world` block
+  has gone. `@1` and `@0` bundles still load, their `world.properties` read as the scope `world`.
 
 - **A deal makes the hand right.** Every hand a deal reaches is re-ranked whole, full or not: the hand
   becomes the top of the ranking, held cards included, each card up to its `inOneHand`. A held card
@@ -38,6 +91,14 @@
   free. A play takes one copy out of the hand. The conformance corpus (version 21) checks it in every
   runtime.
 
+- **What a game is handed is its own, but for extension values.** A dealt card's fields and an
+  outcome's are copies the game may change without touching the bundle; this runtime's views are
+  value structs, so they always were. Extension values are the exception, as in Patter: they're
+  the extension's own data, read-only by contract, which the other runtimes hand out uncopied
+  because they can be large. Here the core's view still carries them by value (a copy C++ makes
+  as it fills the struct) and the Blueprint structs as JSON text, so nothing changes in use; the
+  contract is documented on `DealtCard`, `OutcomeView`, `BoxView` and `ExtensionsOf`. The
+  conformance corpus (version 22) defaces only the fields it was handed.
 - **Saves name cards by Game ID.** A save is now `storylets/save@3`: a flow's turns, cooldowns and
   board, and the cards a shared `redraw: never` has spent, name boxes, cards and hands by Game ID, as
   the play log always did. A card deleted and made again under the same Game ID keeps its place, its

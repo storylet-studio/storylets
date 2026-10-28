@@ -10,7 +10,7 @@
 
 #include "StoryletWorld.generated.h"
 
-namespace storylets { struct WorldResolver; }
+namespace storylets { struct HostScope; }
 struct FStoryletWorldImpl;
 
 /** Fired on every change to a bound world: the host's own writes (bFromStory
@@ -18,12 +18,14 @@ struct FStoryletWorldImpl;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FStoryletWorldChanged,
 	const FString&, Name, const FStoryletValue&, Value, bool, bFromStory);
 
-/** The GAME's @world container, bound to an engine at UStoryletEngine::Create
- *  (design/flows.md: @world is foreign; the engine reads and writes it through
- *  the host and never carries it in a save). Without one the engine self-backs
- *  @world from the declared defaults, which is fine for a run that never
- *  leaves the engine; bind one when the game, Patterplay and the story share
- *  values, as the Hamlet demo does.
+/** A GAME-owned host scope's container (@world, or any scope the project
+ *  declares, @player say), bound to an engine by token at
+ *  UStoryletEngine::Create's HostScopes (design/flows.md: a bound host scope
+ *  is foreign; the engine reads and writes it through the host and never
+ *  carries it in a save). Without one the engine self-backs the scope from its
+ *  declared defaults, which is fine for a run that never leaves the engine;
+ *  bind one when the game, Patterplay and the story share values, as the
+ *  Hamlet demo does with @world. Patterplay's UPatterWorld.
  *
  *  Two read-only ideas meet here and stay distinct (design/Reboot.md 10):
  *  a `writable: false` declaration is the STORY's promise, checked by the
@@ -82,9 +84,13 @@ public:
 
 	// --- C++ seam (Blueprint never sees these) ------------------------------------
 
-	/** The resolver handed to the core; weak on this object, so a world the
-	 *  game dropped reads as unset rather than dangling. */
-	storylets::WorldResolver MakeResolver();
+	/** The host scope handed to the core; weak on this object, so a container
+	 *  the game dropped reads as unset rather than dangling. Patterplay's
+	 *  UPatterWorld::MakeHostScope. */
+	storylets::HostScope MakeHostScope();
+	/** The name before host scopes. */
+	UE_DEPRECATED(5.7, "Use MakeHostScope, the name Patterplay uses.")
+	storylets::HostScope MakeResolver();
 	/** A read in core terms; false when unset. */
 	bool Get(const std::string& Name, storylets::StoryletValue& OutValue) const;
 	/** The host's write in core terms (never refused; fires OnChanged with

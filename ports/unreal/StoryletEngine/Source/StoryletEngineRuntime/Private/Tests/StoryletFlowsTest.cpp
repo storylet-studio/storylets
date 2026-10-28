@@ -112,13 +112,13 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 
 	// --- standalone: the envelope carries everything ----------------------------------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("standalone engine"), Engine)) return false;
 		Engine->OpenFlow(TEXT("main"));
 		Engine->OpenFlow(TEXT("side"));
 		const FString Saved = UStoryletSave::SaveStateToJson(Engine);
 
-		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("a fresh standalone engine"), Fresh)) return false;
 		FString LoadReport;
 		TestTrue(TEXT("the save loads into an engine that never opened a flow"),
@@ -132,7 +132,7 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 
 	// --- a replaced or closed wrapper stays closed through the load's re-bind ----------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		UStoryletFlow* First = Engine->OpenFlow(TEXT("main"));
 		UStoryletFlow* Second = Engine->OpenFlow(TEXT("main"));
@@ -144,7 +144,7 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("GetFlow after a reopen hands back the live wrapper"), Engine->GetFlow(TEXT("main")), Second);
 
 		// A save that carries both names, loaded back over the same engine.
-		UStoryletEngine* Donor = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Donor = UStoryletEngine::Create(Bundle, {});
 		Donor->OpenFlow(TEXT("main"));
 		Donor->OpenFlow(TEXT("gone"));
 		TestTrue(TEXT("the donor's save loads"), UStoryletSave::LoadStateFromJson(Engine, UStoryletSave::SaveStateToJson(Donor)));
@@ -158,7 +158,7 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 
 	// --- OnReplacedFlow: the core's diagnostic hook reaches Blueprint ------------------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		UStoryletReplacedFlowListener* Listener = NewObject<UStoryletReplacedFlowListener>();
 		Engine->OnReplacedFlow.AddDynamic(Listener, &UStoryletReplacedFlowListener::OnReplaced);
@@ -173,7 +173,7 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 
 	// --- OpenFlowFromJson hands back the restore's report ------------------------------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		UStoryletFlow* Visit = Engine->OpenFlow(TEXT("visit"));
 		if (!TestNotNull(TEXT("visit"), Visit)) return false;
@@ -190,8 +190,8 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 
 	// --- OpenFlowSeeded: the flow's own seed in place of the engine's -------------------
 	{
-		UStoryletEngine* Seeded = UStoryletEngine::Create(Bundle);
-		UStoryletEngine* ByEngine = UStoryletEngine::Create(Bundle, 7);
+		UStoryletEngine* Seeded = UStoryletEngine::Create(Bundle, {});
+		UStoryletEngine* ByEngine = UStoryletEngine::CreateWithOptions(Bundle, FStoryletEngineOptions{ 7, false }, {});
 		if (!TestNotNull(TEXT("engines"), Seeded) || !TestNotNull(TEXT("seeded engine"), ByEngine)) return false;
 		Seeded->OpenFlowSeeded(TEXT("f"), 7);
 		ByEngine->OpenFlow(TEXT("f"));
@@ -204,7 +204,7 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 
 	// --- Peek's count, and a closed flow refusing with the core's words -----------------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
 		if (!TestNotNull(TEXT("flow"), Flow)) return false;

@@ -38,10 +38,11 @@ import type { CanvasTokens } from "./canvas-tokens.js";
 import {
   DRAG_THRESHOLD_PX, allInView, boxBetween, centredCamera, clampScale, contentBounds, crossesFloor, frameCamera,
   isAdditive, isContextPress, meetsBox, onGridLine, pastDragThreshold, screenToWorld, snapDelta, viewCentre,
-  visibleRect, worldRectToScreen, worldToScreen, zoomAbout, type Camera, type Point, type Rect,
+  stepTo, visibleRect, worldRectToScreen, worldToScreen, zoomAbout, type Camera, type Point, type Rect,
 } from "./canvas-geometry.js";
-import { canvasKey, cursorFor, escapeTakes, ownsKeys } from "./canvas-input.js";
+import { canvasKey, cursorFor, escapeTakes, ownsKeys, type StepDirection } from "./canvas-input.js";
 import { overlayOpen } from "./browse-keys.js";
+import { focusOpenMenu } from "./menu-key.js";
 import { cameraMotion, startCameraTween, type CameraTween } from "./canvas-tween.js";
 
 export type { Camera } from "./canvas-geometry.js";
@@ -909,8 +910,13 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
 
   // --- keys belong to the canvas only when it is the author's subject ----------
   // The rule is canvas-input `ownsKeys`; this keeps the state it reads.
-  opts.host.tabIndex = -1;
-  opts.host.style.outline = "none";
+  // One tab stop for the whole canvas, its selection the keyboard's place on it
+  // (canvas-input `canvasKey`). The ring shows only when the keyboard brought
+  // the focus here (`.canvas-host:focus-visible`, canvas-controls.css): a press
+  // takes the focus too, and a ring round the whole pane on every click would
+  // be noise.
+  opts.host.tabIndex = 0;
+  opts.host.classList.add("canvas-host");
   let pointerOver = opts.host.matches(":hover");
   const onEnter = (): void => { pointerOver = true; };
   const onLeave = (): void => { pointerOver = false; };
@@ -1501,10 +1507,16 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   // rules, ownership included, are canvas-input `canvasKey`.
   const onKeyDown = (e: KeyboardEvent): void => {
     if (isEditableTarget(e.target)) return;
+    // The browse keys (arrows, Enter, the menu key) are the canvas's only while
+    // the keys are on the canvas itself: a focused button in its control strip
+    // keeps Enter for itself.
+    const target = e.target instanceof Element ? e.target : null;
+    const browse = target === null || target === opts.host || !opts.host.contains(target);
     const key = canvasKey(e, {
-      tool: tool !== undefined, owns: ownsKeysNow(), marquee: marqueeFrom !== undefined, selected: selected.size,
+      tool: tool !== undefined, owns: ownsKeysNow(), marquee: marqueeFrom !== undefined, selected: selected.size, browse,
     });
     if (key === undefined) return;            // not ours: the editor may go up a level
+    if (typeof key === "object" && "step" in key) { e.preventDefault(); stepSelection(key.step); return; }
     if (typeof key === "object") { opts.onKey?.(key.letter); return; }
     if (key === "holdSpace") {
       // A key-repeat says nothing new.
@@ -1528,8 +1540,37 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       case "zoomOut": zoomCentre(1 / ZOOM_STEP); return;
       case "showSelection": showSelection(); return;
       case "fitAll": fitAll(); return;
+      case "activate": opts.onActivate?.([...selected][0]!); return;
+      case "menu": menuFromKeys(); return;
     }
   };
+
+  /** An arrow: the selection moves to the nearest item that way, and the
+   *  camera follows only when that item is not already in view. */
+  function stepSelection(dir: StepDirection): void {
+    const open = items.filter((i) => i.locked !== true);
+    const last = [...selected].pop();
+    const from = open.find((i) => i.id === last);
+    const to = stepTo(from, open, dir);
+    if (to === undefined) return;
+    setSelection([to]);
+    const item = open.find((i) => i.id === to)!;
+    if (!allInView([item], cameraTarget(), view())) centreWorld({ x: item.x + item.width / 2, y: item.y + item.height / 2 });
+  }
+
+  /** The ContextMenu key or Shift+F10: the menu a right-click on the selected
+   *  item opens, anchored to that item on screen. */
+  function menuFromKeys(): void {
+    const id = [...selected].pop();
+    const item = items.find((i) => i.id === id);
+    if (item === undefined) return;
+    const camera = cameraNow();
+    const at = worldToScreen(camera, { x: item.x + item.width / 2, y: item.y + item.height / 2 });
+    const box = opts.host.getBoundingClientRect();
+    const evt = new MouseEvent("contextmenu", { clientX: box.left + at.x, clientY: box.top + at.y, bubbles: false, cancelable: true });
+    opts.onContext?.(item.id, { x: item.x + item.width / 2, y: item.y + item.height / 2 }, evt);
+    focusOpenMenu();
+  }
   const onKeyUp = (e: KeyboardEvent): void => {
     if (e.key === " " && spaceHeld) { spaceHeld = false; resolveCursor(); }
   };

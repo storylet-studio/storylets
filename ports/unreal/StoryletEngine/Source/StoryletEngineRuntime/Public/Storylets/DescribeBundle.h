@@ -139,10 +139,12 @@ namespace storylets
     };
 
     /** The scope kinds a declaration block can belong to. Tag declarations
-     *  compose into @hand for any ask that binds the tag (schema 3.6). */
+     *  compose into @hand for any ask that binds the tag (schema 3.6). `host`
+     *  is a host scope other than @world (`@player`), its token the owner. */
     namespace scopekind
     {
         inline const char* const World = "world";
+        inline const char* const Host = "host";
         inline const char* const Story = "story";
         inline const char* const Box = "box";
         inline const char* const Deck = "deck";
@@ -151,13 +153,17 @@ namespace storylets
     }
 
     /** One scope's declared properties. owner is the owning entity's gameId
-     *  (empty for world / story); box names its box; group names a tag's group.
+     *  (empty for world / story), or a host scope's token; box names its box;
+     *  group names a tag's group.
      *  A zone of the project map is a tag scope with a group and NO box: it
      *  belongs to none. */
     struct PropertyScopeSummary
     {
         std::string scope;
         std::string owner;
+        /** A host scope that declares no names, so takes any (`world` or
+         *  `host` only). False for every other scope. */
+        bool opaque = false;
         /** Empty for world / story. */
         std::string box;
         /** Empty except on tag scopes. */
@@ -209,10 +215,12 @@ namespace storylets
         std::vector<BoxSummary> boxes;
         /** Every hand in the bundle, box by box: the deal() surface. */
         std::vector<HandSummary> hands;
-        /** world, story, then per box: the box, its decks, its hands, its tags;
-         *  then the project map's zones, once. Scopes that declare nothing are
-         *  omitted (world and story always show, so their absence reads as
-         *  "this bundle declares none"). */
+        /** The host scopes in bundle order (world, and any others such as
+         *  player), story, then per box: the box, its decks, its hands, its
+         *  tags; then the project map's zones, once. Scopes that declare
+         *  nothing are omitted (world and story always show, so their absence
+         *  reads as "this bundle declares none"; an undeclared world shows
+         *  first, empty). */
         std::vector<PropertyScopeSummary> properties;
         /** The project map, when the bundle has one. Empty is the bundle with
          *  no map at all. */
@@ -231,6 +239,7 @@ namespace storylets
     inline std::string ScopeLabel(const PropertyScopeSummary& scope)
     {
         if (scope.scope == scopekind::World || scope.scope == scopekind::Story) return scope.scope;
+        if (scope.scope == scopekind::Host) return scope.owner;
         std::string suffix = scope.group.empty() ? std::string() : " (" + scope.group + ")";
         return scope.scope + " " + scope.owner + suffix;
     }
@@ -372,10 +381,21 @@ namespace storylets
         d.identity.hash = bundle.content.hash;
         d.identity.metadata = bundle.metadata;
 
-        PropertyScopeSummary world;
-        world.scope = scopekind::World;
-        world.properties = describedetail::Summarise(bundle.world.properties);
-        d.properties.push_back(std::move(world));
+        if (!FindHostScope(bundle, "world"))
+        {
+            PropertyScopeSummary world;
+            world.scope = scopekind::World;
+            d.properties.push_back(std::move(world));
+        }
+        for (const HostScopeSpec& spec : bundle.hostScopes)
+        {
+            PropertyScopeSummary host;
+            host.scope = spec.token == "world" ? scopekind::World : scopekind::Host;
+            if (spec.token != "world") host.owner = spec.token;
+            host.opaque = spec.opaque;
+            host.properties = describedetail::Summarise(spec.declarations);
+            d.properties.push_back(std::move(host));
+        }
         PropertyScopeSummary story;
         story.scope = scopekind::Story;
         story.properties = describedetail::Summarise(bundle.story.properties);

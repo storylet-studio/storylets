@@ -12,7 +12,8 @@
 # registry once itself, beside this file's envelope.
 # A foreign or malformed blob is refused with push_error instead of
 # corrupting a run; a save for another project is refused by the engine's
-# own project check.
+# own project check. Either way the load verbs return null and the refusal is
+# kept for engine.last_error() (the convention at the head of engine.gd).
 #
 #   var json := StoryletSave.serialize_state(engine, world_values)
 #   var world = StoryletSave.deserialize_state(engine, json)  # null on refusal;
@@ -52,23 +53,26 @@ const LOAD_OPTION_KEYS := ["on_report"]
 ## push_error) on a foreign blob or a project mismatch. `opts` takes
 ## {"on_report": Callable}: see LOAD_OPTION_KEYS.
 static func load_state(engine: StoryletEngine, file, opts: Dictionary = {}) -> Variant:
+	engine._last_error = ""
 	for key in opts:
 		if not LOAD_OPTION_KEYS.has(key):
-			push_error('StoryletSave.load_state: unknown option "%s" (valid: %s)' % [key, ", ".join(LOAD_OPTION_KEYS)])
+			engine._refuse("StoryletSave.load_state", 'unknown option "%s" (valid: %s)' % [key, ", ".join(LOAD_OPTION_KEYS)])
 			return null
 	if not (file is Dictionary) or file.get("schema") != SCHEMA \
 			or not (file.get("engine") is Dictionary) \
 			or not StoryletBundle.SAVE_SCHEMAS.has((file["engine"] as Dictionary).get("schema")):
-		push_error("StoryletSave.load_state: not a %s file" % SCHEMA)
+		engine._refuse("StoryletSave.load_state", "not a %s file" % SCHEMA)
 		return null
 	# Asked before the load rather than read from its return: load_game answers
 	# with a LoadReport now, and the one thing it refuses (a foreign project)
 	# needs a message this call can pass on.
 	var refusal: String = engine._project_mismatch(file["engine"])
 	if refusal != "":
-		push_error("StoryletSave.load_state: " + refusal)
+		engine._refuse("StoryletSave.load_state", refusal)
 		return null
 	var report := engine.load_game(file["engine"])
+	if engine.last_error() != "":
+		return null   # load_game refused it (and said why): nothing was loaded
 	var on_report = opts.get("on_report")
 	if on_report is Callable and (on_report as Callable).is_valid():
 		(on_report as Callable).call(report)
@@ -99,7 +103,7 @@ static func serialize_state(engine: StoryletEngine, world = null, indent: String
 static func deserialize_state(engine: StoryletEngine, json: String, opts: Dictionary = {}) -> Variant:
 	var data = JSON.parse_string(json)
 	if data == null:
-		push_error("StoryletSave.deserialize_state: malformed JSON")
+		engine._refuse("StoryletSave.deserialize_state", "malformed JSON")
 		return null
 	return load_state(engine, data, opts)
 

@@ -95,7 +95,7 @@ bool FStoryletLogEntryTest::RunTest(const FString& Parameters)
 		AddError(Error);
 		return false;
 	}
-	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, 1, /*bRetainLog=*/true);
+	UStoryletEngine* Engine = UStoryletEngine::CreateWithOptions(Bundle, FStoryletEngineOptions{ 1, true }, {});
 	if (!TestNotNull(TEXT("engine creates"), Engine)) return false;
 	UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
 	if (!TestNotNull(TEXT("flow opens"), Flow)) return false;

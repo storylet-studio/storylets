@@ -59,7 +59,8 @@ that wants one playthrough opens one flow and never thinks about it again.
 ## Your game's state
 
 Before you deal, there's one thing to wire up. **`@world`** is the set of properties your game
-owns and the story's conditions read. It works the same way in all four runtimes, so it has
+owns and the story's conditions read, and a game can declare others beside it, such as
+`@player`: its **host scopes**. It works the same way in all four runtimes, so it has
 [a page of its own](/play/world-state/). Read it before you pick an engine.
 
 ## The API, in one table
@@ -70,7 +71,7 @@ On the **engine** (the world):
 
 | Call | Does |
 |---|---|
-| `new Engine(bundle, { seed, log, world, registry })` | Build the engine. `world` binds your game's `@world` resolver, and `registry` hands it your game's registry. A bundle it can't read is refused here |
+| `new Engine(bundle, { seed, log, hostScopes, registry, onError })` | Build the engine. `hostScopes` binds your game's own scopes, one resolver per token (`{ world: ... }`), `registry` hands it your game's registry, and `onError` hears what it played through, set-up problems included. A bundle it can't read is refused here |
 | `openFlow(id, { seed, restore, durable })` | Open (or replace) a named flow. All play happens on the flow it returns; `restore` opens it as it was, and `durable` opens it fresh with its [pocket](/play/world-state/#durable-state-that-outlives-a-run) in |
 | `getFlow(id)` / `flows()` / `closeFlow(id)` | Find, list, and close flows; a closed flow's handle refuses every call |
 | `reset()` | Close every flow and reseed shared state |
@@ -79,7 +80,7 @@ On the **engine** (the world):
 | `saveFlow(id)` | One flow's state on its own, to park a playthrough that is stepping away |
 | `saveDurable()` / `loadDurable(memory)` | The shared [durable](/play/world-state/#durable-state-that-outlives-a-run) state, to carry into a new run. The load returns a report |
 | `previewLoad(envelope)` / `previewFlowRestore(id, save)` | What that load would change, without changing it |
-| `getProperty(path)` / `setProperty(path, value)` | Shared state and `@world` only; a per-flow path is refused |
+| `getProperty(path)` / `setProperty(path, value)` | Shared state and host scopes (`@world`, ...) only; a per-flow path is refused |
 | `subscribeTrace(handler)` | Every flow's events, one stream, tagged with the flow id |
 | `log()` / `clearLog()` | The run's retained log, if you asked for one: every flow's entries in one order, each naming its flow |
 | `listProperties()` / `listBags()` | Every shared property, and the shared bags behind them |
@@ -131,6 +132,7 @@ you name. Peeking shows you what a box would deal; it doesn't let you play from 
 
 ```
 world.gold
+player.hp
 story.reputation
 box.village.heat
 deck.arrival.visits

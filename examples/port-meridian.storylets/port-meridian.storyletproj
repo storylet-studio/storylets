@@ -27,6 +27,32 @@
     bundle: "../storylet-dist/port-meridian.storyletsc",
     metadata: "full",
   },
+  scopeRegistry: {
+    scopes: [
+      {
+        declarations: [
+          {
+            default: "day",
+            name: "time_of_day",
+            purpose: "The game's clock, fed each turn.",
+            type: "enum",
+            values: [
+              "day",
+              "night",
+            ],
+          },
+          {
+            default: false,
+            name: "armed",
+            purpose: "Whether the player carries a weapon right now - gates outcomes the game may offer.",
+            type: "boolean",
+          },
+        ],
+        token: "world",
+      },
+    ],
+    version: 1,
+  },
   settings: {
     playAdvancesTurns: 1,
   },
@@ -102,25 +128,4 @@
     ],
   },
   templates: {},
-  world: {
-    properties: [
-      {
-        default: "day",
-        name: "time_of_day",
-        purpose: "The game's clock, fed each turn.",
-        type: "enum",
-        values: [
-          "day",
-          "night",
-        ],
-      },
-      {
-        default: false,
-        name: "armed",
-        purpose: "Whether the player carries a weapon right now - gates outcomes the game may offer.",
-        type: "boolean",
-      },
-    ],
-    registry: {},
-  },
 }

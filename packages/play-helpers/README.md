@@ -29,8 +29,9 @@ same name, so an integration reads the same in every engine
 - **The examiners** - `createPropertyInspector`, `createBundleInspector`. A
   DOM panel showing live state, the run log and what a bundle offers. The web
   equivalent of the Runtime State window each engine port ships.
-- **`createWorldContainer`** - a ready-made `@world` resolver for a game with
-  no state store of its own to bind.
+- **`createWorldContainer`** - a ready-made `@world` resolver (or any host
+  scope's, by token) for a game with no state store of its own to bind, as
+  `hostScopes: { world: container.resolver }`.
 
 ## Using it
 

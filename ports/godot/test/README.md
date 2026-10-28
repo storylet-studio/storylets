@@ -22,6 +22,11 @@ godot --headless --path ports/godot --import
       [-- /abs/path/to/corpus.json]
   ```
 
+  A case's `hostScopes` are bound through the engine's `"host_scopes"`
+  option, and its `expectSetupErrors` are checked against the `"setup"`
+  reports `on_error` hears, as written: the corpus leaves out the option's
+  name, which each runtime spells its own way (`"host_scopes"` here).
+
   Defaults to the repo's `packages/conformance/corpus.json`. Also runs the two
   corpora vendored from `../expr` beside it: `expr-corpus.json` (the
   evaluator's) and `registry-corpus.json` (the ScopeRegistry's, through the

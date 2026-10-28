@@ -163,8 +163,21 @@ namespace StoryletStudio.StoryletEngine
             {
                 bundle.Settings.PlayAdvancesTurns = settings.Value<double>("playAdvancesTurns");
             }
-            var world = b["world"] as JObject;
-            bundle.World.Properties = world?["properties"] is JArray worldProps ? ParsePropertyDecls(worldProps) : null;
+            // A bundle @1 or @0 has a `world` block, its one game scope; from
+            // @2 the game's scopes are `scopeRegistry`, and a missing `world`
+            // is no gap. An absent block stays null either way, so the engine
+            // can refuse an older bundle that lacks it, by name.
+            if (b["world"] is JObject world)
+            {
+                bundle.World.Properties = world["properties"] is JArray worldProps ? ParsePropertyDecls(worldProps) : null;
+            }
+            else bundle.World = b.Value<string>("schema") == Model.BUNDLE_SCHEMA ? null : new WorldSection { Properties = null };
+            if (b["scopeRegistry"] is JObject registry) bundle.ScopeRegistry = ParseHostScopeRegistry(registry);
+            else if (b["scopeRegistry"] != null && b["scopeRegistry"].Type != JTokenType.Null)
+            {
+                // Not an object: the engine refuses it by name.
+                bundle.ScopeRegistry = new HostScopeRegistry { Scopes = null };
+            }
             var story = b["story"] as JObject;
             bundle.Story.Properties = story?["properties"] is JArray storyProps ? ParsePropertyDecls(storyProps) : null;
             if (b["boxes"] is JArray boxes)
@@ -505,6 +518,32 @@ namespace StoryletStudio.StoryletEngine
                 });
             }
             return decls;
+        }
+
+        /// <summary>The bundle's host scopes (`scopeRegistry`), Patter's shape:
+        /// each scope's token, its scope-level writable, and its declarations,
+        /// absent for an opaque scope. Scopes left null when the bundle's
+        /// `scopes` is not a list, so the engine refuses it by name.</summary>
+        private static HostScopeRegistry ParseHostScopeRegistry(JObject o)
+        {
+            var registry = new HostScopeRegistry { Version = o["version"] != null ? o.Value<int>("version") : 1 };
+            if (!(o["scopes"] is JArray scopes)) { registry.Scopes = null; return registry; }
+            foreach (var item in scopes)
+            {
+                if (!(item is JObject sc)) continue;
+                var spec = new HostScopeSpec
+                {
+                    Token = sc.Value<string>("token"),
+                    Writable = sc["writable"] != null ? (bool?)sc["writable"].Value<bool>() : null,
+                };
+                if (sc["declarations"] is JArray decls)
+                {
+                    spec.Declarations = new List<HostScopeDecl>();
+                    foreach (var d in ParsePropertyDecls(decls)) spec.Declarations.Add(HostScopeDecl.From(d));
+                }
+                registry.Scopes.Add(spec);
+            }
+            return registry;
         }
 
         private static FieldDecl ParseFieldDecl(JObject o)

@@ -88,11 +88,92 @@ namespace StoryletStudio.StoryletEngine
             }
         }
 
-        private sealed class Scored
+        /// <summary>One eligible card of an ask, as ranked. A struct, so an ask
+        /// allocates nothing per card for it; Index is the scored order, the
+        /// sort's last key, which is what makes List.Sort stable.</summary>
+        private struct Scored
         {
-            public CardEntry Entry;
+            public Card Card;
             public double Priority;
             public double Spec;
+            public int Index;
+        }
+
+        /// <summary>Ranking order: priority desc, specificity desc, then scored
+        /// order, so equal cards keep the order they were scored in (the stable
+        /// sort LINQ's OrderByDescending gave). CompareTo is the comparison that
+        /// sort used.</summary>
+        private static readonly Comparison<Scored> ByRank = (a, b) =>
+        {
+            int c = b.Priority.CompareTo(a.Priority);
+            if (c != 0) return c;
+            c = b.Spec.CompareTo(a.Spec);
+            return c != 0 ? c : a.Index.CompareTo(b.Index);
+        };
+
+        /// <summary>One cached evaluation context of a deal: built once per box
+        /// (the hand condition) or per deck and pointed at each ask's @hand as
+        /// it is fetched, so a deal stops building a context, its scopes map and
+        /// its quality closure per deck per ask (about half of what a deal
+        /// allocated). HandEnv is the ask it serves now; the quality channel and
+        /// the "hand" scope read it. View is the registry view it was built
+        /// over: a changed registry builds it again.</summary>
+        private sealed class DealCtx
+        {
+            public EvalContext Ctx;
+            public Engine.RegistryScopes View;
+            public HandEnv HandEnv;
+            /// <summary>The specificity scorer's per-node test against Ctx,
+            /// made once rather than as a closure per card.</summary>
+            public EvalTruthy Matches;
+        }
+
+        /// <summary>What a deal or a peek reuses from the last one: the cached
+        /// contexts and the working lists and maps, cleared rather than rebuilt.
+        /// Held for the whole verb, so it is never shared with a deal a trace
+        /// handler or OnError starts inside it: that one finds none idle and
+        /// makes its own (<see cref="TakeScratch"/>).</summary>
+        private sealed class DealScratch
+        {
+            public readonly Dictionary<string, DealCtx> BoxCtx = new Dictionary<string, DealCtx>();
+            public readonly Dictionary<string, DealCtx> DeckCtx = new Dictionary<string, DealCtx>();
+            /// <summary>RunAsk's deck gates, by the deck's place in its box.</summary>
+            public readonly List<bool> Gates = new List<bool>();
+            /// <summary>EvictUnavailable's gates and contexts, by deck id.</summary>
+            public readonly Dictionary<string, bool> GateById = new Dictionary<string, bool>();
+            public readonly Dictionary<string, DealCtx> CtxById = new Dictionary<string, DealCtx>();
+            public readonly List<Scored> Scored = new List<Scored>();
+            public readonly List<HandInBox> Dealt = new List<HandInBox>();
+            public readonly Dictionary<string, int> Claims = new Dictionary<string, int>();
+            public readonly Dictionary<string, int> World = new Dictionary<string, int>();
+            public readonly Dictionary<string, int> Own = new Dictionary<string, int>();
+            public readonly Dictionary<string, int> Want = new Dictionary<string, int>();
+            /// <summary>A deal's ask and its @hand, one at a time: an ask is
+            /// done with before the next is made.</summary>
+            public readonly AskDescriptor Ask = new AskDescriptor();
+            public readonly OrderedMap<string, string> AskTags = new OrderedMap<string, string>();
+            public readonly OrderedMap<string, string> AskNames = new OrderedMap<string, string>();
+            public readonly HandEnv HandEnv;
+
+            public DealScratch()
+            {
+                var bag = new OrderedMap<string, ExprValue>();
+                HandEnv = new HandEnv { Bag = bag, Sources = new Dictionary<string, HandSource>(), Scope = new BagScope(bag) };
+            }
+        }
+
+        private DealScratch _idleScratch = new DealScratch();
+
+        private DealScratch TakeScratch()
+        {
+            var scratch = _idleScratch ?? new DealScratch();
+            _idleScratch = null;
+            return scratch;
+        }
+
+        private void ReleaseScratch(DealScratch scratch)
+        {
+            _idleScratch = scratch;
         }
 
         /// <summary>One outcome change, resolved and checked but not yet landed
@@ -100,9 +181,10 @@ namespace StoryletStudio.StoryletEngine
         /// address grammar.</summary>
         private sealed class WritePlan
         {
-            public string Kind;     // "world" | "bag" | "scope"
+            public string Kind;     // "host" | "bag" | "scope"
             public string Name;
             public string Path;
+            public Engine.HostScopeState Host; // Kind "host"
             public PropertyBag Bag; // Kind "bag"
             public string Scope;    // Kind "scope": another engine's token
         }
@@ -133,7 +215,7 @@ namespace StoryletStudio.StoryletEngine
         // \z rather than $ in both grammars: a .NET `$` also matches before a
         // final newline, which JS's does not, so "@story.gold\n" was a target
         // here and a refusal there (engine review 2026-10).
-        private static readonly Regex ChangeTarget = new Regex(@"^@([a-z]+)\.([A-Za-z_][A-Za-z0-9_-]*)\z");
+        private static readonly Regex ChangeTarget = new Regex(@"^@([a-z][a-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_-]*)\z");
         private static readonly Regex BoundByRef = new Regex(@"^@(world|story)\.([a-z][a-z0-9_-]*)\z");
 
         private readonly Engine _engine;
@@ -534,8 +616,46 @@ namespace StoryletStudio.StoryletEngine
         /// empty bag, so any reference is an eval error (missing-policy throw).</summary>
         private EvalContext EvalCtx(Box box, Deck deck, HandEnv handEnv)
         {
-            var ctx = new EvalContext { Host = Host(box) };
+            return BuildCtx(box, deck, new DealCtx { HandEnv = handEnv }, _engine.RegistryView()).Ctx;
+        }
+
+        /// <summary>A deal's context for this box (deck null: the hand
+        /// condition's) or deck, from the scratch's cache, now reading
+        /// <paramref name="handEnv"/>. The same as a fresh EvalCtx: box and
+        /// deck fix everything else it holds, and the registry view is checked
+        /// on every fetch.</summary>
+        private DealCtx CachedCtx(DealScratch scratch, Box box, Deck deck, HandEnv handEnv)
+        {
+            var cache = deck == null ? scratch.BoxCtx : scratch.DeckCtx;
+            var key = deck == null ? box.Id : deck.Id;
             var others = _engine.RegistryView();
+            if (!cache.TryGetValue(key, out var held) || held.View != others)
+            {
+                held = BuildCtx(box, deck, new DealCtx(), others);
+                var ctx = held.Ctx;
+                held.Matches = n =>
+                {
+                    try
+                    {
+                        return ConditionPasses(Expr.Evaluate(n, ctx, StoryletsDialect.Instance));
+                    }
+                    catch (Exception)
+                    {
+                        return false;
+                    }
+                };
+                cache[key] = held;
+            }
+            held.HandEnv = handEnv;
+            held.Ctx.Scopes["hand"] = handEnv.Scope;
+            return held;
+        }
+
+        private DealCtx BuildCtx(Box box, Deck deck, DealCtx held, Engine.RegistryScopes others)
+        {
+            var ctx = new EvalContext { Host = Host(box) };
+            held.Ctx = ctx;
+            held.View = others;
             if (_engine._hasQualities || others.Qualities != null)
             {
                 // The quality channel, answering for THIS ask's box and deck, and
@@ -544,11 +664,6 @@ namespace StoryletStudio.StoryletEngine
                 ctx.Qualities = (scope, name) =>
                 {
                     List<string> ladder = null;
-                    if (scope == "world")
-                    {
-                        _engine._worldLadders.TryGetValue(name, out ladder);
-                        return ladder ?? otherLadders?.Invoke(scope, name);
-                    }
                     if (scope == "story")
                     {
                         _engine._storyLadders.TryGetValue(name, out ladder);
@@ -564,8 +679,10 @@ namespace StoryletStudio.StoryletEngine
                         if (_engine._deckLadders.TryGetValue(deck.Id, out var dm)) dm.TryGetValue(name, out ladder);
                         return ladder;
                     }
-                    if (scope == "hand") return HandLadder(handEnv, name);
-                    return otherLadders?.Invoke(scope, name);
+                    if (scope == "hand") return HandLadder(held.HandEnv, name);
+                    // A host scope's (@world, @player, ...), by token.
+                    if (_engine._hostLadders.TryGetValue(scope, out var hm)) hm.TryGetValue(name, out ladder);
+                    return ladder ?? otherLadders?.Invoke(scope, name);
                 };
             }
             // Every other engine's game-wide scope first (every engine reads
@@ -573,14 +690,14 @@ namespace StoryletStudio.StoryletEngine
             // the top.
             foreach (var pair in others.Scopes) ctx.Scopes[pair.Key] = pair.Value;
             // Every own scope is the flow's MERGED view - its own copies over the
-            // shared values, names disjoint - and @world reads through the
-            // registry.
-            ctx.Scopes["world"] = _engine.WorldScope;
+            // shared values, names disjoint - and each host scope reads through
+            // the registry.
+            foreach (var pair in _engine._hostScopes) ctx.Scopes[pair.Key] = pair.Value.Source;
             ctx.Scopes["story"] = StoryScope();
             ctx.Scopes["box"] = BoxScope(box);
             ctx.Scopes["deck"] = deck != null ? (IScopeSource)DeckScope(deck) : EmptyDeckScope;
-            ctx.Scopes["hand"] = handEnv.Scope;
-            return ctx;
+            ctx.Scopes["hand"] = held.HandEnv?.Scope;   // CachedCtx sets it per fetch
+            return held;
         }
 
         private ExprValue Eval(Expression expr, EvalContext ctx)
@@ -644,12 +761,35 @@ namespace StoryletStudio.StoryletEngine
             return group.Tags.Find(t => t.GameId == gameId);
         }
 
-        /// <summary>A deal's ask: the hand's template bindings + chosen tags, or
-        /// its rule's bindings, plus the implicit home binding (schema 2.4).</summary>
-        private AskDescriptor AskForHand(Hand hand, Box box)
+        // The two lookups an ask makes per binding, as loops: List.Find takes
+        // a closure, and these run on every deal.
+        private static Tag TagById(TagGroup group, string id)
         {
-            var boundTags = new OrderedMap<string, string>();
-            var askNames = new OrderedMap<string, string>();
+            foreach (var t in group.Tags) if (t.Id == id) return t;
+            return null;
+        }
+
+        private static Tag TagByEffectiveGameId(TagGroup group, string gameId)
+        {
+            foreach (var t in group.Tags) if (Model.EffectiveGameId(t) == gameId) return t;
+            return null;
+        }
+
+        /// <summary>Hole references and BoundBy references, parsed: {scope,
+        /// name}, or null for one that is not a reference. Keyed by the
+        /// reference text, which is the bundle's, so they hold for the flow's
+        /// life.</summary>
+        private readonly Dictionary<string, string[]> _holeParts = new Dictionary<string, string[]>();
+        private readonly Dictionary<string, string[]> _boundByParts = new Dictionary<string, string[]>();
+
+        /// <summary>A deal's ask: the hand's template bindings + chosen tags, or
+        /// its rule's bindings, plus the implicit home binding (schema 2.4).
+        /// With a scratch, the ask is the scratch's, good until its next
+        /// ask.</summary>
+        private AskDescriptor AskForHand(Hand hand, Box box, DealScratch scratch = null)
+        {
+            var boundTags = scratch != null ? Cleared(scratch.AskTags) : new OrderedMap<string, string>();
+            var askNames = scratch != null ? Cleared(scratch.AskNames) : new OrderedMap<string, string>();
             Expression condition = null;
             if (hand.Template != null)
             {
@@ -660,7 +800,8 @@ namespace StoryletStudio.StoryletEngine
                 }
                 if (template.Bindings != null)
                 {
-                    foreach (var pair in template.Bindings) boundTags.Set(pair.Key, pair.Value);
+                    var groups = template.Bindings.Keys;
+                    for (int i = 0; i < groups.Count; i++) boundTags.Set(groups[i], template.Bindings.GetOrDefault(groups[i]));
                 }
                 BindHand(hand, hand.Chosen, boundTags, askNames);
                 condition = template.Condition;
@@ -672,7 +813,13 @@ namespace StoryletStudio.StoryletEngine
             }
             boundTags.Set(Model.PLACE_GROUP, hand.Id);
             BindStateGroups(box, boundTags, askNames);
-            return new AskDescriptor { Box = box, Hand = hand, Condition = condition, BoundTags = boundTags, AskNames = askNames };
+            var ask = scratch?.Ask ?? new AskDescriptor();
+            ask.Box = box;
+            ask.Hand = hand;
+            ask.Condition = condition;
+            ask.BoundTags = boundTags;
+            ask.AskNames = askNames;
+            return ask;
         }
 
         /// <summary>The hand's own bindings: a template instance's chosen tags or
@@ -684,16 +831,21 @@ namespace StoryletStudio.StoryletEngine
             OrderedMap<string, string> boundTags, OrderedMap<string, string> askNames)
         {
             if (bindings == null) return;
-            foreach (var pair in bindings)
+            // Walked by key: an OrderedMap's enumerator allocates, and this
+            // runs twice per hand per deal.
+            var groups = bindings.Keys;
+            for (int i = 0; i < groups.Count; i++)
             {
-                if (Model.IsHoleRef(pair.Value))
+                var groupId = groups[i];
+                var value = bindings.GetOrDefault(groupId);
+                if (Model.IsHoleRef(value))
                 {
-                    FillHoleFromProperty(hand, pair.Key, pair.Value, boundTags, askNames);
+                    FillHoleFromProperty(hand, groupId, value, boundTags, askNames);
                     continue;
                 }
-                boundTags.Set(pair.Key, pair.Value);
-                var found = _engine._groupsById.GetOrDefault(pair.Key);
-                var tag = found.Group?.Tags.Find(t => t.Id == pair.Value);
+                boundTags.Set(groupId, value);
+                var found = _engine._groupsById.GetOrDefault(groupId);
+                var tag = found.Group != null ? TagById(found.Group, value) : null;
                 if (found.Group != null && tag != null)
                 {
                     askNames.Set(Model.EffectiveGameId(found.Group), Model.EffectiveGameId(tag));
@@ -754,45 +906,55 @@ namespace StoryletStudio.StoryletEngine
         {
             var found = _engine._groupsById.GetOrDefault(groupId);
             var groupName = found.Group != null ? Model.EffectiveGameId(found.Group) : groupId;
-            var where = $"hand {Model.EffectiveGameId(hand)}, tag group {groupName}";
-            string scope, name;
-            if (!Model.TryParseHoleRef(reference, out scope, out name))
+            // The diagnostics' text is built only when something is tracing:
+            // this runs on every deal of a hand with a hole.
+            string Where() => $"hand {Model.EffectiveGameId(hand)}, tag group {groupName}";
+            // The reference parsed once per flow, not per ask: it is the
+            // bundle's, and the parse is a regex match and three strings.
+            if (!_holeParts.TryGetValue(reference, out var parts))
             {
-                Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" is not a @hand, @world or @story property reference" });
+                parts = Model.TryParseHoleRef(reference, out var parsedScope, out var parsedName)
+                    ? new[] { parsedScope, parsedName }
+                    : null;
+                _holeParts[reference] = parts;
+            }
+            if (parts == null)
+            {
+                if (Tracing) Emit(new DiagnosticEvent { Where = Where(), Message = $"\"{reference}\" is not a @hand, @world or @story property reference" });
                 return;
             }
             if (found.Group == null)
             {
-                Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" fills a tag group that is not in this box" });
+                if (Tracing) Emit(new DiagnosticEvent { Where = Where(), Message = $"\"{reference}\" fills a tag group that is not in this box" });
                 return;
             }
             ExprValue value = null;
-            if (scope == "hand")
+            if (parts[0] == "hand")
             {
                 // The merged view: the flow's own bag first, the shared bag
                 // behind it. Names are disjoint, so "first" is routing.
                 var own = _stores.Hand.GetOrDefault(hand.Id);
                 var shared = _engine._shared.Hand.GetOrDefault(hand.Id);
-                value = own?.Get(name) ?? shared?.Get(name);
+                value = own?.Get(parts[1]) ?? shared?.Get(parts[1]);
             }
             else
             {
-                try { value = GetProperty($"{scope}.{name}"); }
+                try { value = PropertyAt(parts, null); }
                 catch (StoryletError) { value = null; }
             }
             if (value == null)
             {
-                Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" names a property that is not declared" });
+                if (Tracing) Emit(new DiagnosticEvent { Where = Where(), Message = $"\"{reference}\" names a property that is not declared" });
                 return;
             }
             // As JS String() makes it: 2 is "2", never "2.0", and a flags list
             // is joined with "," (["act1"] is "act1"). ToString is the JSON
             // form, which quoted a list and so could never name a tag.
             var wanted = value.ToDisplayString();
-            var tag = found.Group.Tags.Find(t => Model.EffectiveGameId(t) == wanted);
+            var tag = TagByEffectiveGameId(found.Group, wanted);
             if (tag == null)
             {
-                Emit(new DiagnosticEvent { Where = where, Message = $"{reference} is \"{wanted}\", which is not one of the tags of \"{groupName}\"" });
+                if (Tracing) Emit(new DiagnosticEvent { Where = Where(), Message = $"{reference} is \"{wanted}\", which is not one of the tags of \"{groupName}\"" });
                 return;
             }
             boundTags.Set(groupId, tag.Id);
@@ -808,96 +970,164 @@ namespace StoryletStudio.StoryletEngine
         {
             // The box's own groups and, when it is on the project map, the
             // map's group: a BoundBy there binds in every opted-in box (3.2).
-            foreach (var group in Model.GroupsOfBox(_engine._bundle, box))
+            // Model.GroupsOfBox's order, walked without the list it builds.
+            foreach (var group in box.TagGroups) BindStateGroup(group, boundTags, askNames);
+            var mapGroup = _engine._bundle?.Map?.Group;
+            if (box.UsesMap && mapGroup != null) BindStateGroup(mapGroup, boundTags, askNames);
+        }
+
+        private void BindStateGroup(TagGroup group, OrderedMap<string, string> boundTags, OrderedMap<string, string> askNames)
+        {
+            if (string.IsNullOrEmpty(group.BoundBy) || boundTags.GetOrDefault(group.Id) != null) return;
+            // Parsed once per flow, as a hole's reference is.
+            if (!_boundByParts.TryGetValue(group.BoundBy, out var parts))
             {
-                if (string.IsNullOrEmpty(group.BoundBy) || boundTags.GetOrDefault(group.Id) != null) continue;
                 var match = BoundByRef.Match(group.BoundBy);
-                if (!match.Success)
-                {
-                    Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"boundBy \"{group.BoundBy}\" is not a @world or @story property reference" });
-                    continue;
-                }
-                ExprValue value;
-                try { value = GetProperty($"{match.Groups[1].Value}.{match.Groups[2].Value}"); }
-                catch (StoryletError)
-                {
-                    Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"boundBy \"{group.BoundBy}\" names a property that is not declared" });
-                    continue;
-                }
-                // JS String() text, as FillHoleFromProperty above.
-                var wanted = value.ToDisplayString();
-                var tag = group.Tags.Find(t => Model.EffectiveGameId(t) == wanted);
-                if (tag == null)
-                {
-                    Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"{group.BoundBy} is \"{wanted}\", which is not one of its tags" });
-                    continue;
-                }
-                boundTags.Set(group.Id, tag.Id);
-                askNames.Set(Model.EffectiveGameId(group), Model.EffectiveGameId(tag));
+                parts = match.Success ? new[] { match.Groups[1].Value, match.Groups[2].Value } : null;
+                _boundByParts[group.BoundBy] = parts;
             }
+            if (parts == null)
+            {
+                if (Tracing) Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"boundBy \"{group.BoundBy}\" is not a @world or @story property reference" });
+                return;
+            }
+            ExprValue value;
+            try { value = PropertyAt(parts, null); }
+            catch (StoryletError)
+            {
+                if (Tracing) Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"boundBy \"{group.BoundBy}\" names a property that is not declared" });
+                return;
+            }
+            // JS String() text, as FillHoleFromProperty above.
+            var wanted = value.ToDisplayString();
+            var tag = TagByEffectiveGameId(group, wanted);
+            if (tag == null)
+            {
+                if (Tracing) Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"{group.BoundBy} is \"{wanted}\", which is not one of its tags" });
+                return;
+            }
+            boundTags.Set(group.Id, tag.Id);
+            askNames.Set(Model.EffectiveGameId(group), Model.EffectiveGameId(tag));
         }
 
         // --- @hand composition (schema 3.6) ---------------------------------------
 
-        private HandEnv BuildHandEnv(AskDescriptor ask)
+        /// <summary>With a scratch, the env is the scratch's, good until its
+        /// next ask (the contexts it caches read it only while that ask
+        /// runs).</summary>
+        private HandEnv BuildHandEnv(AskDescriptor ask, DealScratch scratch = null)
         {
-            var bag = new OrderedMap<string, ExprValue>();
-            var sources = new Dictionary<string, HandSource>();
+            HandEnv env;
+            if (scratch != null)
+            {
+                env = scratch.HandEnv;
+                env.Bag.Clear();
+                env.Sources.Clear();
+            }
+            else
+            {
+                var fresh = new OrderedMap<string, ExprValue>();
+                env = new HandEnv { Bag = fresh, Sources = new Dictionary<string, HandSource>(), Scope = new BagScope(fresh) };
+            }
+            env.BoundTags = ask.BoundTags;
+            var bag = env.Bag;
+            var sources = env.Sources;
 
             // 1. Tag properties of every bound tag (home binds a hand, not a
             //    tag) - the MERGED view: shared under the flow's own, names
             //    disjoint, so order is routing, not shadowing.
-            foreach (var pair in ask.BoundTags)
+            //    Walked by key: an OrderedMap's enumerator allocates, and this
+            //    runs twice per hand per deal.
+            var bound = ask.BoundTags.Keys;
+            for (int i = 0; i < bound.Count; i++)
             {
-                if (pair.Key == Model.PLACE_GROUP) continue;
-                foreach (var side in new[] { _engine._shared.Value.GetOrDefault(pair.Value), _stores.Value.GetOrDefault(pair.Value) })
-                {
-                    if (side == null) continue;
-                    foreach (var prop in side.Values)
-                    {
-                        bag.Set(prop.Key, prop.Value);
-                        sources[prop.Key] = new HandSource { Kind = "value", Id = pair.Value };
-                    }
-                }
+                if (bound[i] == Model.PLACE_GROUP) continue;
+                var tagId = ask.BoundTags.GetOrDefault(bound[i]);
+                var side = _engine._shared.Value.GetOrDefault(tagId);
+                var mine = _stores.Value.GetOrDefault(tagId);
+                if (side == null && mine == null) continue;
+                var source = SourceOf(_valueSources, "value", tagId);
+                Compose(bag, sources, side, source);
+                Compose(bag, sources, mine, source);
             }
             // 2. Hand properties, when the ask is a deal.
             if (ask.Hand != null)
             {
-                foreach (var side in new[] { _engine._shared.Hand.GetOrDefault(ask.Hand.Id), _stores.Hand.GetOrDefault(ask.Hand.Id) })
+                var side = _engine._shared.Hand.GetOrDefault(ask.Hand.Id);
+                var mine = _stores.Hand.GetOrDefault(ask.Hand.Id);
+                if (side != null || mine != null)
                 {
-                    if (side == null) continue;
-                    foreach (var prop in side.Values)
-                    {
-                        bag.Set(prop.Key, prop.Value);
-                        sources[prop.Key] = new HandSource { Kind = "hand", Id = ask.Hand.Id };
-                    }
+                    var source = SourceOf(_handSources, "hand", ask.Hand.Id);
+                    Compose(bag, sources, side, source);
+                    Compose(bag, sources, mine, source);
                 }
             }
             // 3. Chosen tags / criteria, by group name (the tag's gameId as value).
-            foreach (var pair in ask.AskNames)
+            var named = ask.AskNames.Keys;
+            for (int i = 0; i < named.Count; i++)
             {
-                bag.Set(pair.Key, ExprValue.Str(pair.Value));
-                sources[pair.Key] = new HandSource { Kind = "criteria" };
+                bag.Set(named[i], ExprValue.Str(ask.AskNames.GetOrDefault(named[i])));
+                sources[named[i]] = CriteriaSource;
             }
-            return new HandEnv { Bag = bag, Sources = sources, BoundTags = ask.BoundTags, Scope = new BagScope(bag) };
+            return env;
+        }
+
+        // Where a @hand name routes is a (kind, id) pair and never changes,
+        // so one HandSource serves every ask that composes it.
+        private static readonly HandSource CriteriaSource = new HandSource { Kind = "criteria" };
+        private readonly Dictionary<string, HandSource> _valueSources = new Dictionary<string, HandSource>();
+        private readonly Dictionary<string, HandSource> _handSources = new Dictionary<string, HandSource>();
+
+        private static HandSource SourceOf(Dictionary<string, HandSource> known, string kind, string id)
+        {
+            if (known.TryGetValue(id, out var source)) return source;
+            source = new HandSource { Kind = kind, Id = id };
+            known[id] = source;
+            return source;
+        }
+
+        /// <summary>One side of one @hand source, laid over the bag so far.</summary>
+        private static void Compose(OrderedMap<string, ExprValue> bag, Dictionary<string, HandSource> sources,
+            PropertyBag side, HandSource source)
+        {
+            if (side == null) return;
+            var names = side.Values.Keys;
+            for (int i = 0; i < names.Count; i++)
+            {
+                bag.Set(names[i], side.Values.GetOrDefault(names[i]));
+                sources[names[i]] = source;
+            }
         }
 
         // --- the ask (schema 3.1 + 3.2) --------------------------------------------
 
         /// <summary>The claims ledger, derived from the board: card id -> holding
         /// hands (schema 3.5).</summary>
-        private Dictionary<string, int> Claims()
+        private Dictionary<string, int> Claims(Dictionary<string, int> counts)
         {
-            var counts = new Dictionary<string, int>();
-            foreach (var pair in _boardContents)
+            counts.Clear();
+            var hands = _boardContents.Keys;
+            for (int h = 0; h < hands.Count; h++)
             {
-                foreach (var id in pair.Value)
+                foreach (var id in _boardContents.GetOrDefault(hands[h]))
                 {
                     counts.TryGetValue(id, out var n);
                     counts[id] = n + 1;
                 }
             }
             return counts;
+        }
+
+        private static Dictionary<string, int> Cleared(Dictionary<string, int> map)
+        {
+            map.Clear();
+            return map;
+        }
+
+        private static OrderedMap<string, string> Cleared(OrderedMap<string, string> map)
+        {
+            map.Clear();
+            return map;
         }
 
         /// <summary>How many hands of one flow may hold a card at once: one, or
@@ -979,34 +1209,44 @@ namespace StoryletStudio.StoryletEngine
                 var bound = boundTags.GetOrDefault(Model.PLACE_GROUP);
                 if (bound == null || !home.Contains(bound)) return false;
             }
-            foreach (var pair in boundTags)
+            // Walked by key: an OrderedMap's enumerator allocates, and this
+            // runs once per card per ask.
+            var groups = boundTags.Keys;
+            for (int i = 0; i < groups.Count; i++)
             {
-                if (pair.Key == Model.PLACE_GROUP) continue;
-                var tags = card.Tags?.GetOrDefault(pair.Key);
+                var group = groups[i];
+                if (group == Model.PLACE_GROUP) continue;
+                var tags = card.Tags?.GetOrDefault(group);
                 if (tags == null)
                 {
                     // Omission is a wildcard unless the group says otherwise.
-                    if (_engine.requiredGroups.Contains(pair.Key)) return false;
+                    if (_engine.requiredGroups.Contains(group)) return false;
                     continue;
                 }
-                if (!tags.Contains(pair.Value)) return false;
+                if (!tags.Contains(boundTags.GetOrDefault(group))) return false;
             }
             return true;
         }
 
-        /// <summary>Run one ask: availability filter then ranking. `claimed`
-        /// decides the claims step (step 6) per card. `trace` (when a subscriber
-        /// exists) collects the per-card verdicts. `held` is the cards the hand
-        /// being dealt holds: they win ties, so a re-ranking deal never swaps
-        /// one for an equal.</summary>
-        private (List<CardEntry> Ordered, HandEnv HandEnv) RunAsk(
+        /// <summary>Run one ask: availability filter then ranking. `mine` and
+        /// `world` are the claims ledgers the claims step (step 6) reads per
+        /// card. `trace` (when a subscriber exists) collects the per-card
+        /// verdicts. `held` is the cards the hand being dealt holds: they win
+        /// ties, so a re-ranking deal never swaps one for an equal, and claim
+        /// nothing against it. The ranking comes back in the scratch's list,
+        /// which is the caller's until it releases the scratch.</summary>
+        private List<Scored> RunAsk(
+            DealScratch scratch,
             AskDescriptor ask,
-            Func<Card, bool, TraceVerdict?> claimed,
+            Dictionary<string, int> mine,
+            Dictionary<string, int> world,
             List<TraceCard> trace,
             Dictionary<string, int> held = null)
         {
             var box = ask.Box;
-            var handEnv = BuildHandEnv(ask);
+            var handEnv = BuildHandEnv(ask, scratch);
+            var scored = scratch.Scored;
+            scored.Clear();
             // Identity on the trace is by gameId (4.4), so the helper takes the
             // CARD rather than an id: every call site had one in hand, and
             // taking the id was the whole of how the two vocabularies got mixed.
@@ -1016,34 +1256,38 @@ namespace StoryletStudio.StoryletEngine
             }
 
             // The hand's condition: ask-constant, evaluated once (schema 3.1 step 4).
-            if (!Passes(ask.Condition, EvalCtx(box, null, handEnv), "hand", ask.Hand))
+            if (!Passes(ask.Condition, CachedCtx(scratch, box, null, handEnv).Ctx, "hand", ask.Hand))
             {
-                return (new List<CardEntry>(), handEnv);
+                return scored;
             }
 
             // Deck gates: evaluated once per ask, in deck (id) order (schema 2.5).
-            var gateOk = new Dictionary<string, bool>();
+            var gateOk = scratch.Gates;
+            gateOk.Clear();
             foreach (var deck in box.Decks)
             {
-                gateOk[deck.Id] = Passes(deck.Condition, EvalCtx(box, deck, handEnv), "deck", deck);
+                gateOk.Add(Passes(deck.Condition, CachedCtx(scratch, box, deck, handEnv).Ctx, "deck", deck));
             }
 
             var turn = _turnCounts.GetOrDefault(box.Id);
-            var scored = new List<Scored>();
-            foreach (var deck in box.Decks)
+            for (int d = 0; d < box.Decks.Count; d++)
             {
+                var deck = box.Decks[d];
                 // ONE context per deck, not per card: box, deck and handEnv do not
                 // vary inside this loop, and a condition is a read-only gate
                 // (schema 3.1). Rebuilding it per card cost an EvalContext, a
                 // scopes dictionary and five BagScopes each time - about half the
                 // garbage a peek over a large box produced. Reference:
                 // engine.ts runAsk, and storylets-new/design/port-review-2026-08.md.
-                var deckCtx = EvalCtx(box, deck, handEnv);
+                // Since 2026-10-28 the context itself is cached across asks
+                // (CachedCtx), and only pointed at this ask's @hand.
+                var deckCtx = CachedCtx(scratch, box, deck, handEnv);
+                var ctx = deckCtx.Ctx;
                 var deckShared = deck.Shared ?? false;
                 foreach (var card in deck.Cards)
                 {
                     var shared = CardIsShared(card, deckShared);
-                    if (!gateOk[deck.Id])
+                    if (!gateOk[d])
                     {
                         Verdict(card, TraceVerdict.DeckGate);
                         continue;
@@ -1067,7 +1311,6 @@ namespace StoryletStudio.StoryletEngine
                         Verdict(card, TraceVerdict.Tags);
                         continue;
                     }
-                    var ctx = deckCtx;
                     // The label is only built when an eval THROWS, so
                     // interpolating it per card would be waste on the path that
                     // matters.
@@ -1076,7 +1319,9 @@ namespace StoryletStudio.StoryletEngine
                         Verdict(card, TraceVerdict.Condition);
                         continue;
                     }
-                    var refused = claimed(card, shared);    // claims, last (schema 3.1 step 6)
+                    // Claims, last (schema 3.1 step 6).
+                    var refused = ClaimVerdict(card, shared, mine, world,
+                        held != null && held.TryGetValue(card.Id, out var mineHere) ? mineHere : 0);
                     if (refused.HasValue)
                     {
                         Verdict(card, refused.Value);
@@ -1115,25 +1360,15 @@ namespace StoryletStudio.StoryletEngine
                     double spec = 0;
                     if (box.Ranking.Specificity && card.Condition != null)
                     {
-                        var node = Node(card.Condition);
-                        spec = Specificity.MatchedSpecificity(node, n =>
-                        {
-                            try
-                            {
-                                return ConditionPasses(Expr.Evaluate(n, ctx, StoryletsDialect.Instance));
-                            }
-                            catch (Exception)
-                            {
-                                return false;
-                            }
-                        });
+                        spec = Specificity.MatchedSpecificity(Node(card.Condition), deckCtx.Matches);
                     }
-                    scored.Add(new Scored { Entry = new CardEntry { Card = card, Deck = deck, Box = box }, Priority = priority, Spec = spec });
+                    scored.Add(new Scored { Card = card, Priority = priority, Spec = spec, Index = scored.Count });
                 }
             }
 
-            // STABLE sort (List<T>.Sort is unstable; LINQ OrderBy is not).
-            scored = scored.OrderByDescending(s => s.Priority).ThenByDescending(s => s.Spec).ToList();
+            // STABLE sort: List<T>.Sort is not, so the scored order is its
+            // last key (ByRank), in place of LINQ's OrderBy and its copies.
+            scored.Sort(ByRank);
             // Each maximal tie run in the order a deal takes it; runs of 1
             // consume no draws. Held cards first, in the order they were
             // scored; then the rest, shuffled, or drawn by weight when their
@@ -1153,10 +1388,10 @@ namespace StoryletStudio.StoryletEngine
             {
                 foreach (var s in scored)
                 {
-                    trace.Add(new TraceCard { Id = Model.EffectiveGameId(s.Entry.Card), Verdict = TraceVerdict.Dealt, Priority = s.Priority, Specificity = s.Spec });
+                    trace.Add(new TraceCard { Id = Model.EffectiveGameId(s.Card), Verdict = TraceVerdict.Dealt, Priority = s.Priority, Specificity = s.Spec });
                 }
             }
-            return (scored.Select(s => s.Entry).ToList(), handEnv);
+            return scored;
         }
 
         /// <summary>One run of equally ranked cards, scored[from..to), put in
@@ -1176,19 +1411,19 @@ namespace StoryletStudio.StoryletEngine
             run.Clear();
             if (held != null && held.Count > 0)
             {
-                for (int k = from; k < to; k++) if (held.ContainsKey(scored[k].Entry.Card.Id)) run.Add(scored[k]);
+                for (int k = from; k < to; k++) if (held.ContainsKey(scored[k].Card.Id)) run.Add(scored[k]);
             }
             int first = run.Count;
             for (int k = from; k < to; k++)
             {
-                if (first == 0 || !held.ContainsKey(scored[k].Entry.Card.Id)) run.Add(scored[k]);
+                if (first == 0 || !held.ContainsKey(scored[k].Card.Id)) run.Add(scored[k]);
             }
             int rest = run.Count - first;
             bool weighted = false;
             if (rest > 1)
             {
-                var w0 = run[first].Entry.Card.Weight ?? 1;
-                for (int k = first + 1; k < run.Count && !weighted; k++) weighted = (run[k].Entry.Card.Weight ?? 1) != w0;
+                var w0 = run[first].Card.Weight ?? 1;
+                for (int k = first + 1; k < run.Count && !weighted; k++) weighted = (run[k].Card.Weight ?? 1) != w0;
             }
             if (weighted)
             {
@@ -1197,12 +1432,12 @@ namespace StoryletStudio.StoryletEngine
                 for (int p = first; p < run.Count - 1; p++)
                 {
                     double total = 0;
-                    for (int k = p; k < run.Count; k++) total += run[k].Entry.Card.Weight ?? 1;
+                    for (int k = p; k < run.Count; k++) total += run[k].Card.Weight ?? 1;
                     double r = _prng.Next() * total;
                     int at = p;
-                    while (at < run.Count - 1 && r >= (run[at].Entry.Card.Weight ?? 1))
+                    while (at < run.Count - 1 && r >= (run[at].Card.Weight ?? 1))
                     {
-                        r -= run[at].Entry.Card.Weight ?? 1;
+                        r -= run[at].Card.Weight ?? 1;
                         at++;
                     }
                     var picked = run[at];
@@ -1235,17 +1470,23 @@ namespace StoryletStudio.StoryletEngine
             }
         }
 
-        private static DealtCard View(CardEntry entry)
+        private static DealtCard View(CardEntry entry) => View(entry.Card);
+
+        private static DealtCard View(Card card)
         {
-            var card = entry.Card;
             return new DealtCard
             {
                 Id = card.Id,
                 GameId = Model.EffectiveGameId(card),
                 Title = card.Title,
                 Purpose = card.Purpose,
+                // Fields are copied: the game may change what it is handed, and
+                // the bundle's own maps are every later deal's (the hands-on
+                // review, 2026-10, foundation 6). Extension values are NOT: they
+                // are the extension runtime's data, read-only by contract, and
+                // can be large (a family ruling, 2026-10-28, as Patter's).
                 Fields = Handed.Fields(card.Fields),
-                Extensions = Handed.Extensions(card.Extensions),
+                Extensions = card.Extensions,
             };
         }
 
@@ -1287,11 +1528,12 @@ namespace StoryletStudio.StoryletEngine
             criteria = criteria ?? new OrderedMap<string, string>();
             var box = ResolveBox(boxRef);
             var ask = AskForPeek(box, criteria);
-            var claimCounts = Claims();
+            var scratch = TakeScratch();
+            var claimCounts = Claims(scratch.Claims);
             // Skipped outright when the bundle shares nothing, which is most
             // bundles: the ledger walks every live flow's whole board, and an
             // empty map answers every question the same way.
-            var worldClaims = _engine._hasShared ? _engine.SharedClaims() : new Dictionary<string, int>();
+            var worldClaims = _engine._hasShared ? _engine.SharedClaims() : Cleared(scratch.World);
             var trace = Tracing ? new List<TraceCard>() : null;
             // A peek consumes NO draws (ruling A, 2026-10-06): its tie shuffle
             // and any random() in a condition run on a throwaway COPY of the
@@ -1301,22 +1543,33 @@ namespace StoryletStudio.StoryletEngine
             // is what the swap relies on.
             var own = _prng;
             _prng = new Mulberry32(own.State);
-            List<CardEntry> ordered;
             try
             {
-                (ordered, _) = RunAsk(ask, (card, shared) => ClaimVerdict(card, shared, claimCounts, worldClaims), trace);
+                List<Scored> ordered;
+                try
+                {
+                    ordered = RunAsk(scratch, ask, claimCounts, worldClaims, trace);
+                }
+                finally
+                {
+                    _prng = own;
+                }
+                var count = n == null ? ordered.Count : Math.Min(Math.Max(n.Value, 0), ordered.Count);
+                if (trace != null)
+                {
+                    var listedIds = new HashSet<string>();
+                    for (int i = 0; i < count; i++) listedIds.Add(Model.EffectiveGameId(ordered[i].Card));
+                    CapTrace(trace, listedIds);
+                    Emit(new PeekEvent { Box = Model.EffectiveGameId(box), Criteria = criteria, Cards = trace }, _turnCounts.GetOrDefault(box.Id));
+                }
+                var cards = new List<DealtCard>(count);
+                for (int i = 0; i < count; i++) cards.Add(View(ordered[i].Card));
+                return new RankedList { Box = Model.EffectiveGameId(box), Cards = cards };
             }
             finally
             {
-                _prng = own;
+                ReleaseScratch(scratch);
             }
-            var listed = n == null ? ordered : ordered.GetRange(0, Math.Min(Math.Max(n.Value, 0), ordered.Count));
-            if (trace != null)
-            {
-                CapTrace(trace, new HashSet<string>(listed.Select(e => Model.EffectiveGameId(e.Card))));
-                Emit(new PeekEvent { Box = Model.EffectiveGameId(box), Criteria = criteria, Cards = trace }, _turnCounts.GetOrDefault(box.Id));
-            }
-            return new RankedList { Box = Model.EffectiveGameId(box), Cards = listed.Select(View).ToList() };
         }
 
         /// <summary>Refresh one hand (schema 3.5); returns its new shape.</summary>
@@ -1331,22 +1584,24 @@ namespace StoryletStudio.StoryletEngine
         /// it, as a deal does before it fills, and add to `evicted` (when given)
         /// which went and why: the deal's first pass, and the load's check of
         /// what it put back (<see cref="DropUnqualified"/>).</summary>
-        private void EvictUnavailable(Hand hand, Box box, List<EvictEvent> evicted)
+        private void EvictUnavailable(DealScratch scratch, Hand hand, Box box, List<EvictEvent> evicted)
         {
-            var ask = AskForHand(hand, box);
-            var handEnv = BuildHandEnv(ask);
-            var conditionOk = Passes(ask.Condition, EvalCtx(box, null, handEnv), "hand", hand);
-            var gateOk = new Dictionary<string, bool>();
+            var ask = AskForHand(hand, box, scratch);
+            var handEnv = BuildHandEnv(ask, scratch);
+            var conditionOk = Passes(ask.Condition, CachedCtx(scratch, box, null, handEnv).Ctx, "hand", hand);
+            var gateOk = scratch.GateById;
+            gateOk.Clear();
             // ONE context per deck, serving the gate and then every held card
             // of that deck, rather than a fresh one per surviving card: box,
             // deck and handEnv do not vary, and a condition is a read-only
             // gate (schema 3.1), as RunAsk's per-deck context already relies on.
-            var deckCtx = new Dictionary<string, EvalContext>();
+            var deckCtx = scratch.CtxById;
+            deckCtx.Clear();
             foreach (var deck in box.Decks)
             {
-                var ctx = EvalCtx(box, deck, handEnv);
-                deckCtx[deck.Id] = ctx;
-                gateOk[deck.Id] = Passes(deck.Condition, ctx, "deck", deck);
+                var held = CachedCtx(scratch, box, deck, handEnv);
+                deckCtx[deck.Id] = held;
+                gateOk[deck.Id] = Passes(deck.Condition, held.Ctx, "deck", deck);
             }
             var turn = _turnCounts.GetOrDefault(box.Id);
             // The card is named by gameId (4.4). A card the build no longer
@@ -1367,8 +1622,7 @@ namespace StoryletStudio.StoryletEngine
                 }
                 return false;
             }
-            var contents = _boardContents.GetOrDefault(hand.Id) ?? new List<string>();
-            var survivors = contents.Where(cardId =>
+            bool Survives(string cardId)
             {
                 if (!conditionOk) return Evict(cardId, "hand-condition");
                 var entry = _engine._cardsById.GetOrDefault(cardId);
@@ -1393,13 +1647,35 @@ namespace StoryletStudio.StoryletEngine
                 // No condition passes outright, which is what Passes answers
                 // for null. The label is only built when an eval THROWS.
                 if (entry.Card.Condition == null) return true;
-                if (!Passes(entry.Card.Condition, deckCtx[entry.Deck.Id], "card", entry.Card))
+                if (!Passes(entry.Card.Condition, deckCtx[entry.Deck.Id].Ctx, "card", entry.Card))
                 {
                     return Evict(cardId, VerdictWire(TraceVerdict.Condition));
                 }
                 return true;
-            }).ToList();
-            _boardContents.Set(hand.Id, survivors);
+            }
+            // A board list is never changed in place (a change sets a new
+            // one), so a hand that loses nothing keeps its list, and only one
+            // that loses a card is given a new one.
+            var contents = _boardContents.GetOrDefault(hand.Id);
+            if (contents == null)
+            {
+                _boardContents.Set(hand.Id, new List<string>());
+                return;
+            }
+            List<string> survivors = null;
+            for (int i = 0; i < contents.Count; i++)
+            {
+                if (Survives(contents[i]))
+                {
+                    survivors?.Add(contents[i]);
+                }
+                else if (survivors == null)
+                {
+                    survivors = new List<string>(contents.Count);
+                    for (int k = 0; k < i; k++) survivors.Add(contents[k]);
+                }
+            }
+            if (survivors != null) _boardContents.Set(hand.Id, survivors);
         }
 
         /// <summary>After a load puts this flow's board back, drop every held
@@ -1414,6 +1690,7 @@ namespace StoryletStudio.StoryletEngine
         {
             var own = _prng;
             _prng = new Mulberry32(own.State);
+            var scratch = TakeScratch();
             try
             {
                 var handIds = new List<string>(_engine._handsById.Keys);
@@ -1422,12 +1699,13 @@ namespace StoryletStudio.StoryletEngine
                 foreach (var handId in handIds)
                 {
                     var found = _engine._handsById.GetOrDefault(handId);
-                    EvictUnavailable(found.Hand, found.Box, evicted);
+                    EvictUnavailable(scratch, found.Hand, found.Box, evicted);
                 }
                 return evicted.Select(e => new LoadEviction { Hand = e.Hand, Card = e.Card, Reason = e.Reason }).ToList();
             }
             finally
             {
+                ReleaseScratch(scratch);
                 _prng = own;
             }
         }
@@ -1440,17 +1718,42 @@ namespace StoryletStudio.StoryletEngine
         public OrderedMap<string, List<DealtCard>> DealMany(IReadOnlyList<string> handRefs = null)
         {
             AssertOpen();
-            List<string> refs;
+            var scratch = TakeScratch();
+            try
+            {
+                return DealMany(scratch, handRefs);
+            }
+            finally
+            {
+                ReleaseScratch(scratch);
+            }
+        }
+
+        /// <summary>Every hand in id order, resolved as a deal names them: what
+        /// DealMany() deals, worked out once, since the bundle's hands never
+        /// change under a flow.</summary>
+        private List<HandInBox> _everyHand;
+
+        private OrderedMap<string, List<DealtCard>> DealMany(DealScratch scratch, IReadOnlyList<string> handRefs)
+        {
+            var dealt = scratch.Dealt;
+            dealt.Clear();
             if (handRefs != null)
             {
-                refs = new List<string>(handRefs);
+                for (int i = 0; i < handRefs.Count; i++) dealt.Add(ResolveHand(handRefs[i]));
             }
             else
             {
-                refs = new List<string>(_engine._handsById.Keys);
-                refs.Sort(StringComparer.Ordinal);
+                if (_everyHand == null)
+                {
+                    var ids = new List<string>(_engine._handsById.Keys);
+                    ids.Sort(StringComparer.Ordinal);
+                    var every = new List<HandInBox>(ids.Count);
+                    foreach (var id in ids) every.Add(ResolveHand(id));
+                    _everyHand = every;
+                }
+                dealt.AddRange(_everyHand);
             }
-            var dealt = refs.Select(ResolveHand).ToList();
             Prng.ShuffleInPlace(dealt, _prng);
 
             // Eviction first: drop dealt cards no longer available to their hand
@@ -1462,7 +1765,7 @@ namespace StoryletStudio.StoryletEngine
             var evicted = Tracing ? new List<EvictEvent>() : null;
             foreach (var handInBox in dealt)
             {
-                EvictUnavailable(handInBox.Hand, handInBox.Box, evicted);
+                EvictUnavailable(scratch, handInBox.Hand, handInBox.Box, evicted);
                 if (evicted != null && evicted.Count > 0)
                 {
                     var turn = _turnCounts.GetOrDefault(handInBox.Box.Id);
@@ -1471,18 +1774,18 @@ namespace StoryletStudio.StoryletEngine
                 }
             }
 
-            var claimCounts = Claims();
+            var claimCounts = Claims(scratch.Claims);
             // Taken once for the whole batch and kept in step with the local
             // ledger below, so two hands in the SAME deal cannot both take the
             // last shared copy.
             // Skipped outright when the bundle shares nothing, which is most
             // bundles: the ledger walks every live flow's whole board, and an
             // empty map answers every question the same way.
-            var worldClaims = _engine._hasShared ? _engine.SharedClaims() : new Dictionary<string, int>();
+            var worldClaims = _engine._hasShared ? _engine.SharedClaims() : Cleared(scratch.World);
             // Per hand, cleared rather than rebuilt: what the hand holds, and how
             // many of each card it takes.
-            var own = new Dictionary<string, int>();
-            var want = new Dictionary<string, int>();
+            var own = scratch.Own;
+            var want = scratch.Want;
             foreach (var handInBox in dealt)
             {
                 var hand = handInBox.Hand;
@@ -1500,15 +1803,13 @@ namespace StoryletStudio.StoryletEngine
                     own.TryGetValue(id, out var n);
                     own[id] = n + 1;
                 }
-                var ask = AskForHand(hand, box);
+                var ask = AskForHand(hand, box, scratch);
                 var trace = Tracing ? new List<TraceCard>() : null;
                 // At most InOneHand times in this hand; in one hand of this flow
                 // at a time unless the card says any (or, from an older bundle,
                 // Copies); at most SharedCopies hands anywhere (schema 3.5,
                 // shared-scarcity 5).
-                var (ordered, _) = RunAsk(ask,
-                    (card, shared) => ClaimVerdict(card, shared, claimCounts, worldClaims,
-                        own.TryGetValue(card.Id, out var mineHere) ? mineHere : 0), trace, own);
+                var ordered = RunAsk(scratch, ask, claimCounts, worldClaims, trace, own);
                 // The top of the ranking, each card as many times as one hand may hold it.
                 want.Clear();
                 var room = HandCapacity(hand);
@@ -1571,7 +1872,9 @@ namespace StoryletStudio.StoryletEngine
                             }, turn);
                         }
                     }
-                    CapTrace(trace, new HashSet<string>(next.Select(id => Model.EffectiveGameId(_engine._cardsById.GetOrDefault(id).Card))));
+                    var nextIds = new HashSet<string>();
+                    foreach (var id in next) nextIds.Add(Model.EffectiveGameId(_engine._cardsById.GetOrDefault(id).Card));
+                    CapTrace(trace, nextIds);
                     Emit(new DealEvent { Hand = Model.EffectiveGameId(hand), Cards = trace }, turn);
                 }
             }
@@ -1579,8 +1882,13 @@ namespace StoryletStudio.StoryletEngine
             var result = new OrderedMap<string, List<DealtCard>>();
             foreach (var handInBox in dealt)
             {
-                var ids = _boardContents.GetOrDefault(handInBox.Hand.Id) ?? new List<string>();
-                result.Set(Model.EffectiveGameId(handInBox.Hand), ids.Select(id => View(_engine._cardsById.GetOrDefault(id))).ToList());
+                var ids = _boardContents.GetOrDefault(handInBox.Hand.Id);
+                var cards = new List<DealtCard>(ids?.Count ?? 0);
+                if (ids != null)
+                {
+                    foreach (var id in ids) cards.Add(View(_engine._cardsById.GetOrDefault(id)));
+                }
+                result.Set(Model.EffectiveGameId(handInBox.Hand), cards);
             }
             // Keyed as the reference's object is (ruling E): an integer-like
             // hand gameId first.
@@ -1649,7 +1957,7 @@ namespace StoryletStudio.StoryletEngine
                 Title = o.Title,
                 Purpose = o.Purpose,
                 Fields = Handed.Fields(o.Fields),
-                Extensions = Handed.Extensions(o.Extensions),
+                Extensions = o.Extensions,   // read-only, as a dealt card's
                 Available = Passes(o.Condition, ctx, "outcome", entry.Card, o),
             }).ToList();
         }
@@ -1880,14 +2188,21 @@ namespace StoryletStudio.StoryletEngine
             if (!match.Success) throw new StoryletError($"bad change target \"{target}\"");
             var scope = match.Groups[1].Value;
             var name = match.Groups[2].Value;
+            var host = _engine._hostScopes.GetOrDefault(scope);
+            if (host != null)
+            {
+                if (!host.CanSet) throw new StoryletError($"@{scope}.{name} cannot be written: the host bound @{scope} read-only");
+                // The story's own promise, kept HERE and only here, because here
+                // is where the story does the writing: it is consulted before
+                // the seam, so an outcome never reaches the bag (which would let
+                // a host write past it) nor a bound resolver (which cannot tell
+                // the two apart). The host's SetProperty is its own path and
+                // never asks.
+                if (Engine.HostReadOnly(host.Spec, name)) throw new StoryletError($"'@{scope}.{name}' is read-only (writable: false)");
+                return new WritePlan { Kind = "host", Host = host, Name = name, Path = $"{scope}.{name}" };
+            }
             switch (scope)
             {
-                case "world":
-                {
-                    if (!_engine.WorldCanSet) throw new StoryletError($"@world.{name} cannot be written: the host bound @world read-only");
-                    if (_engine.WorldReadOnly(name)) throw new StoryletError($"'@world.{name}' is read-only (writable: false)");
-                    return new WritePlan { Kind = "world", Name = name, Path = $"world.{name}" };
-                }
                 case "story": return PlanBag("story", null, name, $"story.{name}");
                 case "box": return PlanBag("box", entry.Box.Id, name, $"{Address("box", entry.Box.Id)}.{name}");
                 case "deck": return PlanBag("deck", entry.Deck.Id, name, $"{Address("deck", entry.Deck.Id)}.{name}");
@@ -1929,10 +2244,10 @@ namespace StoryletStudio.StoryletEngine
         {
             switch (plan.Kind)
             {
-                case "world":
+                case "host":
                 {
-                    var prev = _engine.WorldGet(plan.Name);
-                    _engine.WorldSet(plan.Name, value);
+                    var prev = _engine.HostGet(plan.Host, plan.Name);
+                    _engine.HostSet(plan.Host, plan.Name, value);
                     return prev;
                 }
                 case "bag":
@@ -1961,7 +2276,7 @@ namespace StoryletStudio.StoryletEngine
             if (prev == null) return;
             switch (plan.Kind)
             {
-                case "world": _engine.WorldSet(plan.Name, prev, host: true); return;
+                case "host": _engine.HostSet(plan.Host, plan.Name, prev, isHost: true); return;
                 case "bag": plan.Bag.Set(plan.Name, prev, silent: true, reason: "play refused", host: true); return;
                 default: _engine._registry.Set(plan.Scope, plan.Name, prev, host: true); return;
             }
@@ -1995,7 +2310,7 @@ namespace StoryletStudio.StoryletEngine
                     GameId = Model.EffectiveGameId(box),
                     Title = box.Title,
                     Turn = _turnCounts.GetOrDefault(box.Id),
-                    Extensions = Handed.Extensions(box.Extensions),
+                    Extensions = box.Extensions,   // read-only and uncopied, as a dealt card's
                 });
             }
             return boxes;
@@ -2020,14 +2335,16 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>The flow's FULL merged view as examiner rows (the property
-        /// examiner / editor surface, parity across all runtimes): @world read
-        /// through the engine's resolver, then per scope the shared values and
-        /// this flow's own. Bundle order.</summary>
+        /// examiner / editor surface, parity across all runtimes): the host
+        /// scopes read through their resolvers, then per scope the shared
+        /// values and this flow's own. Bundle order: host scopes (@world first
+        /// when the bundle lists it first), story, then per-box / per-deck /
+        /// per-hand / per-tag stores.</summary>
         public List<PropertyRow> ListProperties()
         {
             AssertOpen();
             var rows = new List<PropertyRow>();
-            _engine.AddWorldRows(rows);
+            _engine.AddHostRows(rows);
             void Add(string prefix, PropertyBag bag)
             {
                 if (bag == null) return;
@@ -2081,11 +2398,18 @@ namespace StoryletStudio.StoryletEngine
         public ExprValue GetProperty(string path)
         {
             AssertOpen();
-            var parts = path.Split('.');
+            return PropertyAt(path.Split('.'), path);
+        }
+
+        /// <summary>GetProperty on a path already split; a null path is
+        /// joined from the parts only for a refusal's message.</summary>
+        private ExprValue PropertyAt(string[] parts, string path)
+        {
             ExprValue value = null;
-            if (parts.Length == 2 && parts[0] == "world")
+            var host = _engine.HostScopeOf(parts);
+            if (host != null)
             {
-                value = _engine.WorldGet(parts[1]);
+                value = _engine.HostGet(host, parts[1]);
             }
             else if (_engine.IsOtherScope(parts))
             {
@@ -2104,9 +2428,9 @@ namespace StoryletStudio.StoryletEngine
             }
             else
             {
-                throw new StoryletError($"bad property path \"{path}\"");
+                throw new StoryletError($"bad property path \"{path ?? string.Join(".", parts)}\"");
             }
-            if (value == null) throw new StoryletError($"no property at \"{path}\"");
+            if (value == null) throw new StoryletError($"no property at \"{path ?? string.Join(".", parts)}\"");
             return value;
         }
 
@@ -2114,11 +2438,12 @@ namespace StoryletStudio.StoryletEngine
         {
             AssertOpen();
             var parts = path.Split('.');
-            if (parts.Length == 2 && parts[0] == "world")
+            var host = _engine.HostScopeOf(parts);
+            if (host != null)
             {
                 _engine.CheckHostWrite(path, parts, null, value);
-                if (!_engine.WorldCanSet) throw new StoryletError("@world is read-only here: the host bound no write");
-                _engine.WorldSet(parts[1], value, host: true);
+                if (!host.CanSet) throw new StoryletError($"@{host.Token} is read-only here: the host bound no write");
+                _engine.HostSet(host, parts[1], value, isHost: true);
                 return;
             }
             if (_engine.IsOtherScope(parts))

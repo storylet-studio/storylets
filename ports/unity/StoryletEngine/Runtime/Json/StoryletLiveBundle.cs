@@ -75,7 +75,7 @@ namespace StoryletStudio.StoryletEngine
         /// game's: on the game's registry the old engine hands its keys to the
         /// replacement, which a plain save and load into a second engine cannot
         /// do (the two would clash). The engine remembers the options it was
-        /// built with (Seed, Log, World, Registry), so <paramref name="change"/>
+        /// built with (Seed, Log, HostScopes, Registry), so <paramref name="change"/>
         /// is only for building the replacement with different ones: it edits a
         /// copy of them, and whatever it leaves alone is kept (a Registry it
         /// sets is ignored), as in <see cref="Engine.HotSwap"/>.</summary>

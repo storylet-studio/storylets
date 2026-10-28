@@ -3,7 +3,7 @@
 // or on a box, can read. Authoring assist only; validate remains the check.
 // ---------------------------------------------------------------------------
 
-import { worldDeclarations } from "@storylet-studio/compiler";
+import { projectHostScopes } from "@storylet-studio/compiler";
 import type { SourceBox, SourceDeck } from "@storylet-studio/compiler";
 import { effectiveGameId } from "@storylet-studio/model";
 import { otherToolsCatalogue } from "../game-scopes.js";
@@ -12,8 +12,8 @@ import type { ProjectSession } from "../project.js";
 import { locate, locateBoxSeen } from "../mutate/shards.js";
 import type { ConditionProperty } from "../../shared/api.js";
 
-/** The expr-editor catalogue reachable from a card in this deck: the five
- *  scopes' declared properties. @hand is composed per deal, so its entries
+/** The expr-editor catalogue reachable from a card in this deck: the engine's
+ *  scopes' and every host scope's (`@world`, `@player`, ...) declared properties. @hand is composed per deal, so its entries
  *  are the superset of dimension-value properties and query params in the
  *  box (authoring assist; validate remains the real check). */
 export function cardCatalogue(session: ProjectSession, deckId: string): ConditionProperty[] {
@@ -45,10 +45,21 @@ function catalogueFor(session: ProjectSession, box: SourceBox, deck: SourceDeck 
       });
     }
   };
-  // @world from the game's shared file when it declares one, which is what the compiler
-  // checks against; the project's own copy otherwise.
-  add("world", worldDeclarations(session.loaded.source!));
+  // @world first, then the story, then the other host scopes: each from the game's shared file
+  // where it declares one, which is what the compiler checks against; the project's own copy
+  // otherwise. An opaque scope declares nothing to offer.
+  const hosts = projectHostScopes(session.loaded.source!).map((h) => h.spec);
+  // The scope's own `writable` carried onto each, so a read-only scope's properties are read-only here too.
+  const hostDecls = (token: string): Parameters<typeof add>[1] => {
+    const h = hosts.find((x) => x.token === token);
+    return (h?.declarations ?? []).map((d) => {
+      const writable = d.writable ?? h!.writable;
+      return { ...d, ...(writable !== undefined ? { writable } : {}) };
+    });
+  };
+  add("world", hostDecls("world"));
   add("story", project.story?.properties ?? []);
+  for (const h of hosts) if (h.token !== "world") add(h.token, hostDecls(h.token));
   add("box", box.box.box.properties ?? []);
   if (deck) add("deck", deck.shard.deck.properties ?? []);
   const handNames = new Set<string>();

@@ -25,7 +25,7 @@ beforeAll(() => {
 
 const settings = (): ProjectSettingsDto => ({
   name: "Saltmarsh", version: "0.1.0",
-  world: [], story: [], drivers: [],
+  hostScopes: [{ token: "world", declarations: [] }], story: [], drivers: [],
   bundlePath: "build/saltmarsh.storyletsc", metadata: "full", exportMap: false,
   playAdvancesTurns: 1, play: "solo", ladder: { solo: [], shared: [] },
   warnUnreadWrites: false, patterProject: "", vcs: "",
@@ -124,5 +124,96 @@ describe("Project Settings, the Patterpad review (2026-10-07)", () => {
     expect(saved).toBe(0);
     expect(frame.open).toBe(true);
     expect(name.value).toBe("Saltmarsh, renamed");
+  });
+});
+
+describe("Project Settings > Game scopes (host scopes like Patter's)", () => {
+  const withPlayer = (): ProjectSettingsDto => ({
+    ...settings(),
+    hostScopes: [
+      { token: "world", declarations: [{ name: "danger", type: "number", default: "0" }] },
+      { token: "player", writable: false, declarations: [{ name: "hp", type: "number", default: "10" }] },
+    ],
+    drivers: [{ ref: "@player.hp", kind: "recurring", cadence: "sometimes", values: [1, 5] }],
+  });
+  const host = (dto: ProjectSettingsDto, saved: ProjectSettingsDto[] = []): StudioApi => ({
+    projectSettings: async () => dto,
+    saveProjectSettings: async (d: ProjectSettingsDto) => { saved.push(structuredClone(d)); return { error: "stop here" }; },
+    proposeDrivers: async () => [],
+    stageGates: async () => 0,
+  } as unknown as StudioApi);
+  const panelOf = (frame: HTMLDialogElement): HTMLElement =>
+    [...frame.querySelectorAll<HTMLElement>(".settings-panels > *")].find((p) => p.querySelector(".host-scopes")) ?? frame;
+  const save = async (frame: HTMLDialogElement): Promise<void> => {
+    frame.querySelector<HTMLButtonElement>(".settings-save")!.click();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+  };
+
+  it("draws @world first with a fixed name, then each other scope with its own", async () => {
+    document.body.replaceChildren();
+    createProjectSettings(host(withPlayer()), () => {}, () => {}).open("world");
+    const frame = await opened();
+    expect([...frame.querySelectorAll(".settings-tab")].some((t) => t.textContent === "Game scopes")).toBe(true);
+    const blocks = [...panelOf(frame).querySelectorAll<HTMLElement>(".host-scope")];
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]!.querySelector("h3")!.textContent).toBe("@world");
+    expect(blocks[0]!.querySelector(".host-scope-token")).toBeNull();
+    expect(blocks[0]!.textContent).not.toContain("Any name, unchecked");
+    expect(blocks[1]!.querySelector<HTMLInputElement>(".host-scope-token")!.value).toBe("player");
+    // The scope's own Read-only, ticked from the DTO.
+    const ro = [...blocks[1]!.querySelectorAll<HTMLElement>(".shell-toggle")].find((t) => t.textContent?.includes("Read-only to the story"))!;
+    expect(ro.querySelector<HTMLInputElement>("input")!.checked).toBe(true);
+    // The driver offers the scopes as a choice now there are two.
+    expect(panelOf(frame).querySelector<HTMLSelectElement>("select.set-scope")!.value).toBe("player");
+  });
+
+  it("adds a scope, makes it opaque, and saves it with the rest", async () => {
+    document.body.replaceChildren();
+    const saved: ProjectSettingsDto[] = [];
+    createProjectSettings(host(withPlayer(), saved), () => {}, () => {}).open("world");
+    const frame = await opened();
+    const panel = panelOf(frame);
+    [...panel.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "+ Add scope")!.click();
+    const token = [...panel.querySelectorAll<HTMLInputElement>(".host-scope-token")].at(-1)!;
+    token.value = "weather";
+    token.dispatchEvent(new Event("input"));
+    const block = token.closest<HTMLElement>(".host-scope")!;
+    const opaque = [...block.querySelectorAll<HTMLElement>(".shell-toggle")].find((t) => t.textContent?.includes("Any name, unchecked"))!;
+    const box = opaque.querySelector<HTMLInputElement>("input")!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    expect([...panel.querySelectorAll<HTMLElement>(".host-scope")].at(-1)!.textContent).toContain("Any @weather name is accepted");
+    await save(frame);
+    expect(saved[0]!.hostScopes.map((h) => [h.token, h.opaque === true])).toEqual([["world", false], ["player", false], ["weather", true]]);
+  });
+
+  it("won't save a scope named for the engine's own, and says why", async () => {
+    document.body.replaceChildren();
+    const saved: ProjectSettingsDto[] = [];
+    createProjectSettings(host(withPlayer(), saved), () => {}, () => {}).open("world");
+    const frame = await opened();
+    const token = panelOf(frame).querySelector<HTMLInputElement>(".host-scope-token")!;
+    token.value = "story";
+    token.dispatchEvent(new Event("input"));
+    expect(token.classList.contains("illegal")).toBe(true);
+    expect(token.dataset.tip).toContain("Storylet Engine's own scope");
+    await save(frame);
+    expect(saved).toEqual([]);
+  });
+
+  it("removes a scope", async () => {
+    document.body.replaceChildren();
+    const saved: ProjectSettingsDto[] = [];
+    createProjectSettings(host(withPlayer(), saved), () => {}, () => {}).open("world");
+    const frame = await opened();
+    const block = panelOf(frame).querySelectorAll<HTMLElement>(".host-scope")[1]!;
+    block.querySelector<HTMLButtonElement>("button[title='Remove scope'], button[aria-label='Remove scope']")!.click();
+    expect(panelOf(frame).querySelectorAll(".host-scope")).toHaveLength(1);
+    // The driver feeding @player.hp now names a scope that isn't there, which holds Save.
+    await save(frame);
+    expect(saved).toEqual([]);
+    panelOf(frame).querySelector<HTMLButtonElement>("button[title='Remove driver'], button[aria-label='Remove driver']")!.click();
+    await save(frame);
+    expect(saved[0]!.hostScopes.map((h) => h.token)).toEqual(["world"]);
   });
 });

@@ -32,14 +32,20 @@
 import { parse, renameStageInExpression, stageGateCount as gatesIn } from "@wildwinter/expr";
 import type { Dialect, StageTargetRef } from "@wildwinter/expr";
 import type { SourceBox, SourceDeck, SourceProject } from "@storylet-studio/compiler";
+import { bundleHostScopes } from "@storylet-studio/model";
 import type { FieldDecl, PropertyDecl, TagGroup } from "@storylet-studio/model";
+
+/** A property's scope: the Storylet Engine's own, or a host scope's token
+ *  (`world`, `player`, ...), which is any other string. */
+export type PropertyScope = "world" | "story" | "box" | "deck" | "hand" | (string & {});
 
 /** The quality a stage edit is about. */
 export type StageTarget =
   /** A property. `box` narrows @box, @deck and @hand to the box they live in,
    *  `deck` names the deck for @deck, and `holder` the tag group, tag, hand
-   *  template or hand that declares an @hand property (its id). */
-  | { kind: "property"; scope: "world" | "story" | "box" | "deck" | "hand"; name: string; box?: string; deck?: string; holder?: string }
+   *  template or hand that declares an @hand property (its id). Any other
+   *  scope is a host scope the project declares (`world`, `player`, ...). */
+  | { kind: "property"; scope: PropertyScope; name: string; box?: string; deck?: string; holder?: string }
   /** A card field (`template: "fields"`) or an outcome field of a box. */
   | { kind: "field"; box: string; template: "fields" | "outcomeFields"; name: string };
 
@@ -83,7 +89,8 @@ export function boxSites(box: SourceBox): ExprSite[] {
       at(card as unknown as Record<string, unknown>, "priority", deck);
       for (const outcome of card.outcomes) {
         at(outcome as unknown as Record<string, unknown>, "condition", deck);
-        const changes = outcome.changes as Record<string, string>;
+        // An outcome that changes nothing may leave `changes` out of the shard.
+        const changes = (outcome.changes ?? {}) as Record<string, string>;
         for (const key of Object.keys(changes)) {
           sites.push({ get: () => changes[key], set: (src) => { changes[key] = src; }, assignedTo: key, deck });
         }
@@ -118,9 +125,8 @@ export function locate(source: SourceProject, target: StageTarget): Located | un
   }
   const named = (list: PropertyDecl[] | undefined) => (list ?? []).find((p) => p.name === target.name);
   switch (target.scope) {
-    case "world":
     case "story": {
-      const decl = named(target.scope === "world" ? source.project.world?.properties : source.project.story?.properties);
+      const decl = named(source.project.story?.properties);
       return decl ? { decl, touch: (r) => { r.project = true; }, boxes: source.boxes, groups: [] } : undefined;
     }
     case "box": {
@@ -169,6 +175,12 @@ export function locate(source: SourceProject, target: StageTarget): Located | un
         }
       }
       return undefined;
+    }
+    default: {
+      // A host scope (`@world`, `@player`, ...): the project shard's own copy
+      // of it, in `scopeRegistry` (or a legacy `world` block, read as `world`).
+      const decl = named(bundleHostScopes(source.project).find((s) => s.token === target.scope)?.declarations as PropertyDecl[] | undefined);
+      return decl ? { decl, touch: (r) => { r.project = true; }, boxes: source.boxes, groups: [] } : undefined;
     }
   }
 }

@@ -23,22 +23,33 @@ namespace StoryletStudio.StoryletEngine
 
     public static class Model
     {
-        /// <summary>The bundle schema this build of the format writes: @1 since
-        /// the project map (design/project-map-contract.md 2.4), the bundle that
+        /// <summary>The bundle schema this build of the format writes: @2 since
+        /// host scopes (2026-10-28), the bundle whose game scopes are
+        /// Bundle.ScopeRegistry and which has no `world` block. @1 was the
+        /// project map's (design/project-map-contract.md 2.4), the bundle that
         /// can carry Bundle.Map and Box.UsesMap.
         ///
-        /// Every runtime READS @0 and @1 and refuses anything else, by name.
+        /// @2 is a new number because the `world` block is GONE, not added to:
+        /// a runtime that reads only @1 would reach for `world.properties` and
+        /// fail as a raw error, where a schema it does not know is refused by
+        /// name.
+        ///
+        /// Every runtime READS @0, @1 and @2 and refuses anything else, by name.
         /// Reading @0 is not a compatibility branch: an @0 bundle cannot carry a
         /// map, so it is the same shape with less in it. The check exists so
         /// that from this release on a runtime meeting a schema it does not know
         /// says so, rather than half-working the way an @0 runtime does on a map
         /// bundle (tag matching is by id, so its deals look right while every
         /// zone value is missing).</summary>
-        public const string BUNDLE_SCHEMA = "storylets/bundle@1";
+        public const string BUNDLE_SCHEMA = "storylets/bundle@2";
+        /// <summary>The project map's schema, before host scopes: the game's
+        /// scopes were one `world` block. Still read, its `world.properties` as
+        /// the host scope `world`.</summary>
+        public const string BUNDLE_SCHEMA_V1 = "storylets/bundle@1";
         /// <summary>The schema before the project map, still read.</summary>
         public const string BUNDLE_SCHEMA_V0 = "storylets/bundle@0";
         /// <summary>Every bundle schema a runtime accepts.</summary>
-        public static readonly IReadOnlyList<string> BUNDLE_SCHEMAS = new[] { BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA };
+        public static readonly IReadOnlyList<string> BUNDLE_SCHEMAS = new[] { BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA_V1, BUNDLE_SCHEMA };
         /// <summary>The engine's save envelope, version 3 (the hands-on
         /// review, 2026-10, foundation 7): version 2's shape (the one-registry
         /// model: property values are the game's ScopeRegistry's, so the
@@ -226,6 +237,45 @@ namespace StoryletStudio.StoryletEngine
             if (bundle.Map?.Group != null) groups.Add(bundle.Map.Group);
             return groups;
         }
+
+        /// <summary>The host scopes a bundle declares, in order: its
+        /// ScopeRegistry's, or, for a bundle @1 or @0, its `world` block read
+        /// as the scope `world` (none when that block declares nothing, which
+        /// is what an empty `world` always meant). Never null.</summary>
+        public static List<HostScopeSpec> BundleHostScopes(Bundle bundle)
+        {
+            if (bundle.ScopeRegistry != null)
+            {
+                var specs = new List<HostScopeSpec>();
+                foreach (var spec in bundle.ScopeRegistry.Scopes ?? new List<HostScopeSpec>())
+                {
+                    if (spec != null && !string.IsNullOrEmpty(spec.Token)) specs.Add(spec);
+                }
+                return specs;
+            }
+            var legacy = bundle.World?.Properties;
+            if (legacy == null || legacy.Count == 0) return new List<HostScopeSpec>();
+            var declarations = new List<HostScopeDecl>();
+            foreach (var d in legacy) declarations.Add(HostScopeDecl.From(d));
+            return new List<HostScopeSpec> { new HostScopeSpec { Token = "world", Declarations = declarations } };
+        }
+
+        /// <summary>One host scope by token, case-sensitive, from
+        /// BundleHostScopes; null when the bundle declares none by that
+        /// token.</summary>
+        public static HostScopeSpec HostScopeSpecOf(Bundle bundle, string token)
+        {
+            return BundleHostScopes(bundle).Find(s => s.Token == token);
+        }
+
+        /// <summary>A host scope's declarations by token (empty when it
+        /// declares none, is opaque, or isn't there).
+        /// <c>HostScopeDecls(bundle, "world")</c> is what
+        /// <c>bundle.World.Properties</c> was.</summary>
+        public static List<HostScopeDecl> HostScopeDecls(Bundle bundle, string token)
+        {
+            return HostScopeSpecOf(bundle, token)?.Declarations ?? new List<HostScopeDecl>();
+        }
     }
 
     /// <summary>A property declaration: @world / @story / @box / @deck / tag /
@@ -250,7 +300,7 @@ namespace StoryletStudio.StoryletEngine
         /// Flow.SaveDurable and OpenFlowOptions.Durable for a per-flow one.
         /// Never valid on a @world declaration (the compiler refuses it).</summary>
         public bool? Durable;
-        // Writable (@world only: false is the story's promise not to write it,
+        // Writable (host scopes only: false is the story's promise not to write it,
         // Reboot.md 10; absent = writable) is the KERNEL's field and is declared
         // once, on ScopeDeclaration. Re-declaring it here HID the base one: the
         // loader filled this copy, PropertyBag.Set read the other, and a
@@ -562,11 +612,56 @@ namespace StoryletStudio.StoryletEngine
         public double PlayAdvancesTurns = 1;
     }
 
+    /// <summary>The `world` block of a bundle @1 or @0: @world's
+    /// declarations, the one game scope there was. Read as the host scope
+    /// `world` (Model.BundleHostScopes); a bundle @2 has none.</summary>
     public sealed class WorldSection
     {
         public List<PropertyDecl> Properties = new List<PropertyDecl>();
-        // The optional ScopeRegistrySpec (owned/foreign split) is host territory;
-        // the runtime ignores it at this stage.
+    }
+
+    /// <summary>A property of a host scope (`@world`, `@player`, ...): the
+    /// game's own state, declared by the project. The same shape as Patter's
+    /// HostScopeDecl and the kernel's ScopeDeclaration. Default seeds the
+    /// standalone engine's self-backed bag; Writable == false makes the
+    /// property read-only to the story (an outcome may not write it), never to
+    /// the game.</summary>
+    public sealed class HostScopeDecl : ScopeDeclaration
+    {
+        /// <summary>Free-text author note documenting the property (authoring
+        /// only).</summary>
+        public string Purpose;
+
+        /// <summary>A legacy `world` block's declaration as a host-scope one
+        /// (its Shared and Durable flags mean nothing on a game's scope).</summary>
+        public static HostScopeDecl From(PropertyDecl d) => new HostScopeDecl
+        {
+            Name = d.Name, Type = d.Type, Values = d.Values, Stages = d.Stages,
+            Default = d.Default, Writable = d.Writable, Purpose = d.Purpose,
+        };
+    }
+
+    /// <summary>One scope (Token) in a project's host-scope registry. Patter's
+    /// shape. Null Declarations = an OPAQUE scope: any name is accepted and
+    /// nothing is seeded.</summary>
+    public sealed class HostScopeSpec
+    {
+        /// <summary>The scope token after `@` ("world", "player"). Never one of
+        /// the Storylet Engine's own (story, box, deck, hand).</summary>
+        public string Token;
+        /// <summary>Scope-level read/write default for its declarations (true
+        /// when null).</summary>
+        public bool? Writable;
+        public List<HostScopeDecl> Declarations;
+    }
+
+    /// <summary>A project's host-scope registry: every scope the game
+    /// provides itself. Structurally the kernel's scopeRegistrySpec, and
+    /// Patter's HostScopeRegistry.</summary>
+    public sealed class HostScopeRegistry
+    {
+        public int Version = 1;
+        public List<HostScopeSpec> Scopes = new List<HostScopeSpec>();
     }
 
     public sealed class StorySection
@@ -662,6 +757,18 @@ namespace StoryletStudio.StoryletEngine
         public BundleContent Content = new BundleContent();
         public string Metadata = "full";                 // "full" | "stripped"
         public BundleSettings Settings = new BundleSettings();
+        /// <summary>The game's own scopes the project declares (`@world`,
+        /// `@player`, ...), Patter's shape: each one's token, its scope-level
+        /// Writable and its declarations, every default resolved (null
+        /// declarations: an opaque scope). A standalone engine self-backs each
+        /// from its defaults; a game binds its own store for any of them
+        /// (EngineOptions.HostScopes). Null when the project declares none,
+        /// and in a bundle @1 or @0. Read it through Model.BundleHostScopes,
+        /// which reads an older bundle's World too.</summary>
+        public HostScopeRegistry ScopeRegistry;
+        /// <summary>Bundle @1 and @0 only: the one game scope there was, read
+        /// as the host scope `world` (see Model.BundleHostScopes). The JSON
+        /// loader leaves it null for a bundle @2, which has none.</summary>
         public WorldSection World = new WorldSection();
         public StorySection Story = new StorySection();
         public List<Box> Boxes = new List<Box>();
@@ -940,13 +1047,15 @@ namespace StoryletStudio.StoryletEngine
 
     /// <summary>
     /// Copies of the bundle's own maps, for handing to a host. A view's fields
-    /// and extension values (and an extension field's structured default) are
-    /// the bundle's, shared by every deal and every engine on it, so a game that
-    /// changed what it was handed would change it for all of them (the hands-on
-    /// review, 2026-10, foundation 6). An ExprValue is immutable, so fields need
-    /// only a new map; extension values are a JSON tree, so they copy deep.
-    /// Null stays null, so a view with none costs nothing; an empty map is still
-    /// a new one, since a host may add to it.
+    /// (and an extension field's structured default) are the bundle's, shared by
+    /// every deal and every engine on it, so a game that changed what it was
+    /// handed would change it for all of them (the hands-on review, 2026-10,
+    /// foundation 6). An ExprValue is immutable, so fields need only a new map; a
+    /// structured default is a JSON tree, so it copies deep. Null stays null, so
+    /// a view with none costs nothing; an empty map is still a new one, since a
+    /// host may add to it. Extension values are NOT copied: they are the
+    /// extension runtime's data, read-only by contract, and can be large (a
+    /// family ruling, 2026-10-28, as Patter's).
     /// </summary>
     internal static class Handed
     {
@@ -955,14 +1064,6 @@ namespace StoryletStudio.StoryletEngine
             if (values == null) return null;
             var output = new OrderedMap<string, ExprValue>();
             foreach (var pair in values) output.Set(pair.Key, pair.Value);
-            return output;
-        }
-
-        public static OrderedMap<string, OrderedMap<string, object>> Extensions(OrderedMap<string, OrderedMap<string, object>> values)
-        {
-            if (values == null) return null;
-            var output = new OrderedMap<string, OrderedMap<string, object>>();
-            foreach (var pair in values) output.Set(pair.Key, (OrderedMap<string, object>)Deep(pair.Value));
             return output;
         }
 
@@ -1106,7 +1207,8 @@ namespace StoryletStudio.StoryletEngine
         /// and hand by gameId; handTemplate as "box/template"; outcome as
         /// "card/outcome"; tagGroup and tag as "box/name", or the bare name for
         /// the project map's. The result is a fresh map; the values in it are the
-        /// bundle's own.
+        /// bundle's own, READ-ONLY and uncopied, as the engine's views hand them
+        /// out (a family ruling, 2026-10-28).
         /// </summary>
         public static OrderedMap<string, OrderedMap<string, object>> ExtensionsOf(Bundle bundle, string kind, string address = "")
         {
@@ -1147,9 +1249,13 @@ namespace StoryletStudio.StoryletEngine
             }
         }
 
+        /// <summary>A new outer map over the node's own values, which are not
+        /// copied: a host may add to the map, but the values are read-only.</summary>
         private static OrderedMap<string, OrderedMap<string, object>> Copy(OrderedMap<string, OrderedMap<string, object>> values)
         {
-            return values == null ? new OrderedMap<string, OrderedMap<string, object>>() : Handed.Extensions(values);
+            var output = new OrderedMap<string, OrderedMap<string, object>>();
+            if (values != null) foreach (var pair in values) output.Set(pair.Key, pair.Value);
+            return output;
         }
 
         /// <summary>The first item whose gameId (or, with none, id) is the name:

@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { canonicalStringify, loadProjectFiles, parseProjectFiles, parseSource, compileProject } from "@storylet-studio/compiler";
+import { setHostScopeDecls } from "@storylet-studio/model";
 import type { Bundle } from "@storylet-studio/model";
 import { Table, boardRefusal, boardRegistry, coerceStateInput, loadReportNote, whyNotOf } from "./model.js";
 import type { LoadReport } from "@storylet-studio/model";
@@ -409,5 +410,45 @@ describe("the Why not? reason for a card held back by its clock", () => {
   it("says a once-only card was already played, and a repeating one is cooling down", () => {
     const why = whyNotOf([{ id: "c_once", verdict: "cooldown" }, { id: "c_again", verdict: "cooldown" }], label, []);
     expect(why.couldHave.map((c) => c.reason)).toEqual(["already played, and it comes up once", "on cooldown"]);
+  });
+});
+
+describe("host scopes besides @world on the Board", () => {
+  /** The example with an @player scope the project declares (host scopes like Patter's). */
+  function playerBundle(): Bundle {
+    const { project } = parseProjectFiles(loadProjectFiles(exampleDir));
+    setHostScopeDecls(project!.project, "player", [{ name: "hp", type: "number", default: 10 }, { name: "class", type: "string", default: "rogue" }]);
+    const { bundle, issues } = compileProject(project!);
+    if (!bundle) throw new Error(issues.map((i) => i.message).join("\n"));
+    return bundle;
+  }
+
+  it("shows @player's properties as state rows a tester can poke", () => {
+    const table = new Table(playerBundle(), 0);
+    const hp = table.stateRows().find((r) => r.path === "player.hp")!;
+    expect(hp).toMatchObject({ label: "hp", scope: "player", value: 10, editable: true });
+    table.meddle("player.hp", 4, "hp");
+    expect(table.stateRows().find((r) => r.path === "player.hp")!.value).toBe(4);
+  });
+
+  it("carries @player in the Board's save file and puts it back on load", () => {
+    const table = new Table(playerBundle(), 0);
+    table.session.setProperty("player.hp", 3);
+    const file = JSON.parse(JSON.stringify(table.saveFile()));
+    expect(file.hostScopes).toEqual({ player: { hp: 3, class: "rogue" } });
+    const again = new Table(playerBundle(), 0);
+    again.loadFile({ ...file, engine: { ...file.engine, registry: undefined } });
+    expect(again.session.getProperty("player.hp")).toBe(3);
+  });
+
+  it("keeps @player across a new run, as it keeps @world", () => {
+    const table = new Table(playerBundle(), 0);
+    table.session.setProperty("player.hp", 2);
+    table.newRun();
+    expect(table.session.getProperty("player.hp")).toBe(2);
+  });
+
+  it("writes no hostScopes key for a bundle with @world alone", () => {
+    expect("hostScopes" in new Table(exampleBundle(), 0).saveFile()).toBe(false);
   });
 });

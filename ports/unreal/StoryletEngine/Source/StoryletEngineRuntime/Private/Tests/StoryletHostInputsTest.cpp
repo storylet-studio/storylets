@@ -76,7 +76,7 @@ bool FStoryletHostInputsTest::RunTest(const FString& Parameters)
 
 	// --- OnError: the failed condition reaches Blueprint, tracing or not ---------------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		UStoryletReplacedFlowListener* Listener = NewObject<UStoryletReplacedFlowListener>();
 		Engine->OnError.AddDynamic(Listener, &UStoryletReplacedFlowListener::OnPlayError);
@@ -98,7 +98,7 @@ bool FStoryletHostInputsTest::RunTest(const FString& Parameters)
 
 	// --- nothing bound: a Warning in the log, so a content bug is never silent ----------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		AddExpectedMessage(TEXT("the condition on card broken in flow 'main' failed, counted as false"),
 			ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
@@ -109,13 +109,15 @@ bool FStoryletHostInputsTest::RunTest(const FString& Parameters)
 
 	// --- a host write that does not fit its declaration is refused --------------------
 	{
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
 		if (!TestNotNull(TEXT("flow"), Flow)) return false;
 		AddExpectedError(TEXT("\"story.gold\" takes a number; \"5\" doesn't fit"), EAutomationExpectedErrorFlags::Contains, 2);
 		AddExpectedError(TEXT("\"story.mood\" takes one of \"calm\", \"tense\"; \"angry\" doesn't fit"), EAutomationExpectedErrorFlags::Contains, 1);
-		AddExpectedError(TEXT("no property at \"world.nope\": the content declares no @world.nope"), EAutomationExpectedErrorFlags::Contains, 1);
+		// This bundle's `world` block is empty, which declares no @world scope at
+		// all (host scopes, corpus 23): the path names nothing, as in JS.
+		AddExpectedError(TEXT("bad property path \"world.nope\""), EAutomationExpectedErrorFlags::Contains, 1);
 		Flow->SetPropertyString(TEXT("story.gold"), TEXT("5"));
 		Engine->SetPropertyString(TEXT("story.gold"), TEXT("5"));
 		Flow->SetPropertyString(TEXT("story.mood"), TEXT("angry"));
@@ -128,15 +130,62 @@ bool FStoryletHostInputsTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("a listed value lands"), Flow->GetPropertyString(TEXT("story.mood")), FString(TEXT("tense")));
 	}
 
+	// --- refusals the game can see (a family ruling, 2026-10-28) ------------------------
+	// A setter returns its refusal ("" when it lands); a call that returns
+	// something else keeps it for GetLastError, cleared by the next good one.
+	{
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
+		if (!TestNotNull(TEXT("engine"), Engine)) return false;
+		// The broken card's condition is reported here, not as a Warning.
+		UStoryletReplacedFlowListener* Listener = NewObject<UStoryletReplacedFlowListener>();
+		Engine->OnError.AddDynamic(Listener, &UStoryletReplacedFlowListener::OnPlayError);
+		UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
+		if (!TestNotNull(TEXT("flow"), Flow)) return false;
+		const FString Fit = TEXT("\"story.gold\" takes a number; \"lots\" doesn't fit");
+		AddExpectedError(Fit, EAutomationExpectedErrorFlags::Contains, 2);
+		TestTrue(TEXT("a flow's refused setter returns the refusal"),
+			Flow->SetPropertyString(TEXT("story.gold"), TEXT("lots")).Contains(Fit));
+		TestTrue(TEXT("and keeps it for GetLastError"), Flow->GetLastError().Contains(Fit));
+		TestEqual(TEXT("a setter that lands returns empty"), Flow->SetPropertyNumber(TEXT("story.gold"), 4), FString());
+		TestEqual(TEXT("and clears it"), Flow->GetLastError(), FString());
+		TestTrue(TEXT("the engine's refused setter returns the refusal"),
+			Engine->SetPropertyString(TEXT("story.gold"), TEXT("lots")).Contains(Fit));
+		TestEqual(TEXT("the engine's setter that lands returns empty"), Engine->SetPropertyNumber(TEXT("story.gold"), 5), FString());
+
+		AddExpectedError(TEXT("Storylet Engine: Deal - "), EAutomationExpectedErrorFlags::Contains, 1);
+		TestEqual(TEXT("a refused deal hands back nothing"), Flow->Deal(TEXT("no-such-hand")).Num(), 0);
+		const FString DealRefusal = Flow->GetLastError();
+		TestTrue(TEXT("a refused deal sets GetLastError, naming the hand"), DealRefusal.Contains(TEXT("no-such-hand")));
+		Flow->Deal(TEXT("q"));
+		TestEqual(TEXT("the next good deal clears it"), Flow->GetLastError(), FString());
+
+		AddExpectedError(TEXT("Storylet Engine: AdvanceTurns - "), EAutomationExpectedErrorFlags::Contains, 1);
+		TestFalse(TEXT("a refused AdvanceTurns returns the refusal"), Flow->AdvanceTurns(TEXT("no-such-box"), 1).IsEmpty());
+		TestEqual(TEXT("one that lands returns empty"), Flow->AdvanceTurns(TEXT("box"), 1), FString());
+
+		AddExpectedError(TEXT("Storylet Engine: OpenFlowFromJson - "), EAutomationExpectedErrorFlags::Contains, 1);
+		FString Report;
+		TestNull(TEXT("a refused open hands back null"), Engine->OpenFlowFromJson(TEXT("other"), TEXT("not json"), Report));
+		TestFalse(TEXT("and sets the engine's GetLastError"), Engine->GetLastError().IsEmpty());
+		TestNotNull(TEXT("a good open"), Engine->OpenFlow(TEXT("other")));
+		TestEqual(TEXT("clears it"), Engine->GetLastError(), FString());
+
+		AddExpectedError(TEXT("LoadStateFromJson - not a storylets save"), EAutomationExpectedErrorFlags::Contains, 1);
+		TestFalse(TEXT("a refused load"), UStoryletSave::LoadStateFromJson(Engine, TEXT("{}")));
+		TestFalse(TEXT("sets the engine's GetLastError"), Engine->GetLastError().IsEmpty());
+		TestTrue(TEXT("a good load"), UStoryletSave::LoadStateFromJson(Engine, UStoryletSave::SaveStateToJson(Engine)));
+		TestEqual(TEXT("clears it"), Engine->GetLastError(), FString());
+	}
+
 	// --- a bundle or a save that is not one, refused by name --------------------------
 	{
 		UStoryletBundle* Short = UStoryletBundle::LoadFromJsonString(
 			TEXT("{ \"schema\": \"storylets/bundle@0\", \"content\": { \"project\": \"p\" }, \"settings\": {}, \"world\": { \"properties\": [] } }"), Error);
 		if (!TestNotNull(TEXT("a cut-short bundle still loads as an asset"), Short)) return false;
 		AddExpectedError(TEXT("not a complete Storylets bundle: no story properties; no boxes"), EAutomationExpectedErrorFlags::Contains, 1);
-		TestNull(TEXT("but no engine is made on it"), UStoryletEngine::Create(Short));
+		TestNull(TEXT("but no engine is made on it"), UStoryletEngine::Create(Short, {}));
 
-		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		AddExpectedError(TEXT("not a complete Storylets save: no content"), EAutomationExpectedErrorFlags::Contains, 1);
 		TestFalse(TEXT("a save with no content is refused"), UStoryletSave::LoadStateFromJson(Engine,

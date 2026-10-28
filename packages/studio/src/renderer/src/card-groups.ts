@@ -178,7 +178,7 @@ function byPlace(box: BoxDto, entries: GroupEntry[]): CardGroup[] {
   // send the card anywhere else.
   for (const g of spatial) {
     for (const v of g.values) {
-      out.push({ key: `zone:${g.gameId}:${v}`, label: `Anywhere in ${v}`, entries: homeless.filter((e) => valuesIn(e.card, g.gameId).includes(v)) });
+      out.push({ key: `zone:${g.gameId}:${v}`, label: `Any hand in ${v}`, entries: homeless.filter((e) => valuesIn(e.card, g.gameId).includes(v)) });
     }
   }
   // A card whose only answer is a chosen group: offered under its own name.

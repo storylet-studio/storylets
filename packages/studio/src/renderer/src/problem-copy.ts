@@ -55,6 +55,9 @@ export function boxForPath<B extends { folder: string }>(boxes: readonly B[], pa
 const SHAPES: [RegExp, string][] = [
   // parse.ts: files and folders
   [/^unparseable JSON5: /, "unparseable"],
+  // ops merge.ts: a clash a merge left for the author
+  [/^unresolved merge at /, "unresolved-merge"],
+  [/^unresolved merge sidecar: /, "merge-sidecar"],
   [/^shard must be a JSON5 object$/, "not-an-object"],
   [/^schema tag .* is not "/, "wrong-schema"],
   [/^a project has exactly one \*\.storyletproj at its root; found /, "project-count"],
@@ -291,23 +294,23 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
 
   // --- properties and qualities ----------------------------------------------
   "quality-no-stages": (p) => ({
-    text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has no stages yet.`,
-    next: "A quality is its ladder; add its stages in order.",
+    text: `The property ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has no stages yet.`,
+    next: "A Quality is a property that moves up a ladder of stages: add its stages, in order.",
   }),
   "quality-one-stage": (p) => ({
-    text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has only one stage.`,
+    text: `The property ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has only one stage.`,
     next: "A ladder needs at least two; add another stage.",
   }),
   "quality-empty-stage": (p) => ({
-    text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has a stage with no name (stage ${pick(p, /\(stage (\d+)\)$/)}).`,
+    text: `The property ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has a stage with no name (stage ${pick(p, /\(stage (\d+)\)$/)}).`,
     next: "Name it, or remove it.",
   }),
   "quality-stage-twice": (p) => ({
-    text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} lists the stage ${quoted(pick(p, /lists stage "([^"]*)" twice$/))} twice.`,
+    text: `The property ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} lists the stage ${quoted(pick(p, /lists stage "([^"]*)" twice$/))} twice.`,
     next: "Remove one.",
   }),
   "quality-bad-default": (p) => ({
-    text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} starts at ${spoken(pick(p, /defaults to (.*), which is not/))}, which isn’t one of its stages.`,
+    text: `The property ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} starts at ${spoken(pick(p, /defaults to (.*), which is not/))}, which isn’t one of its stages.`,
     next: "Pick a stage as its starting point.",
   }),
   "reserved-property-name": (p) => ({
@@ -428,23 +431,23 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     next: "Change the default.",
   }),
   "quality-field-no-stages": (p) => ({
-    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has no stages yet.`,
-    next: "A quality is its ladder; add its stages in order.",
+    text: `The field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has no stages yet.`,
+    next: "A Quality is a property that moves up a ladder of stages: add its stages, in order.",
   }),
   "quality-field-one-stage": (p) => ({
-    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has only one stage.`,
+    text: `The field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has only one stage.`,
     next: "A ladder needs at least two; add another stage.",
   }),
   "quality-field-empty-stage": (p) => ({
-    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has a stage with no name (stage ${pick(p, /\(stage (\d+)\)$/)}).`,
+    text: `The field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has a stage with no name (stage ${pick(p, /\(stage (\d+)\)$/)}).`,
     next: "Name it, or remove it.",
   }),
   "quality-field-stage-twice": (p) => ({
-    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} lists the stage ${quoted(pick(p, /lists stage "([^"]*)" twice$/))} twice.`,
+    text: `The field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} lists the stage ${quoted(pick(p, /lists stage "([^"]*)" twice$/))} twice.`,
     next: "Remove one.",
   }),
   "quality-field-bad-default": (p) => ({
-    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} starts at ${spoken(pick(p, /defaults to (.*), which is not/))}, which isn’t one of its stages.`,
+    text: `The field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} starts at ${spoken(pick(p, /defaults to (.*), which is not/))}, which isn’t one of its stages.`,
     next: "Pick a stage as its starting point.",
   }),
   "field-type": (p) => ({
@@ -567,14 +570,14 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     return { text: `This project is set to ${rung} play; ${tail}${/[.!?]$/.test(tail) ? "" : "."}` };
   },
   "driver-ref": () => ({
-    text: "A coverage driver names a property that isn’t a declared @world property.",
+    text: "A game value for coverage names a property that isn’t a declared @world property.",
     next: "Only the game’s own state can be driven; pick a @world property.",
   }),
   "driver-kind": () => ({
-    text: "A coverage driver’s kind must be initial or recurring.",
+    text: "A game value for coverage must be set once at the start or re-rolled as it goes.",
   }),
   "driver-value-type": (p) => ({
-    text: `A coverage driver sets ${spoken(pick(p, /^coverage driver value (.*) does not match/))}, which isn’t a ${pick(p, /property's type "([^"]*)"$/)}.`,
+    text: `A game value for coverage sets ${spoken(pick(p, /^coverage driver value (.*) does not match/))}, which isn’t a ${pick(p, /property's type "([^"]*)"$/)}.`,
   }),
 
   // --- the Patter pairing -------------------------------------------------------
@@ -608,12 +611,27 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     };
   },
 
+  // --- merges --------------------------------------------------------------------
+  // Go to issue lands on the clash itself (problems.ts unresolvedMarkAt).
+  "unresolved-merge": (p) => {
+    const field = pick(p, /^unresolved merge at \S*?\.?(\w+):/);
+    return {
+      text: `A merge clashed over ${p.title ? owner(p) : "its"} ${fieldWord(field || "value")}, and kept your side.`,
+      next: `Check it, then remove its entry from “unresolved” in ${fileName(p)}.`,
+    };
+  },
+  "merge-sidecar": (p) => ({
+    text: `A merge left clashes to resolve, listed in ${fileName(p)}.`,
+    next: "Resolve them, then delete that file.",
+  }),
+
   // --- expressions -------------------------------------------------------------
+  // The compiler names the field, so Go to issue opens it on the right tab.
   "expression": (p) => {
     const [, label, detail] = /^([^:]+): (.*)$/.exec(p.message) ?? [];
     return {
       text: `${owner(p)} ${fieldWord(label ?? "expression")} doesn’t hold up: ${detail ?? p.message}.`,
-      next: "Open it in the expression editor.",
+      next: "Go to issue opens it where it’s written.",
     };
   },
 };

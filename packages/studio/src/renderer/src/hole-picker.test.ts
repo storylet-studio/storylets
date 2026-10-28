@@ -35,7 +35,7 @@ const host = (): InspectorHost => ({
   saveBox: vi.fn(), saveBoxIdentity: vi.fn(), saveTemplate: vi.fn(), saveTagGroup: vi.fn(), saveHand: vi.fn(),
   createTemplate: vi.fn(), deleteTemplate: vi.fn(), createTagGroup: vi.fn(), createMap: vi.fn(),
   deleteTagGroup: vi.fn(), setGroupSpatial: vi.fn(), renameStage: vi.fn(), renameProperty: vi.fn(), stageGates: vi.fn(async () => 0), createHand: vi.fn(), deleteHand: vi.fn(),
-  handCards: async () => null, deckCatalogue: async () => [], openCardFromHand: vi.fn(), newCardAtHand: vi.fn(), openHand: vi.fn(),
+  handCards: async () => null, deckCatalogue: async () => [], openCardFromHand: vi.fn(), newCardAtHand: vi.fn(), openHand: vi.fn(), showScene: vi.fn(),
 } as InspectorHost);
 
 const draw = (d: HandDetail): HTMLElement => {

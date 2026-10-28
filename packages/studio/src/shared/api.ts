@@ -316,6 +316,10 @@ export interface OutcomeDto {
 export interface CardDto {
   id: string;
   gameId: string;
+  /** The name of the paired Patter project's scene this card plays (found by the card's Game ID, as
+   *  the game finds it), shown on the card page. Absent when the project isn't paired or the published
+   *  bundle has no such scene. */
+  patterScene?: string;
   /** The raw pinned gameId, absent when the gameId is derived (see OutcomeDto). */
   gameIdPinned?: string;
   title?: string;
@@ -408,6 +412,8 @@ export interface ConditionProperty {
    *  carries meaning: expr-editor lists stages in it, offers the ordering
    *  operators on it, and seeds an outcome to `advance()` because of it. */
   stages?: string[];
+  /** `false`: read-only to the story (a host scope's property, or one on a read-only scope). */
+  writable?: boolean;
   purpose?: string;
   /** Who declares it, when that is another tool (or the game) through the game's shared
    *  scopes folder ("Patter", "Game"): the pill's tip says so. Absent for this project's own. */
@@ -483,7 +489,7 @@ export interface TagGroupDto {
  *  `box`, `deck` and `holder` are ids; `holder` names the tag group, tag, hand
  *  template or hand that declares an @hand property. */
 export type StageTargetDto =
-  | { kind: "property"; scope: "world" | "story" | "box" | "deck" | "hand"; name: string; box?: string; deck?: string; holder?: string }
+  | { kind: "property"; scope: "world" | "story" | "box" | "deck" | "hand" | (string & {}); name: string; box?: string; deck?: string; holder?: string }
   | { kind: "field"; box: string; template: "fields" | "outcomeFields"; name: string };
 
 export interface FieldDeclDto {
@@ -606,6 +612,9 @@ export interface ProjectDto {
    *  tokens it declares, so the dialect accepts them, and which of them are opaque (any
    *  name, unchecked). Absent when there is no folder. */
   gameScopes?: GameScopesDto;
+  /** The project's own host scopes besides `@world` (`@player`, ...), so the expression
+   *  editors parse them with or without a scopes folder. Absent when it declares none. */
+  hostTokens?: HostTokensDto;
   /** The Storylet extensions the project takes and has a sound manifest for, each with its declarations and
    *  every node's values. Absent when it takes none. */
   extensions?: ExtensionDto[];
@@ -688,6 +697,14 @@ export interface GameScopesDto {
   opaque: string[];
   /** Whether `@world` comes from the folder (the World settings then edit its file). */
   sharedWorld: boolean;
+}
+
+/** The project's own host scopes besides `@world` (`player`, ...), as the renderer's
+ *  expression editors need them: every token they must parse, and those declared opaque
+ *  (any name, unchecked). Sent with every project whether or not the game has a scopes folder. */
+export interface HostTokensDto {
+  tokens: string[];
+  opaque: string[];
 }
 
 /** What the Board needs to stand the other engines in (decision 4): the folder's merged
@@ -1097,9 +1114,12 @@ export interface ProjectSettingsDto {
    *  to a bundle (SaveEnvelope.content.project) and must stay stable, so it is
    *  generated at init and never author-edited (Patterpad shows no such field). */
   version: string;
-  world: PropertyDeclDto[];
+  /** The game's own scopes this project declares (host scopes like Patter's), `@world`
+   *  always first, whether or not it declares anything: the Host scopes section edits them,
+   *  and a save writes the shard's `scopeRegistry` from them. */
+  hostScopes: HostScopeDto[];
   story: PropertyDeclDto[];
-  /** The coverage drivers, edited beside the @world declarations they feed
+  /** The coverage drivers, edited beside the host-scope declarations they feed
    *  (Patterpad's World Properties tab). Stored in the shard as a map keyed by
    *  ref; carried here as an ordered list so the editor can reorder and hold
    *  a half-typed row. */
@@ -1127,10 +1147,31 @@ export interface ProjectSettingsDto {
    *  "" is not chosen, and Storyletter finds the system from the folders (every project made before the
    *  setting). Changing it rewrites the project's setup files for the new system. */
   vcs: VcsSetting;
-  /** Where `world` lives when the game shares its scopes: the file the World settings
+  /** Where the host scopes live when the game shares its scopes: the file the settings
    *  write first ("game-scopes/game.scopes.json"), before the project's synced copy.
    *  Absent when the project's own declarations are the only ones. */
   worldFile?: string;
+}
+
+/**
+ * One host scope in Project Settings: a game scope the project declares (`@world`,
+ * `@player`, ...), in Patter's shape. Saved into the shard's `scopeRegistry`, and into the
+ * game's `game.scopes.json` first where the game shares its scopes.
+ */
+export interface HostScopeDto {
+  /** The token after `@` ("world", "player"). Case-sensitive, as the registry is. */
+  token: string;
+  /** The token the scope was saved under when the dialog opened; absent for one added in it.
+   *  A `token` that differs from it at Save is a rename, carried through every reference to
+   *  the scope (`@player.hp` to `@hero.hp`) rather than saved as one scope removed and
+   *  another added. The dialog never changes it. */
+  savedAs?: string;
+  /** Scope-level: false makes every property read-only to the story unless its row says
+   *  otherwise. Absent: writable, as it always was. */
+  writable?: boolean;
+  /** Declared opaque: any name, unchecked, and `declarations` is ignored. */
+  opaque?: boolean;
+  declarations: PropertyDeclDto[];
 }
 
 /** One coverage driver in editable form. `ref` is the whole "@world.name"
@@ -1567,9 +1608,12 @@ export interface CoverageInfo {
   hasProject: boolean;
   name: string;
   driverCount: number;
-  /** How many @world properties the project declares: none, and coverage has
-   *  nothing a driver could feed, so the note about drivers keeps quiet. */
+  /** How many host-scope properties the project declares (@world's, @player's, ...; an opaque
+   *  scope counts one): none, and coverage has nothing a driver could feed, so the note about
+   *  drivers keeps quiet. */
   worldCount?: number;
+  /** The project's host scopes, @world first, for the note's wording. Absent: @world alone. */
+  hostScopes?: string[];
   pinned: boolean;
   last?: CoverageReport;
   /** When `last` ran: present exactly when `last` is. */

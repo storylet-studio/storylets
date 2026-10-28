@@ -29,6 +29,23 @@ function boardWith(gameId: string) {
   return { table, hand: hand?.hand, card };
 }
 
+describe("what a scene writes, on the record", () => {
+  // Patter writes to the shared registry, which the engine's log never sees:
+  // the Board journals each change as the scene's (the hands-on review, 2026-10).
+  it("journals each property a scene step changed, and not Patter's own scope", () => {
+    const { table } = boardWith("arrive-at-the-gate");
+    const name = table.bundle.story.properties.find((p) => p.type === "number")!.name;
+    const prev = table.registry!.save()["story"]?.[name];
+    const before = table.log.length;
+    table.perform("arrive-at-the-gate", () => {
+      table.registry!.set("story", name, Number(prev ?? 0) + 5);
+    });
+    expect(table.lastPerformWrites).toBe(1);
+    const added = table.log.slice(before);
+    expect(added).toEqual([expect.objectContaining({ type: "sceneWrite", scene: "arrive-at-the-gate", label: `@story.${name}`, value: Number(prev ?? 0) + 5 })]);
+  });
+});
+
 describe("the Board performing a card through Patter", () => {
   it("builds both engines on one registry, and Patter performs only the named boxes", () => {
     const { table } = boardWith("arrive-at-the-gate");

@@ -1,11 +1,27 @@
 // Blueprint/C++ API over the pure core: UStoryletEngine wraps storylets::Engine
-// (the world - the bundle, the shared state, @world), UStoryletFlow wraps a
+// (the world - the bundle, the shared state, the host scopes), UStoryletFlow wraps a
 // storylets::Flow owned by that engine (one playthrough - its own board,
 // clocks, cooldowns, history and per-flow state). All play happens on a flow;
 // open one with OpenFlow, exactly as every other runtime and Patterplay's
 // UPatterEngine / UPatterFlow do (design/flows.md). The std objects are held
-// behind Pimpls. Exceptions from the core are caught at this boundary and
-// surfaced as error strings / logs - Blueprint never sees a C++ exception.
+// behind Pimpls. Exceptions from the core are caught at this boundary -
+// Blueprint never sees a C++ exception - and surfaced by one convention:
+//
+// REFUSALS THE GAME CAN SEE (a family ruling, 2026-10-28, as Patterplay's).
+// Every refusal is logged to LogStoryletEngine (StoryletLog.h) at Error, and:
+//   - a SETTER (SetProperty* on the engine and on a flow, a flow's
+//     AdvanceTurns) returns FString: empty when it landed, else the refusal,
+//     with nothing changed;
+//   - every other refusing call, which already returns something (a flow, a
+//     hand, a bool, a JSON string), hands back its fallback (null, empty,
+//     false) and keeps the message for GetLastError() on the object it was
+//     called on, the engine or the flow (the UStoryletSave verbs keep theirs
+//     on the engine they were given). Out-params stay as they were: Play,
+//     Discard and ApplyLiveBundle still fill OutError too.
+// GetLastError is set by a refusal and cleared by the next of those calls
+// that succeeds; the setters set and clear it too. Reads (GetProperty*,
+// Board, GetTurn, ListBoxes, ListProperties, Log) don't touch it: a refused
+// read logs a Warning and hands back zero, empty or false.
 //
 // The property surface is TYPED ONLY (GetPropertyNumber / String / Bool /
 // Flags plus the matching setters); no generic FStoryletValue parameter or
@@ -17,7 +33,7 @@
 // FPatterValue out-pin as well as typed ones, and the two families' surfaces
 // are to be aligned for 1.0 (the hands-on review, 2026-10, ruling 3). It
 // appears on BOTH objects because the core reads differ: the engine sees
-// @world and the shared half only and refuses a per-flow path, while a flow
+// the host scopes (@world, ...) and the shared half only and refuses a per-flow path, while a flow
 // sees its whole merged view.
 #pragma once
 
@@ -69,6 +85,13 @@ public:
 	 *  inert: every verb below refuses and logs. */
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	bool IsClosed() const;
+
+	/** Why this flow's last refusing call was refused; empty when it wasn't.
+	 *  Set on a refusal and cleared by the next refusing call that succeeds
+	 *  (the convention at the top of this file). Blueprint can't catch what
+	 *  the core throws, so the message is kept here, and logged. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
+	FString GetLastError() const { return LastError; }
 
 	/** Close this flow: it leaves the engine and this handle goes inert. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
@@ -153,9 +176,11 @@ public:
 	bool Discard(const FString& CardRef, const FString& FromHand, FString& OutError);
 
 	/** Advance one box's clock on THIS flow (a turn is one draw-from-stock
-	 *  session for that box; there is deliberately no global turn). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void AdvanceTurns(const FString& BoxRef, double Turns = 1);
+	 *  session for that box; there is deliberately no global turn). Returns
+	 *  "" when the clock moved, else why it was refused (an unknown box, a
+	 *  timed box, a closed flow), with nothing changed, and logged. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString AdvanceTurns(const FString& BoxRef, double Turns = 1);
 
 	/** A box's current turn on this flow (0 and a log on an unknown box). */
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
@@ -189,18 +214,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	TArray<FString> GetPropertyFlags(const FString& Path) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyNumber(const FString& Path, double Value);
+	/** Write a number, in this flow's merged view. Returns "" when the write
+	 *  landed, else why it was refused, with nothing changed (and logged): a
+	 *  value that doesn't fit the property's declaration, in the same words
+	 *  on every runtime (`"story.gold" takes a number; "5" doesn't fit`), a
+	 *  name the content doesn't declare, or a closed flow. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyNumber(const FString& Path, double Value);
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyBool(const FString& Path, bool bValue);
+	/** SetPropertyNumber for true or false: "" when it landed, else why not. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyBool(const FString& Path, bool bValue);
 
-	/** Sets string and enum properties alike (an enum value is a string). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyString(const FString& Path, const FString& Value);
+	/** Sets string and enum properties alike (an enum value is a string): ""
+	 *  when it landed, else why not. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyString(const FString& Path, const FString& Value);
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyFlags(const FString& Path, const TArray<FString>& Values);
+	/** SetPropertyNumber for a list of flags: "" when it landed, else why not. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyFlags(const FString& Path, const TArray<FString>& Values);
 
 	// --- durable state (ruling H) --------------------------------------------
 
@@ -270,8 +303,13 @@ private:
 	/** True, having logged "<Verb> - flow "<id>" is closed" (the core's own
 	 *  refusal), when this wrapper is closed: the header's promise that every
 	 *  verb on a closed flow refuses AND logs. Reads log at Warning and verbs
-	 *  at Error, as each one's other refusals do. */
+	 *  at Error, as each one's other refusals do. For a read; a refusing
+	 *  call uses RefuseClosedCall. */
 	bool RefuseClosed(const TCHAR* Verb, bool bRead = false) const;
+
+	/** RefuseClosed for a refusing call: LastError cleared, and on a closed
+	 *  flow set to the refusal. */
+	bool RefuseClosedCall(const TCHAR* Verb) const;
 
 	/** The core's refusal, word for word, for a wrapper whose core is gone. */
 	FString ClosedMessage() const;
@@ -282,13 +320,16 @@ private:
 	/** The flow's id, for re-binding after a live swap. */
 	FString Id;
 
+	/** See GetLastError. Mutable: a const call (SaveDurableToJson) refuses too. */
+	mutable FString LastError;
+
 	TPimplPtr<FStoryletFlowImpl> Impl;
 };
 
 /**
- * The world + flow manager: the compiled bundle, the shared state, the @world
- * surface, and the named flows played over it. All play happens on a
- * UStoryletFlow from OpenFlow.
+ * The world + flow manager: the compiled bundle, the shared state, the host
+ * scopes (@world, ...), and the named flows played over it. All play happens
+ * on a UStoryletFlow from OpenFlow.
  */
 UCLASS(BlueprintType)
 class STORYLETENGINERUNTIME_API UStoryletEngine : public UObject
@@ -296,51 +337,84 @@ class STORYLETENGINERUNTIME_API UStoryletEngine : public UObject
 	GENERATED_BODY()
 
 public:
-	/** Construct a play-ready engine on a compiled bundle, seeding each flow's
-	 *  PRNG (schema 3.3; seed 0 is the cross-runtime default). bRetainLog
-	 *  switches on the retained per-flow log (schema 5; the other runtimes'
-	 *  log option): every trace event, sequence-stamped, capped at 1000
-	 *  entries, read back through a flow's Log(). World, when given, is the
-	 *  game's @world container (StoryletWorld.h): the engine reads and writes
-	 *  @world through it, shared by every flow and by whatever else the game
-	 *  binds to the same object (Patterplay's host scope in the Hamlet demo),
-	 *  and never saves it. Absent, @world is self-backed from the declared
-	 *  defaults and saved with everything else. The binding survives
-	 *  ApplyLiveBundle. The engine keeps its properties in a registry of its
-	 *  own; a C++ game running several engines passes its one registry through
-	 *  CreateWithRegistry instead. Returns nullptr (and logs) on a null or
-	 *  uncompiled bundle. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	static UStoryletEngine* Create(UStoryletBundle* Bundle, int32 Seed = 0, bool bRetainLog = false, UStoryletWorld* World = nullptr);
+	/** Construct a play-ready engine on a compiled bundle. The engine makes
+	 *  its own property registry and acts as its own game.
+	 *
+	 *  HostScopes binds the scopes the GAME owns, by token without the `@`,
+	 *  each to a container (StoryletWorld.h): for @world, a map of "world" to
+	 *  your container. The story reads and writes your values through it,
+	 *  shared by every flow and by whatever else is bound to the same object
+	 *  (Patterplay's host scope in the Hamlet demo, your own systems). A bound
+	 *  scope is EXTERNAL to the engine: never in its save, never written by a
+	 *  load; the game saves its container itself. A declared scope left
+	 *  unbound is self-backed from its declared defaults, and saved with
+	 *  everything else. Tokens are case-sensitive: a token the bundle doesn't
+	 *  declare is reported through OnError (Setup), naming the declared
+	 *  spelling when only the case differs. The bindings survive
+	 *  ApplyLiveBundle. The same option on every runtime (JS `hostScopes`,
+	 *  Unity `EngineOptions.HostScopes`, Godot `host_scopes`) and Patterplay's
+	 *  UPatterEngine::Create. Leave the map empty to bind none. Returns
+	 *  nullptr (and logs) on a null or uncompiled bundle. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (AutoCreateRefTerm = "HostScopes"))
+	static UStoryletEngine* Create(UStoryletBundle* Bundle, const TMap<FString, UStoryletWorld*>& HostScopes);
+
+	/** Create, choosing how the engine plays: each flow's default seed and the
+	 *  retained log (see FStoryletEngineOptions), with the host scopes Create
+	 *  takes. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (AutoCreateRefTerm = "HostScopes"))
+	static UStoryletEngine* CreateWithOptions(UStoryletBundle* Bundle, const FStoryletEngineOptions& Options,
+		const TMap<FString, UStoryletWorld*>& HostScopes);
 
 	/** Create, on the GAME's registry: one storylets::ScopeRegistry per game,
 	 *  holding every engine's properties except those the game keeps itself
 	 *  (patterkit design/one-registry-handover.md). The engine registers its
 	 *  bags in it (@story under `story`, every other bag under a key starting
-	 *  `storylets/`, and @world when World is given), reads every other scope
-	 *  from it, and a save leaves the property values to the game, which saves
-	 *  the registry once, beside the engine's file. Without World, @world is
-	 *  the game's to register in the registry. C++ only: the registry is a
-	 *  std object shared by pointer, which no Blueprint pin carries. Returns
-	 *  nullptr (and logs) on a null or uncompiled bundle or a null registry,
-	 *  and when a token the engine registers is already another's (the log
-	 *  names who holds it; the registry is left as it was).
+	 *  `storylets/`, and each bound host scope as an external scope), reads
+	 *  every other scope from it, and self-backs nothing: a declared host
+	 *  scope left unbound is the game's to register. A save leaves the
+	 *  property values to the game, which saves the registry once, beside the
+	 *  engine's file. C++ only: the registry is a std object shared by
+	 *  pointer, which no Blueprint pin carries. Returns nullptr (and logs) on
+	 *  a null or uncompiled bundle or a null registry, and when a token the
+	 *  engine registers is already another's (the log names who holds it; the
+	 *  registry is left as it was).
 	 *
 	 *  storylets::ScopeRegistry is the shared kernel's
 	 *  wildwinter::expr::ScopeRegistry, the SAME type Patterplay's
 	 *  UPatterEngine::CreateWithRegistry takes, so a game combining the two
 	 *  passes one registry to both. The module that makes the registry includes
 	 *  "Storylets/Kernel.h" and sets bEnableExceptions in its Build.cs. */
-	static UStoryletEngine* CreateWithRegistry(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
-		int32 Seed = 0, bool bRetainLog = false, UStoryletWorld* World = nullptr);
+	static UStoryletEngine* CreateWithRegistry(UStoryletBundle* Bundle, const std::shared_ptr<storylets::ScopeRegistry>& Registry,
+		const TMap<FString, UStoryletWorld*>& HostScopes = {}, const FStoryletEngineOptions& Options = FStoryletEngineOptions());
 
 	/** The registry this engine's properties live in: the game's, from
 	 *  CreateWithRegistry, or the engine's own. C++ only; null when invalid. */
 	std::shared_ptr<storylets::ScopeRegistry> GetRegistry() const;
 
-	/** The @world container given to Create, or null when self-backed. */
+	/** Why this engine's last refusing call was refused; empty when it
+	 *  wasn't: OpenFlow and the other opens, the save and load verbs (UStoryletSave's
+	 *  included), CloseFlow, Reset, ApplyLiveBundle and the SetProperty*
+	 *  setters. Set on a refusal and cleared by the next of them that
+	 *  succeeds (the convention at the top of this file). */
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
-	UStoryletWorld* GetBoundWorld() const;
+	FString GetLastError() const { return LastError; }
+
+	/** @internal - the refusal convention for calls made outside this class
+	 *  (UStoryletSave): clear LastError before the call, keep and log a
+	 *  refusal. */
+	void ClearLastError() const { LastError.Reset(); }
+	void NoteRefusal(const TCHAR* Verb, const FString& Message) const;
+
+	/** The container bound at Create under this host scope's token ("world"),
+	 *  or null when none is (the scope is self-backed, the game's registry
+	 *  holds it, or the bundle has no such scope). Case-sensitive, as the
+	 *  engine matches a token. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
+	UStoryletWorld* GetHostScope(const FString& Token) const;
+
+	/** The name before host scopes: GetHostScope("world"). */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine", meta = (DeprecatedFunction, DeprecationMessage = "Use GetHostScope(\"world\"), the name every runtime uses."))
+	UStoryletWorld* GetBoundWorld() const { return GetHostScope(TEXT("world")); }
 
 	/** Fired when OpenFlow (or OpenFlowFromJson) replaces a flow that still
 	 *  had cards dealt, with its id and how many, before the old flow goes
@@ -354,8 +428,12 @@ public:
 	 *  false (see FStoryletPlayError), whether or not anything traces: a host
 	 *  value of the wrong type, a resolver that throws, a division by zero.
 	 *  The deal carries on either way. With nothing bound, each is logged as a
-	 *  Warning instead, so a content bug is never silent. Survives
-	 *  ApplyLiveBundle. Patterplay's OnError, the same shape. */
+	 *  Warning instead, so a content bug is never silent. A set-up problem
+	 *  (Kind "setup": a host scope the bundle doesn't declare) found while the
+	 *  engine is made comes before this event can be bound: it is logged as a
+	 *  Warning at once, recorded in the retained log, and delivered here on
+	 *  the first OpenFlow. Survives ApplyLiveBundle. Patterplay's OnError, the
+	 *  same shape. */
 	UPROPERTY(BlueprintAssignable, Category = "Storylet Engine")
 	FStoryletErrorEvent OnError;
 
@@ -500,17 +578,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	TArray<FString> GetPropertyFlags(const FString& Path) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyNumber(const FString& Path, double Value);
+	/** Write a shared or @world number (or another engine's game-wide scope,
+	 *  whose engine checks it). Returns "" when the write landed, else why it
+	 *  was refused, with nothing changed (and logged): a value that doesn't
+	 *  fit the property's declaration, in the same words on every runtime
+	 *  (`"story.gold" takes a number; "5" doesn't fit`), an undeclared name,
+	 *  or a path that resolves per-flow (write it on a flow). */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyNumber(const FString& Path, double Value);
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyBool(const FString& Path, bool bValue);
+	/** SetPropertyNumber for true or false: "" when it landed, else why not. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyBool(const FString& Path, bool bValue);
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyString(const FString& Path, const FString& Value);
+	/** SetPropertyNumber for text or an enum's value: "" when it landed, else why not. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyString(const FString& Path, const FString& Value);
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	void SetPropertyFlags(const FString& Path, const TArray<FString>& Values);
+	/** SetPropertyNumber for a list of flags: "" when it landed, else why not. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine", meta = (ReturnDisplayName = "Refusal"))
+	FString SetPropertyFlags(const FString& Path, const TArray<FString>& Values);
 
 	// --- live refresh (design/live-link.md) ------------------------------------
 
@@ -604,9 +691,18 @@ public:
 	virtual void BeginDestroy() override;
 
 private:
-	/** Create and CreateWithRegistry, on a registry or (null) the engine's own. */
+	/** Create, CreateWithOptions and CreateWithRegistry, on a registry or
+	 *  (null) the engine's own. */
 	static UStoryletEngine* CreateOn(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
-		int32 Seed, bool bRetainLog, UStoryletWorld* World);
+		const TMap<FString, UStoryletWorld*>& HostScopes, const FStoryletEngineOptions& Options);
+
+	/** Hand OnError the Setup reports held since the engine was built (see OnError). */
+	void DeliverHeldErrors();
+
+	/** True while CreateOn constructs the core: OnError can't be bound yet, so
+	 *  a report is held instead. */
+	bool bBuilding = false;
+	TArray<FStoryletPlayError> HeldErrors;
 
 	/** OpenFlow, OpenFlowSeeded, OpenFlowFromJson and the two durable opens:
 	 *  the core's openFlow with these options, and the wrapper bookkeeping they
@@ -622,10 +718,12 @@ private:
 	UPROPERTY()
 	TObjectPtr<UStoryletBundle> BundleRef = nullptr;
 
-	/** The bound @world container (null = self-backed); held here so the
-	 *  resolver's weak reference stays live for as long as this engine does. */
+	/** The game's host-scope containers, by token, as bound at Create: held
+	 *  here so each resolver's weak reference stays live for as long as this
+	 *  engine does. The core keeps each binding for its whole life, a live
+	 *  swap's replacement included. */
 	UPROPERTY()
-	TObjectPtr<UStoryletWorld> WorldRef = nullptr;
+	TMap<FString, TObjectPtr<UStoryletWorld>> HostScopeRefs;
 
 	/** Every LIVE wrapper handed out by OpenFlow or GetFlow, so a live swap
 	 *  or a load can re-bind them by id (weak: a flow the game dropped must
@@ -634,6 +732,10 @@ private:
 	 *  of that name, and a closed flow stays closed. Mutable because GetFlow
 	 *  (const) makes the wrapper for a flow a load restored. */
 	mutable TArray<TWeakObjectPtr<UStoryletFlow>> WrappedFlows;
+
+	/** See GetLastError. Mutable: const calls (SaveFlowToJson,
+	 *  PreviewFlowRestoreJson, SaveDurableToJson) refuse too. */
+	mutable FString LastError;
 
 	TPimplPtr<FStoryletEngineImpl> Impl;
 };

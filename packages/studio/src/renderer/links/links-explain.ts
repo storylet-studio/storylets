@@ -71,7 +71,9 @@ function row(reason: LinkReason): ExplanationRow {
   if (reason.outcome !== undefined) parts.push(`written by the outcome ${reason.outcome}`);
   // A property with neither flag nor outcome is a plain read on both sides: say
   // so rather than leaving the row as a bare name with no verb anywhere in it.
-  const detail = parts.length > 0 ? parts.join(", ") : "read on both sides";
+  // A link through `count_played("card")` is the play itself: no property is written.
+  const detail = parts.length > 0 ? parts.join(", ")
+    : reason.property.startsWith("count_played(") ? "counted each time it is played" : "read on both sides";
   return { property: reason.property, detail, ...(reason.note ? { note: reason.note } : {}) };
 }
 

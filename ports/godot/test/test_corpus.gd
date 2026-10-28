@@ -327,6 +327,13 @@ static func _apply_state(session: StoryletFlow, selector: Dictionary) -> String:
 			var refused := session.set_property("%s.%s" % [scope, prop_name], StoryletValues.to_value(selector[scope][prop_name]))
 			if refused != "":
 				return refused
+	# Corpus 23: any other host scope's values, by token, each written as
+	# "<token>.<name>".
+	for token in selector.get("host", {}):
+		for prop_name in selector["host"][token]:
+			var refused := session.set_property("%s.%s" % [token, prop_name], StoryletValues.to_value(selector["host"][token][prop_name]))
+			if refused != "":
+				return refused
 	for kind in ["box", "deck", "hand", "value"]:
 		for id in selector.get(kind, {}):
 			for prop_name in selector[kind][id]:
@@ -334,6 +341,29 @@ static func _apply_state(session: StoryletFlow, selector: Dictionary) -> String:
 				if refused != "":
 					return refused
 	return ""
+
+
+# The `setup` reports the FIRST engine made as it was built (corpus 23), against
+# the case's expectSetupErrors, in any order: each one's node exactly, and its
+# message containing the expected text, as written (the corpus leaves out the
+# option's name, which each runtime spells its own way). Absent means none.
+static func _check_setup(c: Dictionary, reported: Array) -> Array:
+	var expected: Array = []
+	for want in c.get("expectSetupErrors", []):
+		expected.append({"node": str(want["node"]),
+			"message": str(want["message"])})
+	var by_node := func(a: Dictionary, b: Dictionary) -> bool: return a["node"] < b["node"]
+	expected.sort_custom(by_node)
+	var got: Array = reported.duplicate()
+	got.sort_custom(by_node)
+	var same: bool = got.size() == expected.size()
+	for i in expected.size():
+		if not same:
+			break
+		same = got[i]["node"] == expected[i]["node"] and str(got[i]["message"]).contains(expected[i]["message"])
+	if same:
+		return []
+	return ["setup: on_error expected %s, got %s" % [JSON.stringify(expected), JSON.stringify(got)]]
 
 
 # "turn.<boxId>" reads that box's clock (schema 3.4); everything else is a
@@ -630,13 +660,35 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	# op as the trace sinks are. Every engine the script creates is opened with
 	# it, as runner.ts does. The sink lives in a holder because GDScript lambdas
 	# capture by VALUE; rc.clear() at the end breaks the cycle it makes.
-	var play_errors := {"nodes": []}
-	var on_error := func(e: Dictionary) -> void: (play_errors["nodes"] as Array).append(str(e["node"]))
+	# Set-up reports (corpus 23) are recorded apart from a deal's condition
+	# errors, as {node, message}.
+	var play_errors := {"nodes": [], "setup": []}
+	var on_error := func(e: Dictionary) -> void:
+		if str(e.get("kind", "")) == "setup":
+			(play_errors["setup"] as Array).append({"node": str(e["node"]), "message": str(e["message"])})
+		else:
+			(play_errors["nodes"] as Array).append(str(e["node"]))
 	var engine_opts := {"seed": seed, "on_error": on_error}
+	# The case's host scopes (corpus 23): a plain resolver per token over a
+	# store kept for the whole case, shared by every engine it makes. The token
+	# is passed exactly as written, so a case can bind a spelling the bundle
+	# doesn't declare.
+	if c.get("hostScopes") is Dictionary:
+		var host_scopes := {}
+		for token in c["hostScopes"]:
+			var store := {}
+			for prop_name in c["hostScopes"][token]:
+				store[str(prop_name)] = StoryletValues.to_value(c["hostScopes"][token][prop_name])
+			host_scopes[str(token)] = {
+				"get": func(n: String): return store.get(n),
+				"set": func(n: String, v) -> void: store[n] = v,
+			}
+		engine_opts["host_scopes"] = host_scopes
 	var first_engine := StoryletEngine.create(bundle, engine_opts)
 	if first_engine == null:
 		_case_finished = true
 		return ["engine refused its options"]
+	failures.append_array(_check_setup(c, play_errors["setup"]))
 	# One mutable holder: GDScript lambdas capture by VALUE, so saveLoad's
 	# engine swap must go through a reference the flow_of closure shares.
 	# handles = flow handles as the SCRIPT knows them: kept across closeFlow
@@ -1002,16 +1054,16 @@ func _run_scripted_case(c: Dictionary) -> Array:
 					failures.append("%s: expected %s, got %s" % [at, _show_json(op["expect"]), _show_json(got_boxes)])
 
 			"scribble":
-				# A careless host: deface everything the engine handed it, IN
+				# A careless host: deface the FIELDS the engine handed it, IN
 				# PLACE (runner.ts, scribbleView). Nothing is asserted here; the
-				# asserts that follow must still read the bundle's values.
+				# asserts that follow must still read the bundle's values. From
+				# corpus 22 extension values and boxes are not touched: they are
+				# handed out uncopied, read-only by contract.
 				var scribble_key: String = names.get(op["from"], op["from"])
 				for card in session.board().get(scribble_key, []):
 					_scribble_view(card)
 					for outcome in session.outcomes(card["id"], op["from"]):
 						_scribble_view(outcome)
-				for row in session.list_boxes():
-					_scribble_view(row)
 
 			"assertNodeExtensions":
 				# A node no view carries, read off the bundle by the helper.
@@ -1246,18 +1298,12 @@ func _run_scripted_case(c: Dictionary) -> Array:
 # canonicalises to the empty string, which is why the separator is a character
 # no id, gameId or property name can hold.
 
-# --- scribble (corpus version 17) -------------------------------------------------
-# A view's fields and each extension's values defaced in place, then the
-# extensions map gains the extension "scribbled" (runner.ts, scribbleView).
+# --- scribble (corpus version 17; fields only from 22) ----------------------------
+# A view's fields defaced in place (runner.ts, scribbleView). Extension values
+# are read-only, and handed out uncopied.
 static func _scribble_view(view: Dictionary) -> void:
 	if view.get("fields") is Dictionary:
 		_scribble_map(view["fields"])
-	if view.get("extensions") is Dictionary:
-		var exts: Dictionary = view["extensions"]
-		for id in exts.keys():
-			if exts[id] is Dictionary:
-				_scribble_map(exts[id])
-		exts["scribbled"] = {}
 
 
 # Deepest first: nested maps gain the key, nested lists the item, then every
@@ -1400,9 +1446,9 @@ func _read_only_world_probe(bundle: Dictionary) -> Array:
 	var failures: Array = []
 	var vals := {"clock": 0, "mood": 0}
 	var sets: Array = []
-	var engine := StoryletEngine.create(bundle, {"seed": 0, "world": {
+	var engine := StoryletEngine.create(bundle, {"seed": 0, "host_scopes": {"world": {
 		"get": func(n: String): return vals.get(n),
-		"set": func(n: String, v) -> void: sets.append(n); vals[n] = v}})
+		"set": func(n: String, v) -> void: sets.append(n); vals[n] = v}}})
 	if engine == null:
 		_probe_finished = true
 		return ["bound-world probe: engine would not create"]

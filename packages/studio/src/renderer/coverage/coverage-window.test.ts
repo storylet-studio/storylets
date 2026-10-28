@@ -124,7 +124,20 @@ describe("the Coverage window", () => {
     info = { ...info, driverCount: 2 };
     window.dispatchEvent(new Event("focus"));
     await settle();
-    expect(document.querySelector(".cnote .hint")?.textContent).toBe("2 coverage drivers feeding @world.");
+    expect(document.querySelector(".cnote .hint")?.textContent).toBe("2 game values for coverage, feeding @world.");
+  });
+
+  it("names every host scope the drivers may feed, once there are more than @world", async () => {
+    info = { ...info, driverCount: 2, hostScopes: ["world", "player"] };
+    window.dispatchEvent(new Event("focus"));
+    await settle();
+    expect(document.querySelector(".cnote .hint")?.textContent).toBe("2 game values for coverage, feeding @world and @player.");
+    info = { ...info, hostScopes: ["world", "player", "party"] };
+    window.dispatchEvent(new Event("focus"));
+    await settle();
+    expect(document.querySelector(".cnote .hint")?.textContent).toBe("2 game values for coverage, feeding @world, @player, and @party.");
+    const { hostScopes: _gone, ...rest } = info;
+    info = rest;
   });
 
   it("says nothing about drivers for a project with no @world, which has nothing for one to feed", async () => {

@@ -8,57 +8,74 @@
 // hand renames here instead of saving through their own autosave.
 // ---------------------------------------------------------------------------
 
-import { canonicalStringify, projectDialect, worldDeclarations } from "@storylet-studio/compiler";
+import { canonicalStringify, hostScopeDeclarations, projectDialect } from "@storylet-studio/compiler";
+import type { SourceProject } from "@storylet-studio/compiler";
+import { bundleHostScopes, hostScopeDecls, setHostScopeDecls } from "@storylet-studio/model";
+import type { PropertyDecl } from "@storylet-studio/model";
 import { locateProperty, projectMapPath, renameProperty, renameStage, stageGateCount } from "@storylet-studio/ops";
 import type { StageRenameResult, StageTarget } from "@storylet-studio/ops";
 import type { FileState } from "../history.js";
-import { gameWorldWrite } from "../game-scopes.js";
+import { gameScopeWrite } from "../game-scopes.js";
 import type { ProjectSession } from "../project.js";
 import { commit, commitFolded, freshKey, reload } from "./write-path.js";
 import type { Written } from "./write-path.js";
 import { boxWrite, deckWrite, handsWrite, projectWrite, tagsWrite } from "./shards.js";
+
+/** The host scope a target names (`world`, `player`, ...), or undefined for the
+ *  Storylet Engine's own scopes and a field. */
+function hostToken(source: SourceProject, target: StageTarget): string | undefined {
+  if (target.kind !== "property") return undefined;
+  const t = target.scope;
+  return t === "world" || bundleHostScopes(source.project).some((h) => h.token === t) ? t : undefined;
+}
+
+/** A shared host scope is declared in the game's own file first and copied into the
+ *  project, as the Host scopes settings save it: the project's copy brought level first. */
+function levelHostScope(source: SourceProject, token: string | undefined): void {
+  if (token === undefined) return;
+  // An opaque scope declares nothing to rename.
+  if (token !== "world" && bundleHostScopes(source.project).find((h) => h.token === token)?.declarations === undefined) return;
+  setHostScopeDecls(source.project, token, [...hostScopeDeclarations(source, token)]);
+}
+
+/** The game's file, first in the batch, when the target is a host scope's property. */
+function sharedWrites(source: SourceProject, token: string | undefined): FileState[] | { error: string } {
+  return token === undefined ? [] : gameScopeWrite(source, token, hostScopeDecls(source.project, token) as PropertyDecl[]);
+}
 
 /** Rename `from` to `to` on the quality `target` names, carrying every value
  *  and literal that names it. */
 export async function renameQualityStage(session: ProjectSession, target: StageTarget, from: string, to: string): Promise<Written> {
   const source = session.loaded.source;
   if (!source) return { error: "no project open" };
-  // A shared @world is declared in the game's own file first and copied into
-  // the project, as the World settings save it.
-  if (target.kind === "property" && target.scope === "world") source.project.world.properties = [...worldDeclarations(source)];
+  const host = hostToken(source, target);
+  levelHostScope(source, host);
   const result = renameStage(source, target, from, to, projectDialect(source));
   // Nothing to carry: the quality isn't saved under that name yet (its row was
   // renamed in the same moment), or the ladder holds both names. The list's own
   // save, queued behind this, still renames the declaration.
   if (!result) return reload(session);
 
-  const writes: FileState[] = [];
-  if (target.kind === "property" && target.scope === "world") {
-    const shared = gameWorldWrite(source, source.project.world.properties);
-    if ("error" in shared) return shared;
-    writes.push(...shared);
-  }
-  if (result.project) writes.push(projectWrite(session));
-  if (result.map && source.map) writes.push({ path: projectMapPath(session.loaded.dir), content: canonicalStringify(source.map) });
-  for (const box of result.boxes) writes.push(boxWrite(session, box));
-  for (const box of result.tags) writes.push(tagsWrite(session, box));
-  for (const box of result.hands) writes.push(handsWrite(session, box));
-  for (const deck of result.decks) writes.push(deckWrite(session, deck));
+  const writes = renameWrites(session, target, result);
+  if ("error" in writes) return writes;
   // Already declared under the new name and nothing names the old one.
   if (writes.length === 0) return reload(session);
   return commit(session, `Rename stage “${from}”`, freshKey(), writes);
 }
 
-/** Every shard a rename touched, as writes: the game's shared @world file
- *  first when the property is a shared @world one. */
+/** Every shard a rename touched, as writes: the game's shared scopes file
+ *  first when the property is a shared host scope's. */
 function renameWrites(session: ProjectSession, target: StageTarget, result: StageRenameResult): FileState[] | { error: string } {
   const source = session.loaded.source!;
+  const shared = sharedWrites(source, hostToken(source, target));
+  if ("error" in shared) return shared;
+  return [...shared, ...renameResultWrites(session, result)];
+}
+
+/** The shards a rename touched, as writes (a scope rename's too, from the settings). */
+export function renameResultWrites(session: ProjectSession, result: StageRenameResult): FileState[] {
+  const source = session.loaded.source!;
   const writes: FileState[] = [];
-  if (target.kind === "property" && target.scope === "world") {
-    const shared = gameWorldWrite(source, source.project.world.properties);
-    if ("error" in shared) return shared;
-    writes.push(...shared);
-  }
   if (result.project) writes.push(projectWrite(session));
   if (result.map && source.map) writes.push({ path: projectMapPath(session.loaded.dir), content: canonicalStringify(source.map) });
   for (const box of result.boxes) writes.push(boxWrite(session, box));
@@ -81,7 +98,7 @@ export async function renamePropertyEverywhere(session: ProjectSession, target: 
   const source = session.loaded.source;
   if (!source) return { error: "no project open" };
   if (target.kind !== "property") return reload(session);
-  if (target.scope === "world") source.project.world.properties = [...worldDeclarations(source)];
+  levelHostScope(source, hostToken(source, target));
   // The list may have saved the new name already, as its own step: then the
   // references finish that step rather than make a second one, so a single
   // Undo can't leave the name renamed and the cards reading the old one.

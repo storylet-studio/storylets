@@ -59,11 +59,12 @@ namespace StoryletStudio.Hamlet
         {
             World = new HamletWorld(new Dictionary<string, object> { ["time_of_day"] = "day", ["knows_road"] = false });   // nothing read-only: both projects let a scene or a card move time
             var sb = BundleLoader.Parse(storyletJson);
-            Storylets = new SEngine(sb, new StoryletStudio.StoryletEngine.EngineOptions { Seed = Seed, World = World });
-            // ONE resolver, both engines. Patter's Unity package takes it under
-            // HostScopes keyed by scope token; ours under World. Same object.
+            // ONE resolver, both engines, bound the same way: HostScopes, keyed
+            // by scope token. Same object.
+            Storylets = new SEngine(sb, new StoryletStudio.StoryletEngine.EngineOptions
+                { Seed = Seed, HostScopes = new Dictionary<string, StoryletStudio.StoryletEngine.IHostScope> { ["world"] = World } });
             Patter = new PEngine(PatterBundleLoader.Parse(patterJson), new Patterkit.Patterplay.EngineOptions
-                { Seed = Seed, HostScopes = new Dictionary<string, IHostScope> { ["world"] = World } });
+                { Seed = Seed, HostScopes = new Dictionary<string, Patterkit.Patterplay.IHostScope> { ["world"] = World } });
             Story = Storylets.OpenFlow(Flow);
             Performance = Patter.OpenFlow(Box);
             Places.Clear();

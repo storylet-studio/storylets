@@ -24,7 +24,7 @@ import {
   contractPropertyPath, contractPropertyType, effectiveGameId, valueAddresses,
 } from "@storylet-studio/model";
 import type { ContractShard, PropertyDecl, PropertyType } from "@storylet-studio/model";
-import { worldDeclarations } from "@storylet-studio/compiler";
+import { projectHostScopes } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { handDeclarations } from "./analysis-common.js";
 
@@ -81,7 +81,9 @@ function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; 
     return out;
   };
 
-  add("world", [""], worldDeclarations(source), source.path, "world");
+  for (const { spec, path } of projectHostScopes(source)) {
+    add(spec.token, [""], spec.declarations as PropertyDecl[] | undefined, path, spec.token);
+  }
   add("story", [""], source.project.story?.properties, source.path, "story");
   for (const box of source.boxes) {
     add("box", both(box.box.box), box.box.box.properties, `${box.path}/box`, effectiveGameId(box.box.box));

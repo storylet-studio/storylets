@@ -18,6 +18,7 @@ import { vcKeys } from "./vc-view.js";
 import { previewCondition } from "./expr-panels.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { currentDocTab, docTabs, documentHeading, setDocTab } from "./inspector.js";
+import type { DocTabSpec } from "./inspector.js";
 import { extensionTabs, knownTab } from "./extension-rows.js";
 import { problemText } from "./problem-copy.js";
 import { deleteLabel } from "./deletes.js";
@@ -25,6 +26,8 @@ import { placeGroupsOf } from "./where.js";
 import { mapGlyph } from "./map-glyphs.js";
 import { boxColour, boxPin } from "./box-tint.js";
 import { boxChip, chip, listMeta, moreMenu, tableHead } from "./widgets.js";
+import { rove, treeRows, wireTreeKeys } from "./tree-keys.js";
+import { keepCardFocus, wireRowKeys } from "./row-keys.js";
 import { alsoUnder, boxEntries, groupEntries, groupOptions, resolveGroup } from "./card-groups.js";
 import type { CardGroup, GroupEntry, GroupKey, GroupOption, GroupPage } from "./card-groups.js";
 import type { ProblemNames } from "./problem-copy.js";
@@ -183,18 +186,46 @@ const grip = (): HTMLElement => el("span", { className: "cardgrip", tip: "Drag t
  *  rather than lighting a button whose view is not there. */
 function viewToggle(active: ViewMode, actions: ViewActions, withNode = false): HTMLElement {
   const shown: ViewMode = !withNode && active === "node" ? "cards" : active;
+  const modes: ViewMode[] = withNode ? ["cards", "table", "node"] : ["cards", "table"];
   const btn = (mode: ViewMode, name: IconName, title: string): HTMLElement => {
     const b = el("button", { className: `seg-opt viewbtn${shown === mode ? " on" : ""}`, tip: title }, iconNode(name));
+    b.setAttribute("aria-label", title);
+    b.setAttribute("aria-pressed", String(shown === mode));
     b.addEventListener("click", () => { if (shown !== mode) actions.setViewMode(mode); });
     return b;
   };
-  return el("div", { className: "seg viewtoggle" },
-    // From the shell's drawn vocabulary, named by what you get rather than by
-    // the picture, so a second app picks the same three without copying
-    // somebody's taste in symbols.
-    btn("cards", "viewCards", "Card view"),
-    btn("table", "viewTable", "Table view"),
-    withNode ? btn("node", "viewNode", "Node view") : null);
+  // From the shell's drawn vocabulary, named by what you get rather than by
+  // the picture, so a second app picks the same three without copying
+  // somebody's taste in symbols.
+  const buttons = [btn("cards", "viewCards", "Card view"), btn("table", "viewTable", "Table view"),
+    ...(withNode ? [btn("node", "viewNode", "Node view")] : [])];
+  const seg = el("div", { className: "seg viewtoggle" }, ...buttons);
+  segmentKeys(seg, buttons, modes.indexOf(shown), (i) => actions.setViewMode(modes[i]!), ".viewtoggle .seg-opt.on");
+  return seg;
+}
+
+/**
+ * A segmented strip's keys, in the tablist pattern the document tab bar uses
+ * (inspector.ts docTabs): one tab stop, on the chosen option, and Left, Right,
+ * Home and End choose its neighbour, wrapping. Choosing redraws the page, strip
+ * and all, so the redrawn strip's chosen option, found by `again`, takes the
+ * focus (the hands-on review, 2026-10, foundation 8).
+ */
+export function segmentKeys(seg: HTMLElement, buttons: readonly HTMLElement[], at: number, pick: (index: number) => void, again: string): void {
+  buttons.forEach((b, i) => { b.tabIndex = i === Math.max(at, 0) ? 0 : -1; });
+  seg.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || buttons.length === 0) return;
+    const to = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : undefined;
+    if (to === undefined) return;
+    e.preventDefault();
+    // The view switch sits inside the document's tab bar, whose own arrows
+    // would otherwise change the tab as well.
+    e.stopPropagation();
+    const next = (to + buttons.length) % buttons.length;
+    if (next === at) return;
+    pick(next);
+    document.querySelector<HTMLElement>(again)?.focus();
+  });
 }
 
 /**
@@ -315,7 +346,26 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   // its nearest ancestor carries `sel` instead - the Mail model, "which deck
   // am I in" answered at full strength. True ancestors above that are
   // `on-path` (rules 8-9).
+  //
+  // The keyboard's tree (tree-keys.ts): one tab stop, the arrows between rows.
+  // The tree is redrawn whole on every navigation and every disclosure, so the
+  // row that had the focus is found again by its key afterwards (the hands-on
+  // review, 2026-10, foundation 8: focus fell to the top of the window).
+  const active = document.activeElement;
+  const hadKey = active instanceof HTMLElement && host.contains(active) ? active.closest<HTMLElement>("[data-nav-key]")?.dataset["navKey"] : undefined;
+  host.setAttribute("role", "tree");
+  host.setAttribute("aria-label", "Project");
+  wireTreeKeys(host, (r) => r.querySelector<HTMLElement>(".nav-chev")?.click());
+  /** A row's place in the tree, for the keys and for finding it again. */
+  const treeItem = <E extends HTMLElement>(b: E, key: string, level: number): E => {
+    b.dataset["navKey"] = key;
+    b.setAttribute("role", "treeitem");
+    b.setAttribute("aria-level", String(level));
+    b.tabIndex = -1;
+    return b;
+  };
   const row = (opts: {
+    key: string;
     depth: 0 | 1 | 2 | 3;
     label: string;
     onClick: () => void;
@@ -334,13 +384,14 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   }): HTMLElement => {
     // `shell-nav-row`: the family's navigator row (app-shell 0.65), which draws the open document's row
     // from `aria-current` as well as announcing it.
-    const b = el("button", { className: `nav-row shell-nav-row nav-d${opts.depth}${opts.sel ? " sel" : ""}${opts.path ? " on-path" : ""}${opts.cls ? ` ${opts.cls}` : ""}`, onClick: opts.onClick, ...(opts.tip !== undefined ? { tip: opts.tip } : {}) });
+    const b = treeItem(el("button", { className: `nav-row shell-nav-row nav-d${opts.depth}${opts.sel ? " sel" : ""}${opts.path ? " on-path" : ""}${opts.cls ? ` ${opts.cls}` : ""}`, onClick: opts.onClick, ...(opts.tip !== undefined ? { tip: opts.tip } : {}) }), opts.key, opts.depth + 1);
     if (opts.sel) b.setAttribute("aria-current", "page");
     if (opts.vc) b.dataset["vc"] = opts.vc;
     if (opts.node) {
       const id = opts.node;
       const chev = el("span", { className: `nav-chev${expanded.has(id) ? " open" : ""}` }, iconNode("collapsed", 12));
       chev.addEventListener("click", (e) => { e.stopPropagation(); actions.toggleNav(id); });
+      b.setAttribute("aria-expanded", String(expanded.has(id)));
       b.append(chev);
     } else {
       b.append(el("span", { className: "nav-chev-space" }));
@@ -353,7 +404,8 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   };
   // The project's own row opens its page (the boxes master); Settings
   // lives on that page's menu and under Cmd+, as before.
-  const projectRow = el("button", { className: `nav-project${focus?.kind === "project" ? " sel" : ""}`, text: project.name, onClick: () => actions.focus({ kind: "project" }) });
+  const projectRow = treeItem(el("button", { className: `nav-project${focus?.kind === "project" ? " sel" : ""}`, text: project.name, onClick: () => actions.focus({ kind: "project" }) }), "project", 1);
+  if (focus?.kind === "project") projectRow.setAttribute("aria-current", "page");
   projectRow.dataset["vc"] = vcKeys.projectRow;
   host.replaceChildren(projectRow);
 
@@ -363,7 +415,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   // it like configuration. @world STAYS in Project Settings, because it is the
   // other thing: a contract with the game, set by the principal designer.
   host.append(row({
-    depth: 0, label: "Story", cls: "nav-storyrow", vc: vcKeys.project,
+    key: "story", depth: 0, label: "Story", cls: "nav-storyrow", vc: vcKeys.project,
     tip: "The story's own memory. Cards read and write it as @story.",
     count: project.storyPropertyCount,
     sel: focus?.kind === "story",
@@ -379,7 +431,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   // which live on the map's own side panel.
   if (project.map !== undefined) {
     host.append(row({
-      depth: 0, label: "Map", cls: "nav-maprow",
+      key: "map", depth: 0, label: "Map", cls: "nav-maprow",
       lead: mapGlyph("map", 13, "map-glyph nav-glyph"),
       tip: "The project map: zones drawn once, and every box that uses it a layer of its own hands.",
       count: project.map.zones,
@@ -392,7 +444,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     const inBox = focus?.box === box.id;
     const boxNode = navId.box(box.id);
     const boxRow = row({
-      depth: 0, label: box.title ?? box.gameId, node: boxNode, cls: "nav-boxrow", vc: vcKeys.box(box.id),
+      key: boxNode, depth: 0, label: box.title ?? box.gameId, node: boxNode, cls: "nav-boxrow", vc: vcKeys.box(box.id),
       // A small map glyph on a box that uses the map: which boxes are on it,
       // readable from the tree without opening anything. In the box's colour,
       // so the tree says which layer on the map is this box's.
@@ -413,7 +465,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     const collection = (label: string, kind: CKind, count: number, fill?: () => void): void => {
       const node = navId.collection(box.id, kind);
       host.append(row({
-        depth: 1, label, ...(fill ? { node } : {}), count,
+        key: node, depth: 1, label, ...(fill ? { node } : {}), count,
         // The same sentence the Hands master and the box page use (B3): the
         // one line that unlocks the model, at the point of first contact.
         ...(kind === "hands" ? { tip: "Where cards are dealt on the board. Each hand holds the cards it's dealt." } : {}),
@@ -434,21 +486,25 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
       for (const deck of box.decks) {
         const here = inBox && focus.kind === "deck" && focus.deck === deck.id;
         const deckRow = row({
-          depth: 2, label: deck.title ?? deck.gameId, count: deck.cards.length, vc: vcKeys.deck(deck.id),
+          key: `d:${deck.id}`, depth: 2, label: deck.title ?? deck.gameId, count: deck.cards.length, vc: vcKeys.deck(deck.id),
           sel: here,
           onClick: () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }),
         });
         deckRow.addEventListener("contextmenu", itemMenu("deck", () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
         host.append(deckRow);
       }
-      host.append(el("button", { className: "nav-add shell-nav-row shell-nav-add nav-d2", onClick: () => actions.newDeck(box.id) }, iconNode("add", 12), "New deck"));
+      host.append(treeItem(el("button", { className: "nav-add shell-nav-row shell-nav-add nav-d2", onClick: () => actions.newDeck(box.id) }, iconNode("add", 12), "New deck"), `+d:${box.id}`, 3));
     });
 
     collection("Hands", "hands", box.hands.length);
 
   }
 
-  host.append(el("button", { className: "nav-add shell-nav-row shell-nav-add nav-add-box nav-d0", onClick: () => actions.newBox() }, iconNode("add", 12), "New box"));
+  host.append(treeItem(el("button", { className: "nav-add shell-nav-row shell-nav-add nav-add-box nav-d0", onClick: () => actions.newBox() }, iconNode("add", 12), "New box"), "+b", 1));
+  // The one tab stop: the row that had the focus, else the open document's.
+  const rows = treeRows(host);
+  const back = hadKey === undefined ? undefined : rows.find((r) => r.dataset["navKey"] === hadKey);
+  rove(host, back ?? rows.find((r) => r.getAttribute("aria-current") === "page") ?? rows[0], back !== undefined);
 }
 
 // The delete guard's evidence for a card lives with the other deletes
@@ -532,6 +588,7 @@ function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boole
   const face = el("button", { className: `scard${selected ? " sel" : ""}` },
     el("h3", { text: card.title ?? card.gameId }),
   );
+  face.dataset["card"] = card.id;   // the keyboard's place, kept across a redraw (row-keys.ts)
   wireCardGestures(face, card.id, gestures);
   face.addEventListener("contextmenu", onContext);
   if (card.condition) {
@@ -589,6 +646,7 @@ export function renderDeckCentre(
 ): void {
   // The container page: trail, identity heading (title + gameId + purpose,
   // above the bar so no tab hides it), then Dealing | Cards | Fields.
+  const restoreCardFocus = keepCardFocus(host);
   const tabKey = `deck:${deck.id}`;
   const tab = knownTab(actions.project?.(), "deck", currentDocTab(tabKey, "cards"), "cards");
   const trail = crumbTrail([
@@ -610,12 +668,18 @@ export function renderDeckCentre(
   // Cards first: a deck IS its cards, and that is the tab an author opens the page
   // for. Dealing is the deck's own machinery and comes after the contents, which
   // is also the order the box page uses (Contents, then Dealing).
-  const tabs = docTabs([
-    { key: "cards", label: "Cards", count: deck.cards.length },
-    { key: "dealing", label: "Dealing" },
-    { key: "properties", label: "Properties", count: deck.properties.length },
-    ...extensionTabs(actions.project?.(), "deck", deck.id),
-  ], tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "deck", box: box.id, deck: deck.id }); });
+  // Worked out again from the project as it is now when a save lands while the
+  // page is being edited (recountDocTabs), so a count never waits for a redraw.
+  const deckSpecs = (): DocTabSpec[] => {
+    const now = actions.project?.()?.boxes.find((b) => b.id === box.id)?.decks.find((d) => d.id === deck.id) ?? deck;
+    return [
+      { key: "cards", label: "Cards", count: now.cards.length },
+      { key: "dealing", label: "Dealing" },
+      { key: "properties", label: "Properties", count: now.properties.length },
+      ...extensionTabs(actions.project?.(), "deck", deck.id),
+    ];
+  };
+  const tabs = docTabs(deckSpecs(), tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "deck", box: box.id, deck: deck.id }); }, deckSpecs);
   // The card / table / node switch is a view of the Cards tab, so it sits at the
   // tab bar's right end while that tab is open, not in the back row above.
   if (tab === "cards") tabs.append(viewToggle(mode, actions, true));
@@ -664,6 +728,7 @@ export function renderDeckCentre(
   host.replaceChildren(trail, heading, tabs, ...(bar ? [bar] : []), body);
   playSettle(host);
   refocusGroupBar(host);
+  restoreCardFocus(selectedCards);
 }
 
 // --- Group by (the surfacing review's plan item 3) ----------------------------
@@ -701,6 +766,8 @@ function groupBar(options: GroupOption[], current: GroupKey, pick: (key: GroupKe
     });
     seg.append(b);
   }
+  segmentKeys(seg, [...seg.children] as HTMLElement[], options.findIndex((o) => o.key === current),
+    (i) => pick(options[i]!.key), ".groupby .seg-opt.on");
   return el("div", { className: "groupby" }, el("span", { className: "groupby-label", text: "Group by" }), seg);
 }
 
@@ -808,6 +875,7 @@ function deckTable(
   const isPlace = (group: string): boolean => group === PLACE_GROUP || axes.has(group);
   const body = el("tbody");
   const also = alsoUnder(groups);
+  const rows: HTMLElement[] = [];
   for (const g of groups) {
     // A heading row per group, spanning the table: the table's version of the
     // grid's headings, so the two views of a deck group the same way.
@@ -832,12 +900,19 @@ function deckTable(
         el("td", { className: tags ? "" : "ct-dim", text: tags || "any" }),
         el("td", { className: "ct-open" }, openChip(c.id, gestures)),
       );
+      row.dataset["card"] = c.id;
       wireCardGestures(row, c.id, gestures);
       row.addEventListener("contextmenu", cardMenu(box, deck.id, c, actions));
       if (move) wireDrop(row, c.id, "y", move);
       body.append(row);
+      rows.push(row);
     }
   }
+  // One tab stop; the arrows move the selection with the focus, Enter opens.
+  wireRowKeys(rows, {
+    open: (r) => gestures.open(r.dataset["card"]!),
+    move: (r, how) => gestures.select(r.dataset["card"]!, how),
+  });
   table.append(body);
   const wrap = el("div", { className: "ctable-wrap" }, table,
     el("button", { className: "ctable-new", text: "+ New card", onClick: () => actions.newCard(box.id, deck.id) }));
@@ -865,6 +940,7 @@ export function renderBoxCentre(
   // tab is remembered, so this decides the FIRST answer rather than overriding
   // anybody; a remembered Map tab on a box that has since left the map falls
   // back to Contents rather than to an empty page.
+  const restoreCardFocus = keepCardFocus(host);
   const tabKey = `box:${box.id}`;
   const onMap = box.usesMap === true;
   const remembered = currentDocTab(tabKey, onMap ? "map" : "contents");
@@ -904,21 +980,27 @@ export function renderBoxCentre(
     projectMap !== undefined
       ? el("button", { className: "linkbtn", text: "Use the project map", tip: "Put this box's hands on the project's zones", onClick: () => actions.useProjectMap(box.id, true) })
       : el("button", { className: "linkbtn", text: "Make a map", tip: "Draw zones for the project, and put this box's hands on them", onClick: () => actions.newMap(box.id) }));
-  const tabs = docTabs([
-    ...(onMap ? [{ key: "map", label: "Map" }] : []),
-    { key: "contents", label: "Contents" },
-    { key: "dealing", label: "Dealing" },
-    // Both halves of the template count (2026-09-13). The tab holds two lists
-    // now - card fields and outcome fields - and a count of only the first
-    // would draw a dimmed "0", which docTabs teaches as EMPTY, on a tab that
-    // has content. A number that answers "is there anything in here" is worth
-    // more here than one that answers "how many card fields".
-    { key: "template", label: "Card template", count: box.fields.length + box.outcomeFields.length },
-    { key: "templates", label: "Hand templates", count: box.templates.length },
-    { key: "tags", label: "Tags", count: box.tagGroups.length },
-    { key: "properties", label: "Properties", count: box.properties.length },
-    ...extensionTabs(actions.project?.(), "box", box.id),
-  ], tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "box", box: box.id }); });
+  // Worked out again from the project as it is now when a save lands while the
+  // page is being edited (recountDocTabs), so a count never waits for a redraw.
+  const boxSpecs = (): DocTabSpec[] => {
+    const now = actions.project?.()?.boxes.find((b) => b.id === box.id) ?? box;
+    return [
+      ...(onMap ? [{ key: "map", label: "Map" }] : []),
+      { key: "contents", label: "Contents" },
+      { key: "dealing", label: "Dealing" },
+      // Both halves of the template count (2026-09-13). The tab holds two lists
+      // now - card fields and outcome fields - and a count of only the first
+      // would draw a dimmed "0", which docTabs teaches as EMPTY, on a tab that
+      // has content. A number that answers "is there anything in here" is worth
+      // more here than one that answers "how many card fields".
+      { key: "template", label: "Card template", count: now.fields.length + now.outcomeFields.length },
+      { key: "templates", label: "Hand templates", count: now.templates.length },
+      { key: "tags", label: "Tags", count: now.tagGroups.length },
+      { key: "properties", label: "Properties", count: now.properties.length },
+      ...extensionTabs(actions.project?.(), "box", box.id),
+    ];
+  };
+  const tabs = docTabs(boxSpecs(), tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "box", box: box.id }); }, boxSpecs);
 
   let body: HTMLElement;
   if (tab === "templates") {
@@ -990,6 +1072,7 @@ export function renderBoxCentre(
   }
   host.replaceChildren(heading, ...(optIn ? [optIn] : []), tabs, body);
   refocusGroupBar(host);
+  restoreCardFocus(selectedCards);
 }
 
 // The box's setup tabs: hand templates and tags list here (behind the box
@@ -1087,7 +1170,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
   let body: HTMLElement;
   if (mode === "table") {
     const table = el("table", { className: "ctable" });
-    table.append(tableHead(["", "Deck", "Game ID", "Cards", "Purpose"]));
+    table.append(tableHead(["", "Deck", "Game ID", "Cards", "Design note"]));
     const tbody = el("tbody");
     for (const deck of box.decks) {
       const nameCell = el("td", { className: "ct-title", text: deck.title ?? deck.gameId });
@@ -1099,11 +1182,14 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
         el("td", { className: "ct-mono", text: String(deck.cards.length) }),
         el("td", { text: deck.purpose ?? "" }),
       );
+      row.dataset["deck"] = deck.id;
       row.addEventListener("click", () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }));
       row.addEventListener("contextmenu", itemMenu("deck", () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
       wireDrop(row, deck.id, "y", move);
       tbody.append(row);
     }
+    // One tab stop, the arrows between rows, Enter opens the deck as a click does.
+    wireRowKeys([...tbody.querySelectorAll<HTMLElement>("tr")], { open: (r) => actions.focus({ kind: "deck", box: box.id, deck: r.dataset["deck"]! }) });
     table.append(tbody);
     body = el("div", { className: "ctable-wrap" }, table,
       el("button", { className: "ctable-new", text: "+ New deck", onClick: () => actions.newDeck(box.id) }));

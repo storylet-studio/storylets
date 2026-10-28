@@ -51,7 +51,7 @@ describe("createWorldContainer", () => {
     world.resolver.set!("time_phase", "night");
     expect(world.resolver.get("time_phase")).toBe("night");
 
-    const engine = new Engine(bundle, { seed: 0, world: world.resolver });
+    const engine = new Engine(bundle, { seed: 0, hostScopes: { world: world.resolver } });
     const flow = engine.openFlow("main");
     flow.setProperty("world.time_phase", "day");           // the host's own path
     expect(world.bag.get("time_phase")).toBe("day");
@@ -61,7 +61,7 @@ describe("createWorldContainer", () => {
 
   it("an outcome is still refused: the engine asks before it reaches the resolver", () => {
     const world = createWorldContainer(bundle);
-    const flow = new Engine(bundle, { seed: 0, world: world.resolver }).openFlow("main");
+    const flow = new Engine(bundle, { seed: 0, hostScopes: { world: world.resolver } }).openFlow("main");
     flow.dealMany();
     expect(() => flow.play("c_tick", "tick", "q")).toThrow(/read-only \(writable: false\)/);
     expect(world.bag.get("time_phase")).toBe("day");       // refused, so no side effect

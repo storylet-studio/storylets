@@ -11,6 +11,7 @@
 //   - with no folder, nothing outside the project is ever written.
 
 import { describe, expect, it } from "vitest";
+import { hostScopeDecls } from "@storylet-studio/model";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,12 +71,12 @@ describe("saving the project writes the Storylet Engine's file", () => {
       ] }],
     });
     // The copy of @world now says what game.scopes.json says (the shared file wins).
-    expect(projectShard(session).world.properties).toEqual([{ name: "danger", type: "number", default: 2, purpose: "How bad it is out there" }]);
+    expect(hostScopeDecls(projectShard(session), "world")).toEqual([{ name: "danger", type: "number", default: 2, purpose: "How bad it is out there" }]);
 
     await undo(session);
     expect(existsSync(ours)).toBe(false);
     expect(projectShard(session).story.properties.map((p) => p.name)).toEqual(["reputation", "visited"]);
-    expect(projectShard(session).world.properties).toEqual([{ name: "danger", type: "number", default: 0 }]);
+    expect(hostScopeDecls(projectShard(session), "world")).toEqual([{ name: "danger", type: "number", default: 0 }]);
   });
 
   it("publishing writes it too, and never when it already says the same", async () => {
@@ -93,14 +94,14 @@ describe("the World settings, where the game shares its scopes", () => {
   it("read game.scopes.json, and name it", async () => {
     const { session } = scratch(true);
     const s = projectSettings(session);
-    expect(s.world.map((d) => [d.name, d.default])).toEqual([["danger", "2"]]);
+    expect(s.hostScopes[0]!.declarations.map((d) => [d.name, d.default])).toEqual([["danger", "2"]]);
     expect(s.worldFile).toBe("game-scopes/game.scopes.json");
   });
 
   it("write game.scopes.json first, keep its other scopes, and copy the same declarations into the project", async () => {
     const { root, session } = scratch(true);
     const s = projectSettings(session);
-    s.world = [...s.world, { name: "is_night", type: "boolean", default: "false" }];
+    s.hostScopes[0]!.declarations.push({ name: "is_night", type: "boolean", default: "false" });
     expect("error" in await saveProjectSettings(session, s)).toBe(false);
     const game = readJson(join(root, "game-scopes", "game.scopes.json"));
     expect(game.scopes).toEqual([
@@ -111,7 +112,7 @@ describe("the World settings, where the game shares its scopes", () => {
       GAME.scopes[1], GAME.scopes[2],
     ]);
     // The project keeps a synced copy, so it compiles packed or checked out alone.
-    expect(projectShard(session).world.properties).toEqual([
+    expect(hostScopeDecls(projectShard(session), "world")).toEqual([
       { name: "danger", type: "number", default: 2, purpose: "How bad it is out there" },
       { name: "is_night", type: "boolean", default: false },
     ]);
@@ -142,7 +143,7 @@ describe("the World settings, where the game shares its scopes", () => {
     expect("error" in await declareProperty(session, "world", "is_night", "", { type: "boolean", default: false })).toBe(false);
     expect(readJson(join(root, "game-scopes", "game.scopes.json")).scopes[0].declarations.map((d: { name: string }) => d.name))
       .toEqual(["danger", "is_night"]);
-    expect(projectShard(session).world.properties.map((d) => d.name)).toEqual(["danger", "is_night"]);
+    expect(hostScopeDecls(projectShard(session), "world").map((d) => d.name)).toEqual(["danger", "is_night"]);
   });
 });
 
@@ -206,10 +207,10 @@ describe("with no folder", () => {
     const { root, session } = scratch(false);
     const s = projectSettings(session);
     expect(s.worldFile).toBeUndefined();
-    s.world = [...s.world, { name: "is_night", type: "boolean", default: "false" }];
+    s.hostScopes[0]!.declarations.push({ name: "is_night", type: "boolean", default: "false" });
     expect("error" in await saveProjectSettings(session, s)).toBe(false);
     expect(existsSync(join(root, "game-scopes"))).toBe(false);
-    expect(projectShard(session).world.properties.map((d) => d.name)).toEqual(["danger", "is_night"]);
+    expect(hostScopeDecls(projectShard(session), "world").map((d) => d.name)).toEqual(["danger", "is_night"]);
     expect(session.dto.gameScopes).toBeUndefined();
     expect(cardCatalogue(session, "k_docks").some((p) => p.owner !== undefined)).toBe(false);
   });
@@ -245,7 +246,7 @@ describe("merging a returned pack, where the game shares its scopes", () => {
     const { sent, returned } = await roundTrip(session, (theirs) => {
       const path = join(theirs, "saltmarsh.storyletproj");
       const shard = parseSource(readFileSync(path, "utf8")) as ProjectShard;
-      shard.world.properties.push({ name: "tide", type: "number", default: 3 });
+      hostScopeDecls(shard, "world").push({ name: "tide", type: "number", default: 3 });
       writeFileSync(path, canonicalStringify(shard));
     });
     const { merged, session: after } = await merge(session, sent, returned);
@@ -255,7 +256,7 @@ describe("merging a returned pack, where the game shares its scopes", () => {
 
     // The next save re-syncs the project's copy from the game's file, and the edit is still there.
     expect("error" in await declareProperty(after, "story", "owed", "")).toBe(false);
-    expect(projectShard(after).world.properties.map((d) => d.name)).toEqual(["danger", "tide"]);
+    expect(hostScopeDecls(projectShard(after), "world").map((d) => d.name)).toEqual(["danger", "tide"]);
   });
 
   it("with the World left alone, nothing is said and game.scopes.json is not touched", async () => {

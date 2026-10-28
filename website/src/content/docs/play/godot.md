@@ -33,8 +33,8 @@ if not loaded["ok"]:
 var bundle = loaded["bundle"]
 ```
 
-`load_from_string` reads `storylets/bundle@1` and the earlier `storylets/bundle@0`, and refuses
-any other schema by name.
+`load_from_string` reads `storylets/bundle@2` and the earlier `storylets/bundle@1` and
+`storylets/bundle@0`, and refuses any other schema by name.
 
 Or, with the plugin enabled, `load("res://story.storyletsc")` gives you a
 `StoryletBundleResource` carrying `json_text` and `get_bundle()`. A broken bundle still
@@ -64,7 +64,7 @@ the engine kept nowhere, gives a flow that is already closed, and every call on 
 open other flows.
 
 The same reference counting applies to the callables you hand the engine. A trace handler on
-a flow can read that flow freely, since a closed flow lets go of its handlers. But a `@world`
+a flow can read that flow freely, since a closed flow lets go of its handlers. But a host scope
 resolver or an engine-level handler that reads a member of the object holding the engine
 captures that object, and the two then keep each other alive. Have the callable capture the
 values it needs instead, as the Hamlet demo's resolver captures its `world` Dictionary rather
@@ -78,8 +78,34 @@ The same seed always deals the same cards. `"log": true` keeps the event logs. `
 is that flow's own, and `engine.log()` is the run's, every flow's events in one order with
 each entry naming its `flow`. That last one is the only place a story action in another flow
 moving shared state is visible, and the state panel shows both (capped at 1000;
-`"log": {"cap": n}` sets your own). An unknown key in the options Dictionary is an error, so a typo tells you
-instead of doing nothing.
+`"log": {"cap": n}` sets your own).
+
+`@world` is your game's, and so is any other scope the project declares, such as `@player`. Bind
+each one through `"host_scopes"`, keyed by its token, to a `{"get", "set"}` resolver, and
+conditions read your live game state directly:
+
+```gdscript
+var world := {"time_of_day": "day"}
+var engine := StoryletEngine.create(bundle, {
+	"host_scopes": {"world": {
+		"get": func(n: String): return world.get(n),
+		"set": func(n: String, v) -> void: world[n] = v,
+	}},
+	"on_error": func(e: Dictionary) -> void: push_warning("%s %s: %s" % [e["kind"], e["node"], e["message"]]),
+})
+```
+
+Your game keeps those values, so the engine never saves them, and a resolver with no `"set"` is
+one the story can't write. Leave a scope out, and the engine backs it itself from its declared
+defaults, as a property it saves with the rest. Patterplay takes the same `"host_scopes"`, so one
+resolver can serve both engines.
+
+A token is case-sensitive. Bind one the bundle doesn't declare (`"World"` for `world`, say) and
+`"on_error"` hears about it as the engine is built, as `{"kind": "setup", "node", "message"}`,
+naming the declared spelling when only the case differs. So does a key the options Dictionary
+doesn't take, a typo or the old `"world"` option, which is ignored rather than refused.
+`"on_error"` also hears every condition the engine couldn't evaluate and counted as false.
+Without one, each goes to `push_warning`.
 
 ## Deal, peek, outcomes, play
 
@@ -132,8 +158,8 @@ var report := engine.load_game(envelope)     # rebuilds every flow...
 flow = engine.get_flow("main")               # ...so re-take your handles
 ```
 
-An engine built on its own carries every property value in its envelope, a self-backed
-`@world` included, so those two calls are the whole run. The envelope is `storylets/save@3`,
+An engine built on its own carries every property value in its envelope, its self-backed host
+scopes included, so those two calls are the whole run. The envelope is `storylets/save@3`,
 written in the same order every time, so the same run always saves the same bytes, and an
 older `storylets/save@2` or `@1` envelope or file still loads. A game that
 hands the engine its own registry saves that registry once, beside the envelope
@@ -175,7 +201,7 @@ writes, and `JSON.parse_string` reads it back.
 `StoryletSave.serialize_state(engine, world_values)` and
 `StoryletSave.deserialize_state(engine, text)` are the `.storyletsave` string boundary. The
 second hands back the file's `@world` values for your game to apply, which matters when your
-game binds `@world` to a resolver of its own: those values are your game's, and the engine
+game binds `@world` through `"host_scopes"`: those values are your game's, and the engine
 never saves them ([why](/play/world-state/#saving-it)). Like `load_game`, it rebuilds every
 flow, so take your handles again from `engine.get_flow()`. A foreign, malformed, or
 wrong-project blob is refused with a `push_error` and null, so a bad file can't corrupt a run.
@@ -189,7 +215,7 @@ needs. A game running Patterplay beside the Storylet Engine makes one registry, 
 
 ```gdscript
 var registry := StoryletScopeRegistry.new()
-registry.define_owned("world", world_declarations, {"owner": "Game"})   # stored and saved
+registry.define_owned("world", StoryletBundle.host_scope_decls(bundle, "world"), {"owner": "Game"})   # stored and saved
 var engine := StoryletEngine.create(bundle, {"seed": 7, "registry": registry})
 ```
 
@@ -209,10 +235,11 @@ registry.load(save["registry"])
 engine.load_game(save["storylets"])
 ```
 
-`@world` is then your game's to register. `define_owned` keeps it in the registry, saved with
-the rest; `define_foreign("world", {"get": getter, "set": setter}, world_declarations)` leaves
-it in your game's own state, and nothing saves it but you. Pass the engine a `"world"`
-resolver instead and it registers that foreign scope for you. A token is taken once: a second
+`@world` is then your game's to register, and so is any other scope the project declares.
+`define_owned` keeps one in the registry, saved with the rest;
+`define_foreign("world", {"get": getter, "set": setter}, StoryletBundle.host_scope_decls(bundle, "world"))` leaves it in your
+game's own state, and nothing saves it but you. Pass the engine `"host_scopes"` instead and it registers each
+foreign scope for you. A token is taken once: a second
 engine that wants a token another already holds is refused, `create` returns null, the error
 names the holder, and the registry is left as it was.
 
@@ -240,7 +267,7 @@ part way puts the old engine and the registry back exactly as they were.
 GDScript has no exceptions, so the addon reports errors as values:
 
 - `play()` and `set_property()` return an error String, empty on success.
-- `StoryletEngine.create` returns null with a `push_error` for a bad option, a scope token
+- `StoryletEngine.create` returns null with a `push_error` for an option of the wrong shape, a scope token
   another engine already holds, or a bundle it can't read.
 - `load_game()` and `preview_load()` return the load report, or an empty Dictionary with a
   `push_error` when they refuse.

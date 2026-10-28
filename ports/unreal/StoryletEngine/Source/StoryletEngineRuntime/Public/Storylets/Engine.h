@@ -2,7 +2,7 @@
 // (design/flows.md; the shape is Patter's), transliterated from the
 // reference runtime (packages/runtime/src/engine.ts) and held to the
 // conformance corpus. An Engine owns the bundle, the lookups, the SHARED
-// property partitions and the @world seam; a Flow owns its own PRNG, clocks,
+// property partitions and the host scopes (@world, ...); a Flow owns its own PRNG, clocks,
 // cooldowns, board, claims, play history and per-flow partitions. Every name
 // is shared XOR per-flow by declaration, so a read is a union of two bags and
 // a write routes by name. No default flow, no ambient flow: openFlow(id)
@@ -15,9 +15,11 @@
 // @story registers under `story`, every other bag under a key starting
 // `storylets/`, which no expression can name. saveGame() carries what is NOT
 // a property, plus the registry's values only when the engine made the
-// registry itself. @world is the game's: a resolver it binds (never saved), a
-// scope it registers in its registry, or, for a standalone engine, a
-// self-backed bag the registry stores and saves.
+// registry itself. The HOST SCOPES (@world, @player, ...: every scope the
+// bundle's scopeRegistry declares) are the game's: each one a resolver it
+// binds (EngineOptions::hostScopes, never saved), a scope it registers in its
+// registry, or, for a standalone engine, a self-backed bag the registry
+// stores and saves.
 //
 // Key dealing contracts, per flow, in one place:
 //   - two verbs: deal(hand) claims, peek(box, criteria) just looks; you can
@@ -75,6 +77,7 @@
 #include <cstdio>
 #include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -94,13 +97,21 @@
 
 namespace storylets
 {
-    /** The host's @world resolver - the values the game owns. `set` may be
-     *  left empty for a read-only binding. */
-    struct WorldResolver
+    /** A host scope's resolver: a `get` and an optional `set` the game
+     *  provides so the story can read (and, if you allow it, write) values the
+     *  game owns, `@world.*` among them, at run time. Property metadata (types,
+     *  read-only) comes from the compiled bundle's declarations; the values
+     *  live in the game and are never stored or saved by this engine. `set`
+     *  may be left empty for a read-only binding. Patterplay's HostScope. */
+    struct HostScope
     {
         std::function<std::optional<StoryletValue>(const std::string&)> get;
         std::function<void(const std::string&, const StoryletValue&)> set;
     };
+
+    /** The name before host scopes, when @world was the one scope a game
+     *  could bind. Deprecated: bind it as EngineOptions::hostScopes["world"]. */
+    using WorldResolver = HostScope;
 
     /**
      * A content error the engine played through. Content can fail at run time
@@ -115,12 +126,16 @@ namespace storylets
      */
     struct PlayError
     {
-        /** The flow it happened in. */
+        /** The flow it happened in; empty for a `setup` report, which belongs
+         *  to no flow. */
         std::string flow;
-        /** What failed. A Storylets deal evaluates only conditions. */
+        /** What failed: "condition" (a Storylets deal evaluates only
+         *  conditions), or "setup" (how the engine was set up: a host scope
+         *  the bundle doesn't declare, reported as the constructor ends). */
         std::string kind = "condition";
         /** Whose condition: `card <gameId>`, `deck <gameId>`, `hand <gameId>`
-         *  or `outcome <card gameId>/<outcome gameId>`. */
+         *  or `outcome <card gameId>/<outcome gameId>`. For `setup`, the
+         *  host-scope token at fault. */
         std::string node;
         /** The expression's source text, when the bundle carries it; empty
          *  when it does not. */
@@ -138,23 +153,30 @@ namespace storylets
         bool log = false;
         /** Retained log cap (oldest dropped first) when log is on. */
         int logCap = 1000;
-        /** The host's @world binding: the values the game owns and the story
-         *  reads (and, where `set` is given, writes). Engine-level, shared by
-         *  all flows, never saved: the game keeps these values. Absent, a
-         *  standalone engine self-backs @world from the declared defaults, as a
-         *  property its registry stores and saves. A game running several
-         *  engines registers @world in its registry itself instead. */
-        std::optional<WorldResolver> world;
+        /** The host scopes the game binds, by token without the `@`: for
+         *  each, a resolver over values the game owns and the story reads (and,
+         *  where `set` is given, writes), such as `hostScopes["world"]` for
+         *  `@world.*`. A declared scope left unbound is self-backed by a
+         *  standalone engine from its defaults, as a property the registry
+         *  stores and saves. Engine-level, shared by all flows, never saved:
+         *  the game keeps these values. A game running several engines
+         *  registers its scopes in its registry itself instead, and binds none
+         *  here. Tokens are case-sensitive: a token the bundle doesn't declare
+         *  is reported (`setup`, through onError as the constructor ends),
+         *  naming the declared spelling when only the case differs.
+         *  Patterplay's option, name for name, on every runtime. */
+        std::map<std::string, HostScope> hostScopes;
         /** The game's registry: ONE per game, holding every engine's
          *  properties except those the game keeps itself, saved once. Given
          *  one, the engine registers its own scopes in it (@story under
          *  `story`, every other bag under a key starting `storylets/`, and
-         *  @world if `world` is set), reads every other scope from it, and
-         *  saveGame() leaves the property values to the game. @world is then
-         *  the game's to register: owned if the registry should store it,
-         *  foreign if the game keeps it. Null, the engine makes its own
-         *  registry and acts as its own game: it self-backs @world, and
-         *  saveGame() carries the registry's values too. Held shared, so a
+         *  each scope `hostScopes` binds), reads every other scope from it,
+         *  and saveGame() leaves the property values to the game. The host
+         *  scopes the bundle declares are then the game's to register: owned
+         *  if the registry should store them, foreign if the game keeps them.
+         *  Null, the engine makes its own registry and acts as its own game: it
+         *  self-backs every host scope the bundle declares and nobody bound,
+         *  and saveGame() carries the registry's values too. Held shared, so a
          *  game and each engine it runs keep the one registry alive between
          *  them. */
         std::shared_ptr<ScopeRegistry> registry;
@@ -165,7 +187,9 @@ namespace storylets
          *  Parity with the JS runtime's onReplacedFlow. Zero cost when unset. */
         std::function<void(const std::string&, int)> onReplacedFlow;
         /** Told of every condition the engine could not evaluate and counted as
-         *  false (see PlayError), whether or not anything is tracing. Unset: a
+         *  false (see PlayError), whether or not anything is tracing, and of
+         *  each set-up problem (kind "setup", reported as the constructor
+         *  ends). Unset: a
          *  warning on std::cerr. The UE wrapper always sets it (the OnError
          *  event, or a Warning in the log). Patterplay's onError, the same
          *  shape; parity with the JS runtime's. */
@@ -264,7 +288,13 @@ namespace storylets
         std::string purpose;
         OrderedMap<std::string, StoryletValue> fields;
         /** The card's Storylet extension values, raw as the bundle wrote them,
-         *  by extension id; empty when it has none. Never read by the engine. */
+         *  by extension id; empty when it has none. Never read by the engine.
+         *  READ-ONLY by contract, unlike `fields`: they're the extension's own
+         *  data, which the other runtimes hand out uncopied (a family ruling,
+         *  2026-10-28, as Patter's). A view here is a value struct, so this
+         *  member is a copy the engine makes as it fills the view; that is
+         *  acceptable in C++ and changes nothing about the contract: a game
+         *  written for every runtime treats it as the bundle's. */
         NodeExtensions extensions;
     };
 
@@ -280,7 +310,8 @@ namespace storylets
          *  outcomeFields. Handed over as the bundle wrote it, never read by
          *  the engine; empty when the outcome carries none. */
         OrderedMap<std::string, StoryletValue> fields;
-        /** The outcome's Storylet extension values, raw; empty when none. */
+        /** The outcome's Storylet extension values, raw and read-only, as a
+         *  card's are (DealtCard::extensions); empty when none. */
         NodeExtensions extensions;
     };
 
@@ -424,7 +455,8 @@ namespace storylets
         /** Empty when the box has no title. */
         std::string title;
         double turn = 0;
-        /** The box's Storylet extension values, raw; empty when none. */
+        /** The box's Storylet extension values, raw and read-only, as a
+         *  card's are (DealtCard::extensions); empty when none. */
         NodeExtensions extensions;
     };
 
@@ -757,7 +789,7 @@ namespace storylets
             {
                 throw StoryletError("unsupported bundle schema: "
                     + (bundle.schema.empty() ? std::string("(none)") : bundle.schema)
-                    + " (this runtime reads " + BUNDLE_SCHEMA_V0 + " and " + BUNDLE_SCHEMA + ")");
+                    + " (this runtime reads " + SupportedBundleSchemasText() + ")");
             }
             // The parts every bundle of a known schema has, by name: a bundle
             // missing one is cut short or hand-built, and would otherwise play
@@ -1144,12 +1176,12 @@ namespace storylets
             }
         }
 
-        /** @world through the host's resolver, as the registry takes a foreign
-         *  scope. `set` left empty is a read-only binding. */
-        class WorldResolverScope : public IScopeResolver
+        /** A bound host scope through the game's resolver, as the registry
+         *  takes a foreign scope. `set` left empty is a read-only binding. */
+        class HostScopeResolver : public IScopeResolver
         {
         public:
-            explicit WorldResolverScope(WorldResolver resolver) : resolver_(std::move(resolver)) {}
+            explicit HostScopeResolver(HostScope resolver) : resolver_(std::move(resolver)) {}
             std::optional<StoryletValue> get(const std::string& name) const override
             {
                 return resolver_.get ? resolver_.get(name) : std::nullopt;
@@ -1157,13 +1189,28 @@ namespace storylets
             bool canSet() const override { return static_cast<bool>(resolver_.set); }
             void set(const std::string& name, const StoryletValue& value) override { resolver_.set(name, value); }
         private:
-            WorldResolver resolver_;
+            HostScope resolver_;
         };
 
         /** A declaration list as the registry and the bag take it. */
         inline std::vector<ScopeDeclaration> PlainDecls(const std::vector<PropertyDecl>& decls)
         {
             return std::vector<ScopeDeclaration>(decls.begin(), decls.end());
+        }
+
+        /** A self-backed host scope's declarations: the scope's own `writable`
+         *  folded into each that says nothing itself, since an owned bag reads
+         *  writability per declaration. */
+        inline std::vector<ScopeDeclaration> SelfBackedDecls(const HostScopeSpec& spec)
+        {
+            std::vector<ScopeDeclaration> out;
+            for (const PropertyDecl& d : spec.declarations)
+            {
+                ScopeDeclaration decl = d;
+                if (!decl.writable.has_value() && spec.writable.has_value()) decl.writable = spec.writable;
+                out.push_back(std::move(decl));
+            }
+            return out;
         }
 
         // --- durable state (ruling H, 2026-10-06) ------------------------------
@@ -1254,14 +1301,14 @@ namespace storylets
 
     /** The world + flow manager (design/flows.md; the shape is Patter's):
      *  owns the bundle, every lookup built from it, the SHARED property
-     *  partitions and the @world seam; ALL play happens on a Flow from
+     *  partitions and the host scopes; ALL play happens on a Flow from
      *  openFlow(id). Every bag that declares something is registered in the
      *  game's one ScopeRegistry (EngineOptions::registry) or the engine's own. */
     class Engine
     {
     public:
         /** Throws, leaving the game's registry as it was, when a token this
-         *  engine registers (`story`, or `world` with a resolver) is already
+         *  engine registers (`story`, or a host scope it binds) is already
          *  another's: the error names who holds it. */
         explicit Engine(BundlePtr bundle, const EngineOptions& opts = {});
 
@@ -1306,8 +1353,8 @@ namespace storylets
 
         /** Close every flow (their bags leave the registry), forget spent cards
          *  and the run's log, and reseed the shared state to its defaults in
-         *  place (the self-backed @world included; a host-bound @world is the
-         *  host's). Values loaded into the registry for this engine's bags and
+         *  place (the self-backed host scopes included; a host-bound one is
+         *  the host's). Values loaded into the registry for this engine's bags and
          *  not yet claimed are dropped; every other engine's stay. */
         void reset();
 
@@ -1362,8 +1409,8 @@ namespace storylets
 
         void setProperty(const std::string& path, const StoryletValue& value);
 
-        /** The shared surface as examiner rows: @world (read through the
-         *  resolver) then the shared partitions. */
+        /** The shared surface as examiner rows: the host scopes (read through
+         *  their resolvers) then the shared partitions. */
         std::vector<PropertyRow> listProperties() const;
 
         /** The SHARED kernel bags with their store path prefixes (the state
@@ -1422,7 +1469,7 @@ namespace storylets
          *  card, hand and box in it named by its Game ID. The
          *  property values are the registry's: a standalone engine (one that
          *  made its own registry) carries them here under `registry`,
-         *  self-backed @world included; a game that passed a registry saves it
+         *  self-backed host scopes included; a game that passed a registry saves it
          *  once itself, beside each engine's envelope. */
         SaveEnvelope saveGame() const;
 
@@ -1495,45 +1542,60 @@ namespace storylets
          */
         LoadReport loadDurable(const DurableSave& memory);
 
-        // --- the @world seam (used by flows and hosts alike) -----------------
+        // --- the host-scope seam (used by flows and hosts alike) -------------
 
-        /** @world, read through the registry by name (the scope's own
-         *  normalisation), so a @world the game registered folded to lower case
-         *  still answers the names as authored. Nothing registered under
-         *  `world` reads as unset. */
-        std::optional<StoryletValue> worldGet(const std::string& name) const
+        /** A host scope the bundle declares, by token (case-sensitive); null
+         *  when it declares none by that token. */
+        const HostScopeSpec* hostScope(const std::string& token) const
         {
-            return registry_->get("world", name);
+            return FindHostScope(*bundle_, token);
         }
 
-        /** The story's promise about a @world value (writable == false on its declaration),
-         *  kept at runtime as the compiler keeps it at publish. Asked by a flow's outcome
-         *  write; the host's own setProperty never asks. */
-        bool worldReadOnly(const std::string& name) const
+        /** A host scope's value, read through the registry by name (the
+         *  scope's own normalisation), so a scope the game registered folded to
+         *  lower case still answers the names as authored. Nothing registered
+         *  under the token reads as unset. */
+        std::optional<StoryletValue> hostGet(const std::string& token, const std::string& name) const
         {
-            for (const auto& d : bundle_->world.properties)
-                if (d.name == name) return d.writable.has_value() && !*d.writable;
-            return false;
+            return registry_->get(token, name);
         }
 
-        bool worldCanSet() const
+        /** The story's promise about a host scope's value (`writable: false` on
+         *  its declaration, or on its scope), kept at runtime as the compiler
+         *  keeps it at publish. Asked by a flow's outcome write; the host's own
+         *  setProperty never asks. */
+        bool hostReadOnly(const std::string& token, const std::string& name) const
         {
-            return hostWorld_.has_value() ? static_cast<bool>(hostWorld_->set) : true;
+            const HostScopeSpec* spec = hostScope(token);
+            return spec && HostScopeReadOnly(*spec, name);
         }
 
-        /** The @world WRITE seam, through the registry. `host` says the caller is
-         *  the GAME's own surface - setProperty and the tooling built on it - which
-         *  the shared kernel lets past a `writable: false` (scoperegistry 0.6.0):
-         *  that flag is the story's promise, not the game's. The story's refusal is
-         *  worldReadOnly, asked before this seam is reached. A BOUND resolver is
-         *  opaque - it takes a name and a value and keeps whatever rule the game
-         *  has - so it is always written as the host, and the flag only reaches a
-         *  @world the registry stores. A refusal is the kernel's RegistryError,
-         *  rethrown as StoryletError. */
-        void worldSet(const std::string& name, const StoryletValue& value, bool host = false)
+        /** Can the scope be written at all: false only for a resolver bound
+         *  with no `set`. */
+        bool hostCanSet(const std::string& token) const
         {
-            kernelCall([&] { registry_->set("world", name, value, hostWorld_.has_value() ? true : host); });
+            auto it = boundHosts_.find(token);
+            return it == boundHosts_.end() || static_cast<bool>(it->second.set);
         }
+
+        /** A host scope's WRITE seam, through the registry. `host` says the
+         *  caller is the GAME's own surface - setProperty and the tooling built
+         *  on it - which the shared kernel lets past a `writable: false`
+         *  (scoperegistry 0.6.0): that flag is the story's promise, not the
+         *  game's. The story's refusal is hostReadOnly, asked before this seam
+         *  is reached. A BOUND resolver is opaque - it takes a name and a value
+         *  and keeps whatever rule the game has - so it is always written as
+         *  the host, and the flag only reaches a scope the registry stores. A
+         *  refusal is the kernel's RegistryError, rethrown as StoryletError. */
+        void hostSet(const std::string& token, const std::string& name, const StoryletValue& value, bool host = false)
+        {
+            const bool bound = boundHosts_.count(token) > 0;
+            kernelCall([&] { registry_->set(token, name, value, bound ? true : host); });
+        }
+
+        /** @world's value: hostGet("world", name). Kept for callers from before
+         *  host scopes. */
+        std::optional<StoryletValue> worldGet(const std::string& name) const { return hostGet("world", name); }
 
         /** What hotSwap hands back: the replacement engine, and the report its
          *  load produced. */
@@ -1547,7 +1609,7 @@ namespace storylets
          * Live bundle refresh: rebuild on an edited bundle with the whole run
          * carried over, and return the replacement with the report its load
          * produced. The replacement is built from a copy of the options this
-         * engine was built with (seed, log, world, onReplacedFlow); `change`,
+         * engine was built with (seed, log, hostScopes, onReplacedFlow); `change`,
          * when given, edits that copy first, so only what it changes differs
          * (`[](EngineOptions& o) { o.seed = 7; }` keeps the rest). It always
          * lands on this engine's registry, or a new one of its own when this
@@ -1817,7 +1879,7 @@ namespace storylets
             registerShared();
         }
 
-        /** Register the shared bags and @world. On a throw (a token another
+        /** Register the shared bags and the host scopes. On a throw (a token another
          *  engine or the game already holds), whatever this registered comes
          *  out again, keeping its values, so a clash leaves the game's registry
          *  as it was; then the error goes on. */
@@ -1842,34 +1904,48 @@ namespace storylets
                         registered.push_back(key);
                     }
                 }
-                const std::vector<ScopeDeclaration> worldDecls = detail::PlainDecls(bundle_->world.properties);
-                if (hostWorld_.has_value())
+                // Each scope the game binds is EXTERNAL: the game keeps the
+                // values, the registry never saves them. Its declarations
+                // (types, read-only) come from the bundle.
+                for (const auto& pair : boundHosts_)
                 {
-                    // The game keeps these values: an external scope, never saved.
+                    const std::string& token = pair.first;
+                    const HostScopeSpec* spec = hostScope(token);
+                    std::vector<ScopeDeclaration> decls;
+                    if (spec) decls = detail::PlainDecls(spec->declarations);
                     ForeignScopeOptions options;
                     options.normalise = &detail::IdentityName;
+                    options.writable = spec && spec->writable.has_value() ? *spec->writable : true;
                     options.owner = std::string(detail::RegistryOwner);
-                    reg.defineForeign("world", std::make_shared<detail::WorldResolverScope>(*hostWorld_), &worldDecls, options);
-                    registered.push_back("world");
+                    reg.defineForeign(token, std::make_shared<detail::HostScopeResolver>(pair.second),
+                        spec && !spec->opaque ? &decls : nullptr, options);
+                    registered.push_back(token);
                 }
-                else if (ownsRegistry_ && (selfWorld_ || !reg.has("world")))
+                // A declared host scope nobody bound. A standalone engine is
+                // its own game, so it self-backs the scope from its declared
+                // defaults, DECLARATIONS AND ALL, as a property the registry
+                // stores and SAVES (only a resolver the game binds is
+                // external). The bag keeps `writable: false` so an examiner
+                // still reads it there, and the kernel lets a host write past
+                // it, which is what the game's own surface passes. Given the
+                // GAME's registry, the engine registers nothing here: those
+                // scopes are the game's to register.
+                if (ownsRegistry_)
                 {
-                    // Standalone: self-backed from the declared defaults,
-                    // DECLARATIONS AND ALL, as a property the registry stores and
-                    // SAVES (only a resolver the game binds is external). The bag
-                    // keeps `writable: false` so an examiner still reads it there,
-                    // and the kernel lets a host write past it, which is what the
-                    // game's own surface passes.
-                    OwnedScopeOptions options;
-                    options.normalise = &detail::IdentityName;
-                    options.pathPrefix = std::string("world.");
-                    options.owner = std::string(detail::RegistryOwner);
-                    reg.defineOwned("world", worldDecls, options);
-                    registered.push_back("world");
-                    selfWorld_ = true;
+                    for (const HostScopeSpec& spec : bundle_->hostScopes)
+                    {
+                        const std::string& token = spec.token;
+                        const bool mine = std::find(selfBacked_.begin(), selfBacked_.end(), token) != selfBacked_.end();
+                        if (token.empty() || boundHosts_.count(token) || (!mine && reg.has(token))) continue;
+                        OwnedScopeOptions options;
+                        options.normalise = &detail::IdentityName;
+                        options.pathPrefix = token + ".";
+                        options.owner = std::string(detail::RegistryOwner);
+                        reg.defineOwned(token, detail::SelfBackedDecls(spec), options);
+                        registered.push_back(token);
+                        if (!mine) selfBacked_.push_back(token);
+                    }
                 }
-                // Given the game's registry and no resolver, @world is the game's
-                // to register: this engine registers nothing for it.
             }
             catch (...)
             {
@@ -1881,7 +1957,7 @@ namespace storylets
         }
 
         /** Every shared bag back to its declared defaults, in place (the
-         *  registry keeps them registered), the self-backed @world included. */
+         *  registry keeps them registered), the self-backed host scopes included. */
         void reseedShared()
         {
             const std::vector<ScopeDeclaration> story = detail::PlainDecls(sharedDecls_.story);
@@ -1896,9 +1972,9 @@ namespace storylets
                     pair.second->reseed(&plain);
                 }
             }
-            if (selfWorld_)
+            for (const std::string& token : selfBacked_)
             {
-                registry_->reseedOwned("world", detail::PlainDecls(bundle_->world.properties));
+                if (const HostScopeSpec* spec = hostScope(token)) registry_->reseedOwned(token, detail::SelfBackedDecls(*spec));
             }
         }
 
@@ -1998,18 +2074,46 @@ namespace storylets
         /** The game's onError (EngineOptions), or the std::cerr warning. */
         std::function<void(const PlayError&)> onError_;
         std::optional<int> logCap_;
-        std::optional<WorldResolver> hostWorld_;
+        /** The host scopes the game bound (EngineOptions::hostScopes): they
+         *  outlive reset and loads (the game's stores are the game's). */
+        std::map<std::string, HostScope> boundHosts_;
         /** The game's one registry (or the engine's own, when it is standalone). */
         std::shared_ptr<ScopeRegistry> registry_;
         /** True when the engine made the registry: saveGame() then carries its values. */
         bool ownsRegistry_ = false;
-        /** True when the engine self-backed @world (standalone, no resolver bound). */
-        bool selfWorld_ = false;
+        /** The declared host scopes this engine self-backed (standalone, no
+         *  resolver bound), in bundle order. */
+        std::vector<std::string> selfBacked_;
+        /** Set-up problems found while building (a host scope the bundle
+         *  doesn't declare), by node then message: reported as the
+         *  constructor ends, when the engine can report. */
+        std::vector<std::pair<std::string, std::string>> setup_;
+        /** Report a set-up problem (a `setup` PlayError, which belongs to no
+         *  flow): to the game's onError, and to the run log and engine tap. */
+        void reportSetup(const std::string& node, const std::string& message)
+        {
+            PlayError error;
+            error.flow = "";
+            error.kind = "setup";
+            error.node = node;
+            error.message = message;
+            onError_(error);
+            if (logCap_.has_value() || engineTracing())
+            {
+                TraceEvent evt;
+                evt.kind = TraceEvent::Kind::Diagnostic;
+                evt.where = "setup";
+                evt.message = message;
+                emitEngine("", evt, std::nullopt);
+            }
+        }
         /** The keys the engine itself registered (flows keep their own), in order. */
         std::vector<std::string> registered_;
-        /** The @world rows that open both listProperties, the engine's and a
-         *  flow's: read through the resolver, in declaration order. */
-        void addWorldRows(std::vector<PropertyRow>& rows) const;
+        /** The host-scope rows that open both listProperties, the engine's and
+         *  a flow's: every declared host scope's properties read through its
+         *  resolver, in bundle order (an opaque scope declares none, so lists
+         *  none). */
+        void addHostRows(std::vector<PropertyRow>& rows) const;
         /** saveGame's `registry` section, in the order a load rebuilds it. */
         OrderedMap<std::string, OrderedMap<std::string, StoryletValue>> registrySection() const;
         mutable int viewRevision_ = -1;
@@ -2038,7 +2142,8 @@ namespace storylets
          * Refuse a host write that does not fit what the content declared (the
          * hands-on review, 2026-10, foundation 5): a string for a number, a
          * value an enum or a quality does not list, a flag a flags property
-         * does not, or a @world name the content never declared. The rule is
+         * does not, or a name the content never declared in a host scope it
+         * declares (an opaque one declares no names, so any is the game's). The rule is
          * the kernel's ValueFits, the one a load walks saved values with, so a
          * value the game may set is exactly one a save may carry. Another
          * engine's scope (`patter.x`) is that engine's to check. `ownerId` is
@@ -2054,19 +2159,21 @@ namespace storylets
                 return nullptr;
             };
             const PropertyDecl* decl = nullptr;
-            if (parts.size() == 2 && parts[0] == "world")
+            const HostScopeSpec* hostSpec = parts.size() == 2 ? hostScope(parts[0]) : nullptr;
+            if (hostSpec)
             {
+                if (hostSpec->opaque) return;
                 const std::string& name = parts[1];
-                decl = byName(&bundle_->world.properties, name);
+                decl = byName(&hostSpec->declarations, name);
                 if (!decl)
                 {
                     const std::string lower = wildwinter::expr::LowercaseName(name);
-                    for (const PropertyDecl& d : bundle_->world.properties)
+                    for (const PropertyDecl& d : hostSpec->declarations)
                     {
                         if (wildwinter::expr::LowercaseName(d.name) == lower) { decl = &d; break; }
                     }
                 }
-                if (!decl) throw StoryletError("no property at \"" + path + "\": the content declares no @world." + name);
+                if (!decl) throw StoryletError("no property at \"" + path + "\": the content declares no @" + hostSpec->token + "." + name);
             }
             else if (parts.size() == 2 && parts[0] == "story")
             {
@@ -2245,7 +2352,8 @@ namespace storylets
         std::unordered_set<std::string> requiredGroups_;
 
         // Quality ladders (quality.md), declaration-level so partition-blind.
-        std::unordered_map<std::string, std::vector<std::string>> worldLadders_;
+        /** Each host scope's ladders, by token, then name. */
+        std::unordered_map<std::string, std::unordered_map<std::string, std::vector<std::string>>> hostLadders_;
         std::unordered_map<std::string, std::vector<std::string>> storyLadders_;
         std::unordered_map<std::string, std::unordered_map<std::string, std::vector<std::string>>> boxLadders_;
         std::unordered_map<std::string, std::unordered_map<std::string, std::vector<std::string>>> deckLadders_;
@@ -2727,7 +2835,7 @@ namespace storylets
                 v.available = passes(o.condition, ctx,
                     [&] { return "outcome " + EffectiveGameId(*resolved.entry.card) + "/" + EffectiveGameId(o); });
                 v.fields = o.fields;
-                v.extensions = o.extensions;
+                v.extensions = o.extensions;   // read-only, as a dealt card's
                 views.push_back(std::move(v));
             }
             return views;
@@ -2990,7 +3098,7 @@ namespace storylets
          *  the value will land, named for the trace. */
         struct WritePlan
         {
-            enum class Kind { World, Bag, Scope };
+            enum class Kind { Host, Bag, Scope };
             Kind kind = Kind::Bag;
             std::string target;
             std::string path;
@@ -3249,17 +3357,18 @@ namespace storylets
             const PropertyBag* shared_;
         };
 
-        /** @world through the engine's resolver. */
-        class WorldScope : public IScopeSource
+        /** A host scope (@world, @player, ...) through the engine's registry. */
+        class HostScopeSource : public IScopeSource
         {
         public:
-            explicit WorldScope(const Engine* engine) : engine_(engine) {}
+            HostScopeSource(const Engine* engine, std::string token) : engine_(engine), token_(std::move(token)) {}
             std::optional<StoryletValue> get(const std::string& name) const override
             {
-                return engine_->worldGet(name);
+                return engine_->hostGet(token_, name);
             }
         private:
             const Engine* engine_;
+            std::string token_;
         };
 
         static const PropertyBag* bagOf(const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& kind, const std::string& id)
@@ -3290,8 +3399,8 @@ namespace storylets
          *  the card under evaluation; in hand-condition contexts @deck is an
          *  empty bag, so any reference is an eval error (missing-policy
          *  throw). Every scope is the flow's MERGED view - its own copies
-         *  over the shared values, names disjoint - and @world reads through
-         *  the engine's resolver. */
+         *  over the shared values, names disjoint - and each host scope reads
+         *  through the engine's resolver. */
         EvalContext evalCtx(const Box& box, const Deck* deck, const HandEnv& handEnv) const
         {
             const Engine::RegistryView& others = engine_->registryView();
@@ -3313,11 +3422,6 @@ namespace storylets
                         auto it = m.find(name);
                         return it == m.end() ? nullptr : &it->second;
                     };
-                    if (scope == "world")
-                    {
-                        const std::vector<std::string>* own = find(engine_->worldLadders_);
-                        return own || !otherLadders ? own : otherLadders(scope, name);
-                    }
                     if (scope == "story") return find(engine_->storyLadders_);
                     if (scope == "box")
                     {
@@ -3330,7 +3434,9 @@ namespace storylets
                         return it == engine_->deckLadders_.end() ? nullptr : find(it->second);
                     }
                     if (scope == "hand") return handLadder(*env, name);
-                    return otherLadders ? otherLadders(scope, name) : nullptr;
+                    auto host = engine_->hostLadders_.find(scope);
+                    const std::vector<std::string>* own = host == engine_->hostLadders_.end() ? nullptr : find(host->second);
+                    return own || !otherLadders ? own : otherLadders(scope, name);
                 };
             }
             const StoryletsHost* host = hostsByBox_.get(box.id);
@@ -3339,7 +3445,10 @@ namespace storylets
             // Every other engine's game-wide scope first (every engine reads every
             // scope); this engine's own tokens are its merged views, over the top.
             ctx.scopes = others.scopes;
-            ctx.scopes["world"] = std::make_shared<WorldScope>(engine_);
+            for (const HostScopeSpec& spec : engine_->bundle_->hostScopes)
+            {
+                ctx.scopes[spec.token] = std::make_shared<HostScopeSource>(engine_, spec.token);
+            }
             ctx.scopes["story"] = std::make_shared<PairScope>(stores_.story.get(), engine_->shared_.story.get());
             ctx.scopes["box"] = std::make_shared<PairScope>(bagOf(stores_.box, box.id), bagOf(engine_->shared_.box, box.id));
             ctx.scopes["deck"] = deck
@@ -4135,8 +4244,8 @@ namespace storylets
             v.gameId = EffectiveGameId(card);
             v.title = card.title;
             v.purpose = card.purpose;
-            v.fields = card.fields;
-            v.extensions = card.extensions;
+            v.fields = card.fields;   // the game's own copy
+            v.extensions = card.extensions;   // read-only by contract (DealtCard::extensions)
             return v;
         }
 
@@ -4246,20 +4355,25 @@ namespace storylets
             {
                 throw StoryletError("bad change target \"" + target + "\"");
             }
-            if (scope == "world")
+            if (engine_->hostScope(scope))
             {
-                if (!engine_->worldCanSet())
+                if (!engine_->hostCanSet(scope))
                 {
-                    throw StoryletError("@world." + name + " cannot be written: the host bound @world read-only");
+                    throw StoryletError("@" + scope + "." + name + " cannot be written: the host bound @" + scope + " read-only");
                 }
-                if (engine_->worldReadOnly(name))
+                // The story's own promise, kept HERE and only here, because here
+                // is where the story does the writing: asked before the seam, so
+                // an outcome never reaches the bag (which would let a host write
+                // past it) nor a bound resolver (which cannot tell the two apart).
+                if (engine_->hostReadOnly(scope, name))
                 {
-                    throw StoryletError("'@world." + name + "' is read-only (writable: false)");
+                    throw StoryletError("'@" + scope + "." + name + "' is read-only (writable: false)");
                 }
                 WritePlan plan;
-                plan.kind = WritePlan::Kind::World;
+                plan.kind = WritePlan::Kind::Host;
                 plan.target = target;
-                plan.path = "world." + name;
+                plan.path = scope + "." + name;
+                plan.scope = scope;
                 plan.name = name;
                 return plan;
             }
@@ -4314,10 +4428,10 @@ namespace storylets
         {
             switch (plan.kind)
             {
-                case WritePlan::Kind::World:
+                case WritePlan::Kind::Host:
                 {
-                    std::optional<StoryletValue> prev = engine_->worldGet(plan.name);
-                    engine_->worldSet(plan.name, value);
+                    std::optional<StoryletValue> prev = engine_->hostGet(plan.scope, plan.name);
+                    engine_->hostSet(plan.scope, plan.name, value);
                     return prev;
                 }
                 case WritePlan::Kind::Bag:
@@ -4340,8 +4454,8 @@ namespace storylets
             if (!prev.has_value()) return;
             switch (plan.kind)
             {
-                case WritePlan::Kind::World:
-                    engine_->worldSet(plan.name, *prev, /*host=*/true);
+                case WritePlan::Kind::Host:
+                    engine_->hostSet(plan.scope, plan.name, *prev, /*host=*/true);
                     return;
                 case WritePlan::Kind::Bag:
                     plan.bag->set(plan.name, *prev, /*silent=*/true, "play refused", /*host=*/true);
@@ -4352,16 +4466,17 @@ namespace storylets
             }
         }
 
-        /** ^@([a-z]+)\.([A-Za-z_][A-Za-z0-9_-]*)$ without a regex engine. */
+        /** ^@([a-z][a-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_-]*)$ without a regex engine. */
         static bool parseChangeTarget(const std::string& target, std::string& scope, std::string& name)
         {
             if (target.size() < 4 || target[0] != '@') return false;
             size_t dot = target.find('.');
             if (dot == std::string::npos || dot < 2 || dot + 1 >= target.size()) return false;
             scope = target.substr(1, dot - 1);
+            if (scope[0] < 'a' || scope[0] > 'z') return false;
             for (char c : scope)
             {
-                if (c < 'a' || c > 'z') return false;
+                if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) return false;
             }
             name = target.substr(dot + 1);
             auto nameStart = [](char c)
@@ -4468,7 +4583,7 @@ namespace storylets
                 v.gameId = EffectiveGameId(box);
                 v.title = box.title;
                 v.turn = turnCounts_.getOr(box.id, 0);
-                v.extensions = box.extensions;
+                v.extensions = box.extensions;   // read-only, as a dealt card's
                 boxes.push_back(std::move(v));
             }
             return boxes;
@@ -4490,14 +4605,14 @@ namespace storylets
             return mounts;
         }
 
-        /** The flow's FULL merged view as examiner rows: @world read through
-         *  the engine's resolver, then per scope the shared values and this
-         *  flow's own. Bundle order. */
+        /** The flow's FULL merged view as examiner rows: the host scopes read
+         *  through the engine's resolvers, then per scope the shared values and
+         *  this flow's own. Bundle order. */
         std::vector<PropertyRow> listProperties() const
         {
             assertOpen();
             std::vector<PropertyRow> rows;
-            engine_->addWorldRows(rows);
+            engine_->addHostRows(rows);
             // No path prefix passed in: the bag composes the address from its
             // own pathPrefix, so the row arrives complete - which is also why
             // the field-by-field copy this used to do is gone, including the
@@ -4544,9 +4659,9 @@ namespace storylets
             assertOpen();
             std::vector<std::string> parts = splitPath(path);
             std::optional<StoryletValue> value;
-            if (parts.size() == 2 && parts[0] == "world")
+            if (parts.size() == 2 && engine_->hostScope(parts[0]))
             {
-                value = engine_->worldGet(parts[1]);
+                value = engine_->hostGet(parts[0], parts[1]);
             }
             else if (parts.size() == 2 && parts[0] != "story" && engine_->registry_->has(parts[0]))
             {
@@ -4580,14 +4695,14 @@ namespace storylets
         {
             assertOpen();
             std::vector<std::string> parts = splitPath(path);
-            if (parts.size() == 2 && parts[0] == "world")
+            if (parts.size() == 2 && engine_->hostScope(parts[0]))
             {
                 engine_->checkHostWrite(parts, path, value, std::string());
-                if (!engine_->worldCanSet())
+                if (!engine_->hostCanSet(parts[0]))
                 {
-                    throw StoryletError("@world is read-only here: the host bound no write");
+                    throw StoryletError("@" + parts[0] + " is read-only here: the host bound no write");
                 }
-                engine_->worldSet(parts[1], value, /*host=*/true);
+                engine_->hostSet(parts[0], parts[1], value, /*host=*/true);
                 return;
             }
             if (parts.size() == 2 && parts[0] != "story" && engine_->registry_->has(parts[0]))
@@ -4870,7 +4985,8 @@ namespace storylets
         : bundle_(std::move(bundle)), creationOptions_(opts), seed_(opts.seed), onReplacedFlow_(opts.onReplacedFlow),
           onError_(opts.onError ? opts.onError : [](const PlayError& e)
           {
-              const std::string line = "Storylet Engine: the condition on " + e.node + " in flow '" + e.flow
+              const std::string line = e.kind == "setup" ? "Storylet Engine: " + e.message + "\n"
+                  : "Storylet Engine: the condition on " + e.node + " in flow '" + e.flow
                   + "' failed, counted as false: " + e.message + "\n";
               std::fputs(line.c_str(), stderr);
           })
@@ -4881,7 +4997,27 @@ namespace storylets
         if (!bundle_) throw StoryletError("the engine needs a bundle");
         detail::RefuseUnreadableBundle(*bundle_);
         if (opts.log) logCap_ = opts.logCap;
-        if (opts.world.has_value()) hostWorld_ = opts.world;
+        // Each bound host scope; an empty binding (no get, no set) binds
+        // nothing. Tokens are case-sensitive everywhere, so a near miss is
+        // reported, never folded: folding would make a second spelling of the
+        // scope. Another engine's scope the content names is that engine's to
+        // declare.
+        for (const auto& pair : opts.hostScopes)
+        {
+            if (!pair.second.get && !pair.second.set) continue;
+            boundHosts_.insert(pair);
+            const std::string& token = pair.first;
+            const std::vector<std::string>& external = bundle_->externalScopes;
+            if (FindHostScope(*bundle_, token) || std::find(external.begin(), external.end(), token) != external.end()) continue;
+            const HostScopeSpec* near = nullptr;
+            for (const HostScopeSpec& spec : bundle_->hostScopes)
+            {
+                if (wildwinter::expr::LowercaseName(spec.token) == wildwinter::expr::LowercaseName(token)) { near = &spec; break; }
+            }
+            setup_.emplace_back(token, near
+                ? "hostScopes binds \"" + token + "\", which this bundle doesn't declare: it declares \"" + near->token + "\", and a scope's token is case-sensitive"
+                : "hostScopes binds \"" + token + "\", which this bundle doesn't declare");
+        }
         registry_ = opts.registry ? opts.registry : std::make_shared<ScopeRegistry>();
         ownsRegistry_ = !opts.registry;
         // The value scope's segments come off the whole bundle at once (a tag
@@ -4980,6 +5116,9 @@ namespace storylets
         durable_.shared = durableProps(sharedDecls_);
         durable_.flow = durableProps(flowDecls_);
         initShared();
+        // Last, so the game's handler and the run log hear about an engine that
+        // is ready to be asked.
+        for (const auto& problem : setup_) reportSetup(problem.first, problem.second);
     }
 
     inline void Engine::initLadders()
@@ -4991,7 +5130,7 @@ namespace storylets
                 if (d.type == PropertyTypes::Quality && d.stages.has_value()) { out[d.name] = *d.stages; hasQualities_ = true; }
             }
         };
-        grab(bundle_->world.properties, worldLadders_);
+        for (const HostScopeSpec& spec : bundle_->hostScopes) grab(spec.declarations, hostLadders_[spec.token]);
         grab(bundle_->story.properties, storyLadders_);
         for (const auto& box : bundle_->boxes)
         {
@@ -5167,11 +5306,11 @@ namespace storylets
     inline StoryletValue Engine::readShared(const std::string& path, const std::vector<std::string>& parts,
         const std::optional<OwnedAddress>& owned) const
     {
-        if (parts.size() == 2 && parts[0] == "world")
+        if (parts.size() == 2 && hostScope(parts[0]))
         {
-            std::optional<StoryletValue> wv = worldGet(parts[1]);
-            if (!wv.has_value()) throw StoryletError("no property at \"" + path + "\"");
-            return *wv;
+            std::optional<StoryletValue> hv = hostGet(parts[0], parts[1]);
+            if (!hv.has_value()) throw StoryletError("no property at \"" + path + "\"");
+            return *hv;
         }
         // Another engine's game-wide scope (`patter.gold`): every engine reads every scope.
         if (parts.size() == 2 && parts[0] != "story" && registry_->has(parts[0]))
@@ -5226,11 +5365,11 @@ namespace storylets
     inline void Engine::setProperty(const std::string& path, const StoryletValue& value)
     {
         const std::vector<std::string> parts = Flow::splitPath(path);
-        if (parts.size() == 2 && parts[0] == "world")
+        if (parts.size() == 2 && hostScope(parts[0]))
         {
             checkHostWrite(parts, path, value, std::string());
-            if (!worldCanSet()) throw StoryletError("@world is read-only here: the host bound no write");
-            worldSet(parts[1], value, /*host=*/true);
+            if (!hostCanSet(parts[0])) throw StoryletError("@" + parts[0] + " is read-only here: the host bound no write");
+            hostSet(parts[0], parts[1], value, /*host=*/true);
             return;
         }
         if (parts.size() == 2 && parts[0] != "story" && registry_->has(parts[0]))
@@ -5262,31 +5401,34 @@ namespace storylets
         bag->set(parts.back(), value, /*silent=*/true, "host setProperty", /*host=*/true);
     }
 
-    inline void Engine::addWorldRows(std::vector<PropertyRow>& rows) const
+    inline void Engine::addHostRows(std::vector<PropertyRow>& rows) const
     {
-        for (const auto& d : bundle_->world.properties)
+        for (const HostScopeSpec& spec : bundle_->hostScopes)
         {
-            PropertyRow r;
-            r.path = "world." + d.name;
-            r.name = d.name;
-            r.type = d.type;
-            std::optional<StoryletValue> value = worldGet(d.name);
-            r.value = value.has_value() ? *value : d.defaultOrTypeDefault();
-            r.defaultValue = d.defaultOrTypeDefault();
-            r.values = d.values;
-            r.stages = d.stages;
-            // Whether the resolver can be written at all AND what the declaration
-            // says, which is the kernel's own rule for a foreign scope: a row is
-            // where `writable: false` is meant to SHOW.
-            r.writable = worldCanSet() && !worldReadOnly(d.name);
-            rows.push_back(std::move(r));
+            for (const auto& d : spec.declarations)
+            {
+                PropertyRow r;
+                r.path = spec.token + "." + d.name;
+                r.name = d.name;
+                r.type = d.type;
+                std::optional<StoryletValue> value = hostGet(spec.token, d.name);
+                r.value = value.has_value() ? *value : d.defaultOrTypeDefault();
+                r.defaultValue = d.defaultOrTypeDefault();
+                r.values = d.values;
+                r.stages = d.stages;
+                // Whether the resolver can be written at all AND what the declaration
+                // says, which is the kernel's own rule for a foreign scope: a row is
+                // where `writable: false` is meant to SHOW.
+                r.writable = hostCanSet(spec.token) && !HostScopeReadOnly(spec, d.name);
+                rows.push_back(std::move(r));
+            }
         }
     }
 
     inline std::vector<PropertyRow> Engine::listProperties() const
     {
         std::vector<PropertyRow> rows;
-        addWorldRows(rows);
+        addHostRows(rows);
         // No path prefix passed in: the bag composes the address from its own
         // pathPrefix, so the row arrives complete.
         auto add = [&rows](const PropertyBag& bag)
@@ -5376,7 +5518,7 @@ namespace storylets
         // of its own, with its own registry, and this one is left as it was.
         EngineOptions opts;
         opts.seed = creationOptions_.seed;
-        opts.world = creationOptions_.world;
+        opts.hostScopes = creationOptions_.hostScopes;
         opts.onError = [](const PlayError&) {};
         try
         {

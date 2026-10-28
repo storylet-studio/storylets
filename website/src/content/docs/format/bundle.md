@@ -35,7 +35,7 @@ Patterpad publishes to `../patter-dist/` in the same way.
 
 ```json5
 {
-  schema: "storylets/bundle@1",
+  schema: "storylets/bundle@2",
   content: {
     project: "proj_salt",        // immutable project id
     version: "0.3.0",            // authored project version
@@ -45,9 +45,12 @@ Patterpad publishes to `../patter-dist/` in the same way.
   settings: {
     playAdvancesTurns: 1,
   },
-  world: {
-    properties: [ /* the @world declarations */ ],
-    registry: { /* owned / foreign split */ },
+  scopeRegistry: {                     // the game's own scopes, when the project declares any
+    version: 1,
+    scopes: [
+      { token: "world", declarations: [ /* the @world declarations */ ] },
+      { token: "player", writable: false, declarations: [ /* ... */ ] },
+    ],
   },
   story: {
     properties: [ /* the @story declarations */ ],
@@ -57,6 +60,13 @@ Patterpad publishes to `../patter-dist/` in the same way.
   externalScopes: ["patter"],          // other engines' scopes the content names, when any
 }
 ```
+
+`scopeRegistry` is the project's host scopes, in Patter's shape: each one's token, its own
+`writable`, and its declarations with every default filled in (a scope with none is opaque). A
+standalone engine backs each one from those defaults, and a game binds its own store for any of
+them through `hostScopes` ([Your game's state](/play/world-state/#binding-it)). It's absent when
+the project declares none, and a token the project declares is never in `externalScopes`, which
+lists only other engines'.
 
 There's no text a player would read, no localisation and no captions. A card is its
 condition, its ranking inputs, its redraw policy, its tags, its outcomes, and its box-shaped
@@ -151,8 +161,11 @@ against.
 
 ## Versioning
 
-The `schema` tag (`storylets/bundle@1`) versions the format, and runtimes refuse a version
-they don't speak. Today's runtimes read `@1` and `@0`; the project map brought `@1`, and a
+The `schema` tag (`storylets/bundle@2`) versions the format, and runtimes refuse a version
+they don't speak. Today's runtimes read `@2`, `@1` and `@0`. Host scopes brought `@2`: its game
+scopes are `scopeRegistry`, and the `world` block an `@1` or `@0` bundle has is gone, so an
+older runtime refuses an `@2` bundle by name rather than misreading it. A runtime reads an older
+bundle's `world.properties` as the host scope `world`. The project map brought `@1`, and a
 bundle with no map differs from an `@0` one only in its tag. Canonical source serialisation is versioned the same way, in each
 shard's own `schema` tag. A change to how shards serialise is a schema bump even if no field
 changed, because the bytes are part of the contract.
@@ -177,8 +190,9 @@ its own, and then its envelope carries that registry's values under `registry`, 
 still the whole run. An engine given the game's registry leaves them out, and the game saves the
 registry once, beside every engine's envelope. The keys are the same on every runtime:
 `story` for the shared `@story`, `storylets/<kind>/<id>` for a shared box, deck, hand, or
-value bag, and `storylets/flow/<flow>/story` or `storylets/flow/<flow>/<kind>/<id>` for a
-flow's own. A bag with no declared properties isn't registered.
+value bag, `storylets/flow/<flow>/story` or `storylets/flow/<flow>/<kind>/<id>` for a
+flow's own, and its token (`world`, `player`) for a host scope the engine backs itself. A bag
+with no declared properties isn't registered.
 
 Claims aren't in it. A claim is just "this card is on that hand right now", so
 it is read back off the boards rather than stored twice. What a shared one-shot **spent** is
@@ -216,10 +230,10 @@ A `storylets/save@1` envelope, from before the registry held the properties, car
 values move into the registry as it does. `saveFlow(id)`, which parks one flow, still carries
 that flow's `props`, because a parked flow's values leave the registry when it closes.
 
-**A `@world` your game binds is never in the envelope.** It's your game's state (the engine only
-borrows it), so your game saves it once, beside the envelope
-([why](/play/world-state/#saving-it)). A self-backed `@world` is a property the engine's own
-registry stores, so it rides under `registry`. The `.storyletsave` FILE on disk is
+**A host scope your game binds is never in the envelope.** It's your game's state (the engine
+only borrows it), so your game saves it once, beside the envelope
+([why](/play/world-state/#saving-it)). A self-backed one is a property the engine's own
+registry stores, so it rides under `registry`, keyed by its token. The `.storyletsave` FILE on disk is
 `storylets/savefile@1`, which is `{ schema, engine: <the envelope>, world?: <your values> }`,
 both halves in one file. Storyletter's Board writes them, every runtime reads and writes
 them, and a foreign, malformed, or wrong-project file is refused at the boundary instead of

@@ -22,7 +22,8 @@ import type { MergedScopes, NamedScopesFile, ScopesFile, ScopesFs, ScopesIssue }
 import type { ScopeDeclaration, ScopeRegistry } from "@wildwinter/scoperegistry";
 import { STORYLETS_SCOPES_FILE, STORYLETS_TOKEN, canonicalStringify, storyletsScopesFile, toScopeDeclaration } from "@storylet-studio/compiler";
 import type { GameScopes, Issue, SourceProject } from "@storylet-studio/compiler";
-import type { Bundle, PropertyDecl } from "@storylet-studio/model";
+import { bundleHostScopes } from "@storylet-studio/model";
+import type { Bundle, HostScopeSpec, PropertyDecl } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 import type { PlannedWrite } from "./write.js";
 
@@ -144,12 +145,25 @@ export function readGameFile(dir: string): { file: ScopesFile } | { error: strin
  * caller writes it; `undefined` when the file already says exactly this.
  */
 export function planGameWorld(dir: string, decls: readonly PropertyDecl[]): { write?: PlannedWrite } | { error: string } {
+  return planGameScopes(dir, { world: decls });
+}
+
+/**
+ * `game.scopes.json` with each named scope's declarations replaced (any game scope: `world`,
+ * `player`, ...), as text: every other scope in the file kept as it was, each named one where
+ * it was (or last, when new, in the order given). The caller writes it; `undefined` when the
+ * file already says exactly this.
+ */
+export function planGameScopes(dir: string, byToken: Record<string, readonly PropertyDecl[]>): { write?: PlannedWrite } | { error: string } {
   const read = readGameFile(dir);
   if ("error" in read) return read;
-  const declarations: ScopeDeclaration[] = decls.map(toScopeDeclaration);
-  const scopes = read.file.scopes.some((s) => s.token === "world")
-    ? read.file.scopes.map((s) => (s.token === "world" ? { ...s, declarations } : s))
-    : [...read.file.scopes, { token: "world", declarations }];
+  let scopes = read.file.scopes;
+  for (const [token, decls] of Object.entries(byToken)) {
+    const declarations: ScopeDeclaration[] = decls.map(toScopeDeclaration);
+    scopes = scopes.some((s) => s.token === token)
+      ? scopes.map((s) => (s.token === token ? { ...s, declarations } : s))
+      : [...scopes, { token, declarations }];
+  }
   const path = join(dir, GAME_SCOPES_FILE);
   const content = serialiseScopesFile({ ...read.file, scopes });
   let current: string | undefined;
@@ -158,10 +172,45 @@ export function planGameWorld(dir: string, decls: readonly PropertyDecl[]): { wr
 }
 
 /**
+ * `game.scopes.json` with the project's host scopes written in, as text: what Project
+ * Settings' host scopes save to where the game shares its scopes (Patter's `planWorldSave`).
+ * Each of `scopes` replaces the file's scope of that token (its scope-level `writable` and
+ * its declarations, none for an opaque one) where it was, or goes last when new; each of
+ * `removed` (a scope the settings showed that is no longer there) is taken out; every other
+ * scope in the file is kept exactly as it was. Re-read from disk, since any tool may have
+ * changed it since. Each of `renames` (old token to new) renames the file's scope in place
+ * first, so a scope renamed in the settings keeps its place in the file. `undefined` write
+ * when the file already says exactly this.
+ */
+export function planGameHostScopes(
+  dir: string, scopes: readonly HostScopeSpec[], removed: readonly string[] = [], renames: Readonly<Record<string, string>> = {},
+): { write?: PlannedWrite } | { error: string } {
+  const read = readGameFile(dir);
+  if ("error" in read) return read;
+  let next = read.file.scopes.map((s) => (Object.hasOwn(renames, s.token) ? { ...s, token: renames[s.token]! } : s)).filter((s) => !removed.includes(s.token) || scopes.some((h) => h.token === s.token));
+  for (const h of scopes) {
+    const spec = {
+      token: h.token,
+      ...(h.writable !== undefined ? { writable: h.writable } : {}),
+      ...(h.declarations !== undefined ? { declarations: (h.declarations as PropertyDecl[]).map(toScopeDeclaration) } : {}),
+    };
+    next = next.some((s) => s.token === h.token) ? next.map((s) => (s.token === h.token ? spec : s)) : [...next, spec];
+  }
+  const path = join(dir, GAME_SCOPES_FILE);
+  const content = serialiseScopesFile({ ...read.file, scopes: next });
+  let current: string | undefined;
+  try { current = readFileSync(path, "utf8"); } catch { current = undefined; }
+  // No file and nothing to say: none is made.
+  if (current === undefined && next.length === 0) return {};
+  return current === content ? {} : { write: { path, content } };
+}
+
+/**
  * The registry a PREVIEW builds its engine on, when the project has a game scopes folder and
  * its content names another engine's scope (decision 4): every scope in the folder except
- * `@story`, stood in from its declared defaults, plus `@world` from the bundle's declarations
- * when the folder has none (an engine given a registry doesn't self-back `@world`). Undefined
+ * `@story`, stood in from its declared defaults, plus each host scope the bundle declares that
+ * the folder doesn't, from the bundle's declarations (an engine given a registry doesn't
+ * self-back its host scopes). Undefined
  * otherwise, and the engine runs alone exactly as it did: with no folder, content naming
  * another engine is refused as the flow opens.
  *
@@ -170,11 +219,14 @@ export function planGameWorld(dir: string, decls: readonly PropertyDecl[]): { wr
 export function previewRegistry(bundle: Bundle, merged: MergedScopes | undefined): ScopeRegistry | undefined {
   if (!merged || (bundle.externalScopes ?? []).length === 0) return undefined;
   const registry = standInRegistry(merged, { except: [STORYLETS_TOKEN] });
-  if (!registry.has("world")) {
+  for (const host of bundleHostScopes(bundle)) {
+    if (registry.has(host.token)) continue;
     // Declared exactly as a standalone engine self-backs it: case-significant names, and
-    // rows addressed `world.<name>`, the address the engine's own surface takes.
-    registry.defineOwned("world", bundle.world.properties as unknown as ScopeDeclaration[],
-      { normalise: (name) => name, pathPrefix: "world.", owner: "Game" });
+    // rows addressed `<token>.<name>`, the address the engine's own surface takes.
+    registry.defineOwned(host.token, (host.declarations ?? []).map((d) => {
+      const writable = d.writable ?? host.writable;
+      return { ...d, ...(writable !== undefined ? { writable } : {}) } as ScopeDeclaration;
+    }), { normalise: (name) => name, pathPrefix: `${host.token}.`, owner: "Game" });
   }
   return registry;
 }
@@ -197,11 +249,12 @@ export function defaultGameScopesParent(projectDir: string): string {
 
 /**
  * Share a project's scopes with the other tools: a `game-scopes/` folder in `parent`, holding
- * the Storylet Engine's file and the game's own file with the project's `@world` (which the
- * project keeps, as its synced copy: a project compiles on its own). Planned, not written.
+ * the Storylet Engine's file and the game's own file with the project's host scopes (`@world`
+ * and any others, which the project keeps, as its synced copy: a project compiles on its own).
+ * Planned, not written.
  *
  * A folder already there is used rather than refused, and a `game.scopes.json` that already
- * declares `@world` keeps it: the shared file is the source, so this never overwrites the
+ * declares a scope keeps it: the shared file is the source, so this never overwrites the
  * game's own declarations with one project's. `override` is set when discovery from the
  * project would not find the folder (outside the repository, or beside a project that is its
  * own repository), and the plan's last write then names it in the project as `gameScopes`.
@@ -214,11 +267,19 @@ export function planShareScopes(loaded: LoadedProject, parent: string): { dir: s
   const writes: PlannedWrite[] = [{ path: join(dir, STORYLETS_SCOPES_FILE), content: storyletsScopesText(loaded.source) }];
   const game = existsSync(dir) ? readGameFile(dir) : { file: { version: 1, owner: "Game", scopes: [] } as ScopesFile };
   if ("error" in game) return game;
-  if (!game.file.scopes.some((s) => s.token === "world")) {
-    const world = loaded.source.project.world?.properties ?? [];
+  // The project's host scopes the file doesn't declare yet, `@world` always (empty when the
+  // project declares none, as it always was).
+  const own = bundleHostScopes(loaded.source.project);
+  const hosts = own.some((s) => s.token === "world") ? own : [{ token: "world", declarations: [] }, ...own];
+  const missing = hosts.filter((h) => !game.file.scopes.some((s) => s.token === h.token));
+  if (missing.length > 0) {
     writes.push({
       path: join(dir, GAME_SCOPES_FILE),
-      content: serialiseScopesFile({ ...game.file, scopes: [...game.file.scopes, { token: "world", declarations: world.map(toScopeDeclaration) }] }),
+      content: serialiseScopesFile({ ...game.file, scopes: [...game.file.scopes, ...missing.map((h) => ({
+        token: h.token,
+        ...(h.writable !== undefined ? { writable: h.writable } : {}),
+        ...(h.declarations !== undefined ? { declarations: (h.declarations as PropertyDecl[]).map(toScopeDeclaration) } : {}),
+      }))] }),
     });
   }
   // Would discovery find it? Asked of the real walk, with the folder counted as there.

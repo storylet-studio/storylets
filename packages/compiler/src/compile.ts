@@ -17,7 +17,7 @@ import { storyletsDialectWith, OWN_SCOPES, EXTERNAL_SCOPES } from "@storylet-stu
 import { referenceNote, scopesSchema } from "@wildwinter/scoperegistry/scopes";
 import { defaultFor } from "@wildwinter/scoperegistry";
 import type {
-  Box, Bundle, Card, Deck, FieldDecl, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
+  Box, Bundle, Card, Deck, FieldDecl, Hand, HandTemplate, HostScopeDecl, HostScopeSpec, Outcome, PropertyDecl, ScalarValue, TagGroup,
 } from "@storylet-studio/model";
 import { BUNDLE_SCHEMA, FIELD_TYPES, PLACE_GROUP, effectiveGameId, isHoleRef, isSpatial, isValidGameId,
   isValidPropertyName, parseHoleRef, propertyNameify, RESERVED_PROPERTY_NAMES, byDisplayOrder, inferDeclFromWrite } from "@storylet-studio/model";
@@ -27,7 +27,7 @@ import { contentAboveRung, ladderWarning, playRungOf } from "./play-ladder.js";
 import { canonicalStringify } from "./serialize.js";
 import { compileMaps } from "./maps.js";
 import { hash32 } from "./hash.js";
-import { gameTokens, sameDeclarations, scopesFilePath, sharedWorld } from "./game-scopes.js";
+import { gameTokens, projectHostScopes, sharedWorld } from "./game-scopes.js";
 import { describeDisagreement, propertyMeta, sameMeta } from "./declarations.js";
 import { extensionHashInput, extensionPass } from "./extensions.js";
 import type { CompiledExtensions } from "./extensions.js";
@@ -59,6 +59,18 @@ const meta = propertyMeta;
  */
 const resolved = <D extends { type: string; default?: ScalarValue; values?: string[]; stages?: string[] }>(decls: readonly D[]): D[] =>
   decls.map((d) => (d.default === undefined ? { ...d, default: defaultFor(d) } : d));
+
+/** A host scope declaration as the bundle carries it: a legacy `world`
+ *  declaration's sharing and durability flags (each a compile error there)
+ *  left behind. */
+const hostDecl = (d: HostScopeDecl): HostScopeDecl => ({
+  name: d.name, type: d.type,
+  ...(d.values !== undefined ? { values: d.values } : {}),
+  ...(d.stages !== undefined ? { stages: d.stages } : {}),
+  ...(d.default !== undefined ? { default: d.default } : {}),
+  ...(d.writable !== undefined ? { writable: d.writable } : {}),
+  ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),
+});
 
 const bagSchema = (decls: PropertyDecl[]): Map<string, PropertyMeta> =>
   new Map(decls.map((d) => [d.name, meta(d)]));
@@ -101,15 +113,18 @@ const scopedRefs = (node: unknown): { scope: string; name: string }[] => {
  *  `compileProject` uses, for a tool that has to parse an expression the way
  *  the compiler will (a stage rename rewriting literals, say). */
 export function projectDialect(source: SourceProject): Dialect {
-  return storyletsDialectWith(gameTokens(source.gameScopes?.merged, OWN_SCOPES));
+  const hosted = projectHostScopes(source).map((s) => s.spec.token).filter((t) => !(OWN_SCOPES as readonly string[]).includes(t));
+  return storyletsDialectWith([...new Set([...hosted, ...gameTokens(source.gameScopes?.merged, OWN_SCOPES)])]);
 }
 
 /** The content hash: over the canonical serialisation of the parsed shards,
  *  so formatting and comments never perturb it (schema 2.8). */
 export function projectHash(source: SourceProject): string {
   // The shared @world, when the game's scopes folder declares one, is part of what the
-  // bundle is compiled from (its world block), so an edit to it makes a committed bundle
+  // bundle is compiled from (its scopeRegistry), so an edit to it makes a committed bundle
   // stale. Only then: a project with no folder hashes exactly as it always has.
+  // (The folder's other game scopes reach the bundle only through the project's own
+  // copy, which is hashed with the project.)
   const world = sharedWorld(source)?.decls;
   // Compiled extension data is content: what the bundle carries of it, editor-only
   // fields left out, as view and notes shards are. A project taking no extension
@@ -328,60 +343,100 @@ export function compileProject(source: SourceProject): CompileResult {
   const boxGameIds = new Map<string, string>();
   const deckGameIds = new Map<string, string>();
 
-  // --- the game's shared scopes (patterkit design/shared-scopes.md) ------------------
-  // The folder's @world, when it declares one, is this project's @world
-  // (decision 2): the checks below and the bundle's world block read it, and the
-  // project's own declarations are its synced copy, the fallback for a project
-  // on its own. The copy differing means an edit made outside the tools.
+  // --- the game's own scopes, and the shared folder (patterkit design/shared-scopes.md) --
+  // The project's host scopes (`@world`, `@player`, ...): the game's own state,
+  // validated strictly and carried in the bundle's scopeRegistry, so a
+  // standalone engine self-backs each one. Where the game's scopes folder
+  // declares one, the folder's declarations are the scope (decision 2), and
+  // the project's own are its synced copy, the fallback for a project on its
+  // own. The copy differing means an edit made outside the tools.
   const gameScopes = source.gameScopes;
   const merged = gameScopes?.merged;
-  const shared = sharedWorld(source);
-  const worldDecls: PropertyDecl[] = shared?.decls ?? source.project.world?.properties ?? [];
-  const worldPath = shared ? scopesFilePath(source, shared.fileName) : source.path;
-  if (shared && !sameDeclarations(source.project.world?.properties ?? [], shared.decls)) {
+  const hostScopes = projectHostScopes(source);
+  for (const h of hostScopes) {
+    if (h.differs !== true || h.sharedFile === undefined) continue;
     report({
-      severity: "warning", path: source.path, where: "world",
-      message: `the project's @world declarations differ from ${scopesFilePath(source, shared.fileName)}, which wins:`
+      severity: "warning", path: source.path, where: h.spec.token,
+      message: `the project's @${h.spec.token} declarations differ from ${h.path}, which wins:`
         + " save the project in Storyletter to bring its copy up to date",
     });
   }
-  // The game-wide scopes other tools declare (`@patter`, a game's `@player`):
-  // the dialect accepts every one of them, content naming one is recorded in the
-  // bundle like any other engine's, and references into a declared one are
-  // checked, as warnings (decision 3), since the other project may be a save
-  // behind on someone's branch. A token nobody declares is the shared
-  // vocabulary's: accepted and unchecked, as before the folder existed.
-  const declaredTokens = gameTokens(merged, OWN_SCOPES);
-  const otherTokens = [...new Set([...EXTERNAL_SCOPES, ...declaredTokens])];
+  // A host scope's token is a name an expression reaches it by, and one
+  // the Storylet Engine or another engine doesn't already answer to.
+  const seenTokens = new Set<string>();
+  for (const { spec, path } of hostScopes) {
+    const token = spec.token;
+    const where = `@${token}`;
+    if (seenTokens.has(token)) report({ severity: "error", path, where, message: `the host scope @${token} is declared twice` });
+    else if (!/^[a-z][a-z0-9_]*$/.test(token)) {
+      report({ severity: "error", path, where, message: `host scope token "${token}" cannot be used: only lower case letters, digits and underscores, starting with a letter, can name a scope` });
+    } else if (token !== "world" && (OWN_SCOPES as readonly string[]).includes(token)) {
+      report({ severity: "error", path, where, message: `@${token} is the Storylet Engine's own scope, so it can't be a host scope` });
+    } else if (EXTERNAL_SCOPES.includes(token)) {
+      report({ severity: "error", path, where, message: `@${token} is another engine's scope, so it can't be a host scope` });
+    }
+    seenTokens.add(token);
+  }
+  const hostTokens = hostScopes.map((h) => h.spec.token);
+  /** A declared host scope by token, or undefined. */
+  const hostScope = (token: string): { spec: HostScopeSpec; path: string } | undefined => hostScopes.find((h) => h.spec.token === token);
+  /** A host scope's declarations (none for one the project doesn't declare, or an opaque one). */
+  const hostDecls = (token: string): PropertyDecl[] => (hostScope(token)?.spec.declarations ?? []) as PropertyDecl[];
+  /** Is a host scope's property read-only to the story? Its own `writable`, else its scope's. */
+  const hostReadOnly = (spec: HostScopeSpec, name: string): boolean => {
+    const decl = spec.declarations?.find((d) => d.name === name);
+    return (decl?.writable ?? spec.writable) === false;
+  };
+  // The game-wide scopes other tools declare (`@patter`, a game's `@player`
+  // the project doesn't declare itself): the dialect accepts every one of them,
+  // content naming one is recorded in the bundle like any other engine's, and
+  // references into a declared one are checked, as warnings (decision 3), since
+  // the other project may be a save behind on someone's branch. A token nobody
+  // declares is the shared vocabulary's: accepted and unchecked, as before the
+  // folder existed. A host scope is the game's, never another engine's.
+  const notOther = [...OWN_SCOPES, ...hostTokens];
+  const declaredTokens = gameTokens(merged, notOther);
+  const otherTokens = [...new Set([...EXTERNAL_SCOPES, ...declaredTokens])].filter((t) => !hostTokens.includes(t));
   const dialect = projectDialect(source);
-  const otherSchema = merged ? scopesSchema(merged, { except: OWN_SCOPES }).properties : undefined;
+  const otherSchema = merged ? scopesSchema(merged, { except: notOther }).properties : undefined;
   const checkedTokens = new Set(otherSchema ? [...otherSchema.keys()] : []);
 
   // --- expression validation plumbing --------------------------------------------
   legalPropertyName("story", source.project.story?.properties, source.path);
-  legalPropertyName("world", worldDecls, worldPath);
-  // The sharing flag stops at @world's door (design/flows.md): @world is the
-  // game's own state, always one value across every flow, so a flag either
-  // way is a claim the scope cannot honour.
-  for (const d of worldDecls) {
-    if (d.shared !== undefined) {
-      report({
-        severity: "error", path: worldPath, where: `world.${d.name}`,
-        message: `@world.${d.name} declares "shared" - @world is the game's own state and is always shared across flows; the flag belongs on @story, box, deck, hand or tag properties`,
-      });
-    }
-    // The durability axis stops at the same door, for the same reason
-    // (design/engine-server.md 4.2): @world is the game's own state, so how
-    // long the game keeps it is the game's business and not the story's.
-    if (d.durable !== undefined) {
-      report({
-        severity: "error", path: worldPath, where: `world.${d.name}`,
-        message: `@world.${d.name} declares "durable" - @world is the game's own state and the game decides how long it keeps it; the flag belongs on @story, box, deck, hand or tag properties`,
-      });
+  for (const { spec, path } of hostScopes) {
+    const token = spec.token;
+    const decls = (spec.declarations ?? []) as PropertyDecl[];
+    legalPropertyName(token, decls, path);
+    // The sharing flag stops at a host scope's door (design/flows.md): it is
+    // the game's own state, always one value across every flow, so a flag
+    // either way is a claim the scope cannot honour.
+    for (const d of decls) {
+      if (d.shared !== undefined) {
+        report({
+          severity: "error", path, where: `${token}.${d.name}`,
+          message: `@${token}.${d.name} declares "shared" - @${token} is the game's own state and is always shared across flows; the flag belongs on @story, box, deck, hand or tag properties`,
+        });
+      }
+      // The durability axis stops at the same door, for the same reason
+      // (design/engine-server.md 4.2): a host scope is the game's own state,
+      // so how long the game keeps it is the game's business and not the story's.
+      if (d.durable !== undefined) {
+        report({
+          severity: "error", path, where: `${token}.${d.name}`,
+          message: `@${token}.${d.name} declares "durable" - @${token} is the game's own state and the game decides how long it keeps it; the flag belongs on @story, box, deck, hand or tag properties`,
+        });
+      }
     }
   }
+  const worldDecls = hostDecls("world");
   const storySchema = bagSchema(source.project.story?.properties ?? []);
-  const worldSchema = bagSchema(worldDecls);
+  // Each declared host scope's names, typed. An opaque one is left out, which
+  // leaves it unchecked: any name. @world is always there, declared or not, so
+  // a reference into an undeclared @world is an error, as it always was.
+  const hostSchemas: [string, Map<string, PropertyMeta>][] = hostScopes
+    .filter((h) => h.spec.declarations !== undefined)
+    .map((h) => [h.spec.token, bagSchema(h.spec.declarations as PropertyDecl[])]);
+  if (!hostTokens.includes("world")) hostSchemas.push(["world", new Map()]);
   /**
    * The @hand schema for one box, INFERRED from what the box already declares
    * (design/hand-typing.md step A). @hand is composed per ask, in the three
@@ -476,7 +531,7 @@ export function compileProject(source: SourceProject): CompileResult {
   const schemaFor = (box: SourceBox, deckDecls: PropertyDecl[] | undefined): ExpressionSchema => ({
     properties: new Map([
       ["story", storySchema],
-      ["world", worldSchema],
+      ...hostSchemas,
       ["box", bagSchema(box.box.box.properties ?? [])],
       // deck absent (undefined) would be permissive; an empty map makes every
       // reference an error - exactly right for query conditions (schema 6.2).
@@ -485,8 +540,8 @@ export function compileProject(source: SourceProject): CompileResult {
     ]),
   });
 
-  // A change target: one of the engine's own scopes, or another engine's.
-  const changeTarget = new RegExp(`^@(${[...OWN_SCOPES, ...otherTokens].join("|")})\\.[a-z][a-z0-9_-]*$`);
+  // A change target: one of the engine's own scopes, a host scope, or another engine's.
+  const changeTarget = new RegExp(`^@(${[...new Set([...OWN_SCOPES, ...hostTokens, ...otherTokens])].join("|")})\\.[a-z][a-z0-9_-]*$`);
 
   // Other engines' game-wide scopes the content names (`@patter.gold`): recorded
   // in the bundle, so the engine can say at run time when the game has not
@@ -1071,14 +1126,15 @@ export function compileProject(source: SourceProject): CompileResult {
                 });
               }
             }
-            // Read-only @world (Reboot.md 10): the story's own promise not to
-            // write a game value, `writable: false` on the declaration, kept
-            // here so a card that moves the clock is an error before it is a
-            // bug. The game is not bound by it; its resolver is its policy.
-            if (scope === "world") {
+            // A read-only host scope property (Reboot.md 10): the story's own
+            // promise not to write a game value, `writable: false` on the
+            // declaration or its scope, kept here so a card that moves the
+            // clock is an error before it is a bug. The game is not bound by
+            // it; its resolver is its policy.
+            const host = hostScope(scope!);
+            if (host !== undefined) {
               const name = target.slice(1).split(".")[1]!;
-              const decl = worldDecls.find((d) => d.name === name);
-              if (decl && decl.writable === false) {
+              if (hostReadOnly(host.spec, name)) {
                 report({ severity: "error", path, where: `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, field: "changes",
                   message: `change target "${target}" is read-only to the story (writable: false): the game owns it, and a condition may read it but an outcome may not write it` });
                 continue;
@@ -1398,7 +1454,6 @@ export function compileProject(source: SourceProject): CompileResult {
   // domain is a config bug the author should see immediately.
   const coverage = source.project.coverage;
   if (coverage) {
-    const worldByName = new Map(worldDecls.map((d) => [d.name, d]));
     const matches = (value: unknown, type: string, values?: string[]): boolean =>
       type === "number" ? typeof value === "number"
       : type === "boolean" ? typeof value === "boolean"
@@ -1406,17 +1461,21 @@ export function compileProject(source: SourceProject): CompileResult {
       : type === "enum" ? typeof value === "string" && (values ?? []).includes(value)
       : typeof value === "string";
     for (const [ref, driver] of Object.entries(coverage.drivers ?? {})) {
-      const match = /^@world\.([a-z][a-z0-9_-]*)$/.exec(ref);
-      const decl = match ? worldByName.get(match[1]!) : undefined;
-      if (!decl) {
-        report({ severity: "error", path: source.path, where: ref, message: "coverage driver ref must name a declared @world property (the host seam is the only drivable scope)" });
+      // Any host scope's property: the game's own state is what a driver stands
+      // in for. An opaque scope takes any name, and any value.
+      const match = /^@([a-z][a-z0-9_]*)\.([a-z][a-z0-9_-]*)$/.exec(ref);
+      const host = match ? hostScope(match[1]!) : undefined;
+      const opaque = host !== undefined && host.spec.declarations === undefined;
+      const decl = match && host !== undefined ? hostDecls(match[1]!).find((d) => d.name === match[2]) : undefined;
+      if (!decl && !opaque) {
+        report({ severity: "error", path: source.path, where: ref, message: "coverage driver ref must name a declared host scope property, such as @world.x (the game's own scopes are the only drivable ones)" });
         continue;
       }
       if (driver.kind !== "initial" && driver.kind !== "recurring") {
         report({ severity: "error", path: source.path, where: ref, message: `coverage driver kind must be "initial" or "recurring"` });
       }
       for (const value of driver.values) {
-        if (!matches(value, decl.type, decl.values)) {
+        if (decl !== undefined && !matches(value, decl.type, decl.values)) {
           report({ severity: "error", path: source.path, where: ref, message: `coverage driver value ${JSON.stringify(value)} does not match the property's type "${decl.type}"` });
         }
       }
@@ -1438,10 +1497,19 @@ export function compileProject(source: SourceProject): CompileResult {
     },
     metadata: strip ? "stripped" : "full",
     settings: { playAdvancesTurns: source.project.settings?.playAdvancesTurns ?? 1 },
-    world: {
-      properties: resolved(worldDecls),
-      ...(source.project.world?.registry !== undefined ? { registry: source.project.world.registry } : {}),
-    },
+    // The game's own scopes, as Patter's bundle carries them: each declaration's
+    // default resolved, only the fields a host scope declaration has. Absent when
+    // the project declares none.
+    ...(hostScopes.length > 0 ? {
+      scopeRegistry: {
+        version: source.project.scopeRegistry?.version ?? 1,
+        scopes: hostScopes.map(({ spec }) => ({
+          token: spec.token,
+          ...(spec.writable !== undefined ? { writable: spec.writable } : {}),
+          ...(spec.declarations !== undefined ? { declarations: resolved(spec.declarations.map(hostDecl)) } : {}),
+        })),
+      },
+    } : {}),
     story: { properties: resolved(source.project.story?.properties ?? []) },
     boxes: byId(boxes),
     // The project map's zone group always ships when there is one: hands and

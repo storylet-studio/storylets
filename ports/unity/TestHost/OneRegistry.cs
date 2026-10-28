@@ -319,7 +319,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     "scope '@story' is already registered by Storylet Engine", "a second engine");
 
                 var withWorld = new ScopeRegistry().DefineOwned("world", new List<ScopeDeclaration>(), new OwnedScopeOptions { Owner = "Game" });
-                Throws(() => new Engine(NewBundle(), new EngineOptions { Registry = withWorld, World = new ZeroWorld() }),
+                Throws(() => new Engine(NewBundle(), new EngineOptions { Registry = withWorld, HostScopes = new Dictionary<string, IHostScope> { ["world"] = new ZeroWorld() } }),
                     "scope '@world' is already registered by Game", "a resolver for a registered @world");
                 Check(!withWorld.Has("story"), "the failed engine left story registered");
             }),
@@ -563,7 +563,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var before = Blob(g.Registry.Save());
                 // The replacement is asked to bind @world, which the game already
                 // registered: it clashes mid-build.
-                ThrowsExactly<StoryletError>(() => g.Engine.HotSwap(Edited(), o => o.World = new ZeroWorld()),
+                ThrowsExactly<StoryletError>(() => g.Engine.HotSwap(Edited(), o => o.HostScopes = new Dictionary<string, IHostScope> { ["world"] = new ZeroWorld() }),
                     "scope '@world' is already registered by Game", "the clash");
                 // Every key and value as before (the order of keys may differ: registering again appends).
                 Same(Blob(g.Registry.Save()), before.ToString(Newtonsoft.Json.Formatting.None), "the registry after the failed swap");
@@ -587,15 +587,15 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
             ("hotSwap: a change through the callback keeps every option it leaves alone", () =>
             {
-                // Built with a Seed and a World resolver; the swap turns on Log
+                // Built with a Seed and a @world binding; the swap turns on Log
                 // and nothing else, so the replacement keeps both.
-                var engine = new Engine(NewBundle(), new EngineOptions { Seed = 7, World = new FiveWorld() });
+                var engine = new Engine(NewBundle(), new EngineOptions { Seed = 7, HostScopes = new Dictionary<string, IHostScope> { ["world"] = new FiveWorld() } });
                 engine.OpenFlow("f").Deal("q");
                 Check(engine.Log().Count == 0, "the engine was built without Log");
                 var next = engine.HotSwap(Edited(), o => o.Log = true).Engine;
                 next.OpenFlow("n").Deal("q");
                 Check(next.Log().Count > 0, "the change (Log) did not reach the replacement");
-                Num(next.GetProperty("world.alarm"), 5, "world.alarm through the World resolver it was built with");
+                Num(next.GetProperty("world.alarm"), 5, "world.alarm through the @world binding it was built with");
                 var seeded = new Engine(Edited(), new EngineOptions { Seed = 7 });
                 seeded.OpenFlow("n");
                 var unseeded = new Engine(Edited());
@@ -739,14 +739,14 @@ namespace StoryletStudio.StoryletEngine.TestHost
             }),
         };
 
-        private sealed class ZeroWorld : IScopeResolver
+        private sealed class ZeroWorld : IHostScope
         {
             public ExprValue Get(string name) => ExprValue.Num(0);
             public bool CanSet => false;
             public void Set(string name, ExprValue value) { }
         }
 
-        private sealed class FiveWorld : IScopeResolver
+        private sealed class FiveWorld : IHostScope
         {
             public ExprValue Get(string name) => ExprValue.Num(5);
             public bool CanSet => false;

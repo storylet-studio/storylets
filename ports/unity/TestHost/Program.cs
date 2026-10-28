@@ -74,11 +74,12 @@ namespace StoryletStudio.StoryletEngine.TestHost
             }
             int d = RunDescribe(peek);
             int th = RunTraceHandlers(peek);
+            int re = RunReentrantDeals(scripted);
             int m = RunDescribeMaps();
             int l = RunLiveLinkFixture(path);
 
             Console.WriteLine($"corpus version {version}");
-            Console.WriteLine($"describeBundle checks: {d}/1  maps: {m}/1  live-link fixture: {l}/1  trace handlers: {th}/1");
+            Console.WriteLine($"describeBundle checks: {d}/1  maps: {m}/1  live-link fixture: {l}/1  trace handlers: {th}/1  re-entrant deals: {re}/1");
             Console.WriteLine(
                 $"expressions: {e}/{expressions.Count}  specificity: {sp}/{specificity.Count}  " +
                 $"peek: {p}/{peek.Count}  scripted: {s}/{scripted.Count}  load: {ld}/{load.Count}");
@@ -454,6 +455,24 @@ namespace StoryletStudio.StoryletEngine.TestHost
         /// is refused there and the qualified one is accepted always.</summary>
         private static void ApplyState(Flow session, JObject selector)
         {
+            ApplyScopes(session, selector);
+            // Corpus 23: any other host scope's values, by token, each
+            // written as `<token>.<name>`.
+            if (selector["host"] is JObject hosts)
+            {
+                foreach (var host in hosts)
+                {
+                    foreach (var prop in (JObject)host.Value)
+                    {
+                        session.SetProperty($"{host.Key}.{prop.Key}", StoryletJson.ToValue(prop.Value));
+                    }
+                }
+            }
+            ApplyOwned(session, selector);
+        }
+
+        private static void ApplyScopes(Flow session, JObject selector)
+        {
             foreach (var scope in new[] { "story", "world" })
             {
                 if (!(selector[scope] is JObject bag)) continue;
@@ -462,6 +481,10 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     session.SetProperty($"{scope}.{prop.Key}", StoryletJson.ToValue(prop.Value));
                 }
             }
+        }
+
+        private static void ApplyOwned(Flow session, JObject selector)
+        {
             foreach (var kind in new[] { "box", "deck", "hand", "value" })
             {
                 if (!(selector[kind] is JObject byId)) continue;
@@ -549,44 +572,15 @@ namespace StoryletStudio.StoryletEngine.TestHost
             }
         }
 
-        /// <summary>The `scribble` op on one view: its fields and every
-        /// extension's values. A field value is an immutable ExprValue, so only
-        /// the map itself can be defaced.</summary>
-        private static void ScribbleView(OrderedMap<string, ExprValue> fields, OrderedMap<string, OrderedMap<string, object>> extensions)
+        /// <summary>The `scribble` op on one view: its fields only (extension
+        /// values are read-only, and handed out uncopied, from corpus 22). A
+        /// field value is an immutable ExprValue, so only the map itself can be
+        /// defaced.</summary>
+        private static void ScribbleView(OrderedMap<string, ExprValue> fields)
         {
-            if (fields != null)
-            {
-                foreach (var k in fields.Keys.ToList()) fields.Set(k, ExprValue.Str("scribbled"));
-                fields.Set("scribbled", ExprValue.Str("scribbled"));
-            }
-            if (extensions != null)
-            {
-                foreach (var pair in extensions.ToList()) ScribbleMap(pair.Value);
-                extensions.Set("scribbled", new OrderedMap<string, object>());
-            }
-        }
-
-        /// <summary>Deface a map in place, deepest first: nested maps gain the
-        /// key, nested lists the item, then every top-level value is replaced.</summary>
-        private static void ScribbleMap(OrderedMap<string, object> map)
-        {
-            foreach (var pair in map.ToList()) ScribbleDeep(pair.Value);
-            foreach (var k in map.Keys.ToList()) map.Set(k, "scribbled");
-            map.Set("scribbled", "scribbled");
-        }
-
-        private static void ScribbleDeep(object value)
-        {
-            if (value is List<object> list)
-            {
-                foreach (var item in list.ToList()) ScribbleDeep(item);
-                list.Add("scribbled");
-            }
-            else if (value is OrderedMap<string, object> map)
-            {
-                foreach (var pair in map.ToList()) ScribbleDeep(pair.Value);
-                map.Set("scribbled", "scribbled");
-            }
+            if (fields == null) return;
+            foreach (var k in fields.Keys.ToList()) fields.Set(k, ExprValue.Str("scribbled"));
+            fields.Set("scribbled", ExprValue.Str("scribbled"));
         }
 
         private static string ShowJsonFields(JObject fields)
@@ -1078,6 +1072,62 @@ namespace StoryletStudio.StoryletEngine.TestHost
             return failures.Count == 0 ? 1 : 0;
         }
 
+        /// <summary>A deal reuses its working state from the last one (the
+        /// allocation pass, 2026-10-28), so a peek a trace handler or OnError
+        /// makes from INSIDE a deal must not touch the outer deal's: thirty
+        /// deals of every scripted bundle, with a handler and OnError that peek
+        /// every box on each event and error, deal exactly as thirty without
+        /// them (a peek draws nothing).</summary>
+        private static int RunReentrantDeals(JArray scripted)
+        {
+            var failures = new List<string>();
+            foreach (var c in scripted)
+            {
+                var name = c.Value<string>("name");
+                try
+                {
+                    var bundle = BundleLoader.Parse((JObject)c["bundle"]);
+                    string Deals(bool meddle)
+                    {
+                        Flow flow = null;
+                        bool inside = false;
+                        void PeekAll()
+                        {
+                            if (inside || flow == null) return;
+                            inside = true;
+                            try { foreach (var box in bundle.Boxes) flow.Peek(box.Id); }
+                            catch (StoryletError) { }
+                            finally { inside = false; }
+                        }
+                        var engine = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions
+                        {
+                            Seed = 3,
+                            OnError = e => { if (meddle) PeekAll(); },
+                        });
+                        flow = engine.OpenFlow("main");
+                        if (meddle) flow.SubscribeTrace(e => PeekAll());
+                        var dealt = new System.Text.StringBuilder();
+                        for (int i = 0; i < 30; i++)
+                        {
+                            foreach (var pair in flow.DealMany())
+                            {
+                                dealt.Append(pair.Key).Append(':');
+                                foreach (var card in pair.Value) dealt.Append(card.Id).Append(',');
+                                dealt.Append(';');
+                            }
+                            foreach (var box in bundle.Boxes) flow.AdvanceTurns(box.Id);
+                        }
+                        return dealt.ToString();
+                    }
+                    if (Deals(false) != Deals(true)) failures.Add($"{name}: peeking from inside a deal changed what it dealt");
+                }
+                catch (StoryletError) { }   // a bundle the engine refuses: the load family's
+                catch (Exception ex) { failures.Add($"{name}: {ex.Message}"); }
+            }
+            foreach (var f in failures) Fail("re-entrant deals", "scratch", f);
+            return failures.Count == 0 ? 1 : 0;
+        }
+
         private static int RunDescribe(JArray cases)
         {
             if (cases.Count == 0) return 0;
@@ -1135,7 +1185,41 @@ namespace StoryletStudio.StoryletEngine.TestHost
             }
         }
 
-        sealed class RecordingWorld : IScopeResolver
+        /// <summary>A case's host scope (corpus 23): get and set by name over
+        /// a store, no rule of its own.</summary>
+        sealed class MapScope : IHostScope
+        {
+            public readonly Dictionary<string, ExprValue> Values = new Dictionary<string, ExprValue>();
+            public ExprValue Get(string name) => Values.TryGetValue(name, out var v) ? v : null;
+            public bool CanSet => true;
+            public void Set(string name, ExprValue value) { Values[name] = value; }
+        }
+
+        /// <summary>The set-up reports the FIRST engine made, against the
+        /// case's expectSetupErrors, in any order: each one's node exactly, and
+        /// a message its message must contain, matched as written (the corpus
+        /// leaves out the option's name, which each runtime spells its own
+        /// way).</summary>
+        static List<string> CheckSetupErrors(JArray expected, List<(string Node, string Message)> reported)
+        {
+            var want = new List<(string Node, string Message)>();
+            if (expected != null)
+            {
+                foreach (JObject e in expected) want.Add((e.Value<string>("node"), e.Value<string>("message")));
+            }
+            want.Sort((a, b) => string.CompareOrdinal(a.Node, b.Node));
+            var got = new List<(string Node, string Message)>(reported);
+            got.Sort((a, b) => string.CompareOrdinal(a.Node, b.Node));
+            bool Matches((string Node, string Message) g, (string Node, string Message) w) =>
+                g.Node == w.Node && g.Message.Contains(w.Message);
+            var ok = got.Count == want.Count;
+            for (int i = 0; ok && i < want.Count; i++) ok = Matches(got[i], want[i]);
+            if (ok) return new List<string>();
+            string ShowSetup(List<(string Node, string Message)> xs) => "[" + string.Join(", ", xs.Select(x => $"{{node:{x.Node}, message:{x.Message}}}")) + "]";
+            return new List<string> { $"setup: OnError expected {ShowSetup(want)}, got {ShowSetup(got)}" };
+        }
+
+        sealed class RecordingWorld : IHostScope
         {
             public readonly Dictionary<string, ExprValue> Values = new Dictionary<string, ExprValue>();
             public readonly List<string> Sets = new List<string>();
@@ -1151,7 +1235,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             world.Values["clock"] = ExprValue.Num(0);
             world.Values["mood"] = ExprValue.Num(0);
             var bundle = BundleLoader.Parse(bundleJson);
-            var flow = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = 0, World = world }).OpenFlow("main");
+            var flow = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = 0, HostScopes = new Dictionary<string, IHostScope> { ["world"] = world } }).OpenFlow("main");
             flow.Deal("h_q");
             try { flow.Play("c_tick", "tick", "h_q"); failures.Add("bound-world probe: the story wrote a read-only @world value and was not refused"); }
             catch (StoryletError ex) { if (!ex.Message.Contains("is read-only")) failures.Add("bound-world probe: refused, but not as read-only: " + ex.Message); }
@@ -1173,7 +1257,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
         {
             var failures = new List<string>();
             var bundle = BundleLoader.Parse(bundleJson);
-            var bag = new PropertyBag(bundle.World.Properties, n => n, "world.");
+            var bag = new PropertyBag(Model.HostScopeDecls(bundle, "world"), n => n, "world.");
             // A kernel bag, called directly, refuses with the kernel's own RegistryError (the
             // engine rethrows it as a StoryletError; a game calling the kernel sees it as is).
             try
@@ -1265,8 +1349,30 @@ namespace StoryletStudio.StoryletEngine.TestHost
             // every engine this case builds reports here, and the sink is
             // emptied before each op, as the reference runner's is.
             var playErrors = new List<string>();
-            EngineOptions Options() => new EngineOptions { Seed = seed, OnError = e => playErrors.Add(e.Node) };
+            // Set-up reports (corpus 23), apart from a deal's condition errors.
+            var setupErrors = new List<(string Node, string Message)>();
+            // The case's host scopes (corpus 23): a plain resolver per token
+            // over a store kept for the whole case, shared by every engine it
+            // makes. The token is passed exactly as written.
+            Dictionary<string, IHostScope> hostScopes = null;
+            if (c["hostScopes"] is JObject hostJson)
+            {
+                hostScopes = new Dictionary<string, IHostScope>();
+                foreach (var pair in hostJson)
+                {
+                    var store = new MapScope();
+                    foreach (var value in (JObject)pair.Value) store.Values[value.Key] = StoryletJson.ToValue(value.Value);
+                    hostScopes[pair.Key] = store;
+                }
+            }
+            EngineOptions Options() => new EngineOptions
+            {
+                Seed = seed,
+                HostScopes = hostScopes,
+                OnError = e => { if (e.Kind == "setup") setupErrors.Add((e.Node, e.Message)); else playErrors.Add(e.Node); },
+            };
             var engine = new StoryletStudio.StoryletEngine.Engine(bundle, Options());
+            failures.AddRange(CheckSetupErrors(c["expectSetupErrors"] as JArray, setupErrors));
             // The bundle the engine runs now: a kept durable half must carry its
             // content.
             var running = bundle;
@@ -1760,17 +1866,17 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
                     case "scribble":
                     {
-                        // A careless host: deface everything the engine handed
-                        // over, in place. Nothing is asserted here; the asserts
+                        // A careless host: deface the fields the engine handed
+                        // over, in place (not boxes, not extension values, which
+                        // are read-only). Nothing is asserted here; the asserts
                         // that follow must read the bundle unchanged.
                         var from = op.Value<string>("from");
                         var key = names.TryGetValue(from, out var mapped) ? mapped : from;
                         foreach (var card in session.Board().GetOrDefault(key) ?? new List<DealtCard>())
                         {
-                            ScribbleView(card.Fields, card.Extensions);
-                            foreach (var outcome in session.Outcomes(card.Id, from)) ScribbleView(outcome.Fields, outcome.Extensions);
+                            ScribbleView(card.Fields);
+                            foreach (var outcome in session.Outcomes(card.Id, from)) ScribbleView(outcome.Fields);
                         }
-                        foreach (var box in session.ListBoxes()) ScribbleView(null, box.Extensions);
                         break;
                     }
 

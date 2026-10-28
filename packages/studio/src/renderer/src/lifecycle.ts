@@ -200,7 +200,7 @@ export function createLifecycle(ctx: LifecycleContext) {
     setCanvasProject(result.project.dir);
     setBoxColours(result.project.boxes);
     session.remote = result.remote;
-    setGameScopes(result.project.gameScopes);
+    setGameScopes(result.project.gameScopes, result.project.hostTokens);
     setPlayRung(result.project.play);
     problems.reset(result.problems);
     ctx.liveLink(true);   // Live Link: the control is available once a project is open

@@ -2,7 +2,7 @@
 // (design/flows.md; the shape is Patter's), transliterated from the
 // reference runtime (packages/runtime/src/engine.ts) and held to the
 // conformance corpus. An Engine owns the bundle, the lookups, the SHARED
-// property partitions and the @world seam; a Flow owns its own PRNG, clocks,
+// property partitions and the host scopes (@world, ...); a Flow owns its own PRNG, clocks,
 // cooldowns, board, claims, play history and per-flow partitions. Every name
 // is shared XOR per-flow by declaration, so a read is a union of two bags and
 // a write routes by name. No default flow, no ambient flow: OpenFlow(id)
@@ -26,10 +26,12 @@
 // as its own game. The shared @story registers under `story`, every other bag
 // that declares something under a key starting `storylets/`, which no
 // expression can name. SaveGame() carries what is NOT a property, plus the
-// registry's values only when the engine made the registry itself. @world is
-// the game's: a resolver it binds (EngineOptions.World, never saved), a scope
-// it registers in its registry, or, for a standalone engine, a self-backed
-// bag the registry stores and saves.
+// registry's values only when the engine made the registry itself. The HOST
+// SCOPES (@world, @player, ...: every scope the bundle's ScopeRegistry
+// declares) are the game's: each one a resolver it binds
+// (EngineOptions.HostScopes, never saved), a scope it registers in its
+// registry, or, for a standalone engine, a self-backed bag the registry
+// stores and saves.
 //
 // Key dealing contracts, per flow, in one place:
 //   - two verbs: deal(hand) claims, peek(box, criteria) just looks; you can
@@ -155,6 +157,19 @@ namespace StoryletStudio.StoryletEngine
         public OrderedMap<string, PropertyBag> Value = new OrderedMap<string, PropertyBag>();
     }
 
+    /// <summary>A host scope's resolver: what the game binds through
+    /// <see cref="EngineOptions.HostScopes"/> so the story can read (and, where
+    /// CanSet, write) values the game owns, `@world.*` among them, at run
+    /// time. Property metadata (types, read-only) comes from the compiled
+    /// bundle's declarations; the values themselves live in the game and are
+    /// never stored or saved by this engine. Patterplay's IHostScope, Get and
+    /// Set by the same names, so one object can serve both engines; CanSet
+    /// false binds the scope read-only for everyone, as a JS resolver with no
+    /// `set` does.</summary>
+    public interface IHostScope : IScopeResolver
+    {
+    }
+
     public sealed class EngineOptions
     {
         /// <summary>Default seed for each flow's PRNG; override per flow in
@@ -166,24 +181,29 @@ namespace StoryletStudio.StoryletEngine
         public bool Log = false;
         /// <summary>Retained log cap (oldest dropped first) when Log is on.</summary>
         public int LogCap = 1000;
-        /// <summary>The host's @world resolver - the values the game owns and
-        /// the story reads (and, where CanSet, writes). Engine-level, shared by
-        /// all flows, never saved: the game keeps these values. Null and no
-        /// Registry = a standalone engine self-backs @world from the declared
-        /// defaults, as a property its registry stores and saves. A game
-        /// running several engines registers @world in its registry itself
-        /// instead.</summary>
-        public IScopeResolver World = null;
+        /// <summary>The host scopes the game binds, by token: for each, a
+        /// resolver over values the game owns and the story reads (and, where
+        /// CanSet, writes), such as <c>["world"] = myWorld</c> for `@world.*`.
+        /// A declared scope left unbound is self-backed from its defaults, as a
+        /// property the registry stores and saves. Engine-level, shared by all
+        /// flows, never saved: the game keeps these values. A game running
+        /// several engines registers its scopes in its registry itself instead,
+        /// and binds none here. Tokens are case-sensitive: a token the bundle
+        /// doesn't declare is reported ("setup", through OnError), naming the
+        /// declared spelling when only the case differs. Patterplay's option,
+        /// name for name.</summary>
+        public Dictionary<string, IHostScope> HostScopes = null;
         /// <summary>The game's registry: ONE per game, holding every engine's
         /// properties except those the game keeps itself, saved once. Given
         /// one, the engine registers its own scopes in it (@story under
         /// `story`, every other bag under a key starting `storylets/`, and
-        /// @world if World is set), reads every other scope from it, and
-        /// SaveGame() leaves the property values to the game. @world is then
-        /// the game's to register: owned if the registry should store it,
-        /// foreign if the game keeps it. Null = the engine makes its own
-        /// registry and acts as its own game: it self-backs @world, and
-        /// SaveGame() carries the registry's values too.</summary>
+        /// each scope HostScopes binds), reads every other scope from it, and
+        /// SaveGame() leaves the property values to the game. The host scopes
+        /// the bundle declares are then the game's to register: owned if the
+        /// registry should store them, foreign if the game keeps them. Null =
+        /// the engine makes its own registry and acts as its own game: it
+        /// self-backs every host scope the bundle declares and HostScopes
+        /// doesn't bind, and SaveGame() carries the registry's values too.</summary>
         public ScopeRegistry Registry = null;
         /// <summary>Diagnostics hook (opt-in, dev only): fired when OpenFlow
         /// REPLACES a flow that still had cards dealt (flow id, count). The
@@ -194,7 +214,8 @@ namespace StoryletStudio.StoryletEngine
         public Action<string, int> OnReplacedFlow = null;
         /// <summary>Told of every condition the engine could not evaluate and
         /// counted as false (see <see cref="PlayError"/>), whether or not
-        /// anything is tracing. Unset, each goes to
+        /// anything is tracing, and of each set-up problem (reported as the
+        /// constructor ends). Unset, each goes to
         /// <see cref="Engine.DefaultOnError"/>, so a content bug is never
         /// silent. Parity with the JS runtime's onError and Patterplay's
         /// OnError, the same shape.</summary>
@@ -218,13 +239,16 @@ namespace StoryletStudio.StoryletEngine
     /// came up).</summary>
     public sealed class PlayError
     {
-        /// <summary>The flow it happened in.</summary>
+        /// <summary>The flow it happened in; "" for a "setup" report, which
+        /// belongs to no flow.</summary>
         public string Flow;
-        /// <summary>What failed. A Storylets deal evaluates only conditions:
-        /// always "condition".</summary>
+        /// <summary>What failed: "condition" (a Storylets deal evaluates only
+        /// conditions), or "setup", how the engine was set up (a host scope the
+        /// bundle doesn't declare), reported as the constructor ends.</summary>
         public string Kind;
         /// <summary>Whose condition: "card &lt;gameId&gt;", "deck &lt;gameId&gt;",
-        /// "hand &lt;gameId&gt;" or "outcome &lt;card gameId&gt;/&lt;outcome gameId&gt;".</summary>
+        /// "hand &lt;gameId&gt;" or "outcome &lt;card gameId&gt;/&lt;outcome gameId&gt;".
+        /// For "setup", the host-scope token at fault.</summary>
         public string Node;
         /// <summary>The expression's source text, when the bundle carries it;
         /// null otherwise.</summary>
@@ -233,7 +257,8 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>One line for a console: what failed, where, and why.</summary>
         public override string ToString()
-            => $"the {Kind} on {Node} in flow '{Flow}' failed, counted as false: {Message}";
+            => Kind == "setup" ? Message
+            : $"the {Kind} on {Node} in flow '{Flow}' failed, counted as false: {Message}";
     }
 
     /// <summary>What Engine.HotSwap produced: the replacement engine, and the
@@ -344,7 +369,9 @@ namespace StoryletStudio.StoryletEngine
         /// exactly as the bundle wrote them: raw and sparse, any JSON as the
         /// neutral tree. Null when it has none.
         /// FieldHelpers.EffectiveFields(FieldHelpers.ExtensionDecls(...), ...)
-        /// fills in the declared defaults.</summary>
+        /// fills in the declared defaults. READ-ONLY: these are the bundle's own
+        /// values, handed out uncopied (unlike Fields), so changing them changes
+        /// them for every later deal.</summary>
         public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
@@ -359,7 +386,7 @@ namespace StoryletStudio.StoryletEngine
         /// engine.</summary>
         public OrderedMap<string, ExprValue> Fields;
         /// <summary>The outcome's Storylet extension values, by extension id,
-        /// raw, as DealtCard.Extensions. Null when it has none.</summary>
+        /// raw and read-only, as DealtCard.Extensions. Null when it has none.</summary>
         public OrderedMap<string, OrderedMap<string, object>> Extensions;
         /// <summary>Evaluated against CURRENT state at the moment of the ask.</summary>
         public bool Available;
@@ -540,17 +567,17 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Null when the box has no title.</summary>
         public string Title;
         public double Turn;
-        /// <summary>The box's Storylet extension values, by extension id, raw.
-        /// Null when it has none.</summary>
+        /// <summary>The box's Storylet extension values, by extension id, raw
+        /// and read-only, as DealtCard.Extensions. Null when it has none.</summary>
         public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     /// <summary>The world + flow manager (design/flows.md; the shape is
     /// Patter's): owns the bundle, every lookup built from it, the SHARED
-    /// property partitions and the @world resolver; ALL play happens on a
+    /// property partitions and the host scopes (@world, ...); ALL play happens on a
     /// Flow handle from OpenFlow(id). There is no default flow and no ambient
     /// current flow; re-opening an id REPLACES it; closed handles are inert;
-    /// GetProperty serves world.* and shared refs only, and a ref that
+    /// GetProperty serves host scopes (world.*) and shared refs only, and a ref that
     /// resolves per-flow throws, naming the fix. Every property bag lives in
     /// the game's one ScopeRegistry (EngineOptions.Registry), or in the
     /// engine's own when it is standalone.</summary>
@@ -795,7 +822,8 @@ namespace StoryletStudio.StoryletEngine
         }
 
         // Quality ladders (quality.md), declaration-level so partition-blind.
-        internal readonly Dictionary<string, List<string>> _worldLadders = new Dictionary<string, List<string>>();
+        /// <summary>Each host scope's ladders, by token, then name.</summary>
+        internal readonly Dictionary<string, Dictionary<string, List<string>>> _hostLadders = new Dictionary<string, Dictionary<string, List<string>>>();
         internal readonly Dictionary<string, List<string>> _storyLadders = new Dictionary<string, List<string>>();
         internal readonly Dictionary<string, Dictionary<string, List<string>>> _boxLadders = new Dictionary<string, Dictionary<string, List<string>>>();
         internal readonly Dictionary<string, Dictionary<string, List<string>>> _deckLadders = new Dictionary<string, Dictionary<string, List<string>>>();
@@ -823,15 +851,31 @@ namespace StoryletStudio.StoryletEngine
         /// engine's life. Reseeded in place by Reset and by a load that carries
         /// values.</summary>
         internal Partition _shared;
-        // @world: the host's resolver (it outlives Reset/LoadGame - the
-        // container is the host's), a scope the game registered, or a
-        // self-backed scope in the engine's own registry. Read and written
-        // through the registry in every case.
-        private readonly IScopeResolver _hostWorld;
-        /// <summary>True when the engine self-backed @world (standalone, no
-        /// resolver bound).</summary>
-        private bool _selfWorld;
-        internal IScopeSource WorldScope;
+        /// <summary>One host scope the bundle declares, as the engine serves
+        /// it. Its values are read and written through the registry in every
+        /// case: a resolver the game bound (it outlives Reset and LoadGame, the
+        /// store is the game's), a scope the game registered itself, or a
+        /// self-backed bag in the engine's own registry.</summary>
+        internal sealed class HostScopeState
+        {
+            public HostScopeSpec Spec;
+            /// <summary>The scope as an expression reads it: through the
+            /// registry, by the names as authored.</summary>
+            public IScopeSource Source;
+            /// <summary>The resolver the game bound, or null.</summary>
+            public IHostScope Bound;
+            /// <summary>True when this engine self-backed it (standalone, no
+            /// resolver bound).</summary>
+            public bool SelfBacked;
+            /// <summary>False only when the game bound a resolver it can't
+            /// write: the scope is then read-only for everyone.</summary>
+            public bool CanSet => Bound == null || Bound.CanSet;
+            public string Token => Spec.Token;
+        }
+
+        /// <summary>Every host scope the bundle declares (`@world`, `@player`,
+        /// ...), by token, in bundle order.</summary>
+        internal readonly OrderedMap<string, HostScopeState> _hostScopes = new OrderedMap<string, HostScopeState>();
 
         /// <summary>The owner label on everything this engine registers: named
         /// in a clash error and carried on the registry's examiner rows.</summary>
@@ -947,12 +991,13 @@ namespace StoryletStudio.StoryletEngine
             return new PropertyBag(decls, n => n, pathPrefix);
         }
 
-        /// <summary>@world as an expression reads it: through the registry, by
-        /// the names as authored.</summary>
-        private sealed class WorldSource : IScopeSource
+        /// <summary>A host scope as an expression reads it: through the
+        /// registry, by the names as authored.</summary>
+        private sealed class HostSource : IScopeSource
         {
-            public Engine Owner;
-            public ExprValue Get(string name) => Owner.WorldGet(name);
+            public ScopeRegistry Registry;
+            public string Token;
+            public ExprValue Get(string name) => Registry.Get(Token, name);
         }
 
         // --- inputs the game hands over ---------------------------------------------
@@ -966,7 +1011,10 @@ namespace StoryletStudio.StoryletEngine
             if (bundle.Content == null) problems.Add("no content");
             if (bundle.Settings == null) problems.Add("no settings");
             if (bundle.Story?.Properties == null) problems.Add("no story properties");
-            if (bundle.World?.Properties == null) problems.Add("no world properties");
+            // A bundle @1 or @0 has a `world` block; from @2 the game's scopes
+            // are ScopeRegistry, null when the project declares none.
+            if (bundle.Schema != Model.BUNDLE_SCHEMA && bundle.World?.Properties == null) problems.Add("no world properties");
+            if (bundle.ScopeRegistry != null && bundle.ScopeRegistry.Scopes == null) problems.Add("no host scopes in its scopeRegistry");
             if (bundle.Boxes == null) problems.Add("no boxes");
             return problems;
         }
@@ -988,7 +1036,7 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>What a declared property takes, in words, for a refused
         /// host write.</summary>
-        private static string Takes(PropertyDecl decl)
+        private static string Takes(ScopeDeclaration decl)
         {
             string Quoted(IReadOnlyList<string> xs) =>
                 xs == null ? "" : string.Join(", ", xs.Select(x => ExprValue.JsonQuote(x)));
@@ -1014,22 +1062,25 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Refuse a host write that does not fit what the content
         /// declared (the hands-on review, 2026-10, foundation 5): a string for
         /// a number, a value an enum or a quality does not list, a flag a flags
-        /// property does not, or a @world name the content never declared. The
-        /// rule is the kernel's ValueFit.Fits, the one a load walks saved
-        /// values with, so a value the game may set is exactly one a save may
-        /// carry. Another engine's scope (`patter.x`) is that engine's to
-        /// check. <paramref name="ownerId"/> is the owner segment already
+        /// property does not, or a name the content never declared in a host
+        /// scope it declares. The rule is the kernel's ValueFit.Fits, the one a
+        /// load walks saved values with, so a value the game may set is exactly
+        /// one a save may carry. An opaque host scope declares no names, so any
+        /// name and value in it is the game's. Another engine's scope
+        /// (`patter.x`) is that engine's to check. <paramref name="ownerId"/> is the owner segment already
         /// resolved to its internal id, for a three-part path.</summary>
         internal void CheckHostWrite(string path, string[] parts, string ownerId, ExprValue value)
         {
-            PropertyDecl decl = null;
-            if (parts.Length == 2 && parts[0] == "world")
+            ScopeDeclaration decl = null;
+            var host = parts.Length == 2 ? _hostScopes.GetOrDefault(parts[0]) : null;
+            if (host != null)
             {
+                var decls = host.Spec.Declarations;
+                if (decls == null) return;
                 var name = parts[1];
-                var decls = _bundle.World.Properties;
-                decl = DeclNamed(decls, name)
+                decl = (ScopeDeclaration)decls.Find(d => d.Name == name)
                     ?? decls.Find(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase));
-                if (decl == null) throw new StoryletError($"no property at \"{path}\": the content declares no @world.{name}");
+                if (decl == null) throw new StoryletError($"no property at \"{path}\": the content declares no @{host.Token}.{name}");
             }
             else if (parts.Length == 2 && parts[0] == "story")
             {
@@ -1117,7 +1168,7 @@ namespace StoryletStudio.StoryletEngine
             if (schema == null || !Model.BUNDLE_SCHEMAS.Contains(schema))
             {
                 throw new StoryletError($"unsupported bundle schema: {schema ?? "undefined"} "
-                    + $"(this runtime reads {string.Join(" and ", Model.BUNDLE_SCHEMAS)})");
+                    + $"(this runtime reads {string.Join(", ", Model.BUNDLE_SCHEMAS.Take(Model.BUNDLE_SCHEMAS.Count - 1))} and {Model.BUNDLE_SCHEMAS[Model.BUNDLE_SCHEMAS.Count - 1]})");
             }
             // The parts every bundle of a known schema has, by name: a bundle
             // missing one is cut short or hand-built, and would fail later as a
@@ -1228,7 +1279,6 @@ namespace StoryletStudio.StoryletEngine
             _onReplacedFlow = opts.OnReplacedFlow;
             _onError = opts.OnError;
             if (opts.Log) _logCap = opts.LogCap;
-            _hostWorld = opts.World;
             _registry = opts.Registry ?? new ScopeRegistry();
             _ownsRegistry = opts.Registry == null;
             // The value scope's segments come off the whole bundle at once (a
@@ -1314,8 +1364,21 @@ namespace StoryletStudio.StoryletEngine
             }
             _durableShared = DurableProps(_sharedDecls);
             _durableFlow = DurableProps(_flowDecls);
-            WorldScope = new WorldSource { Owner = this };
-            InitShared();
+            // Set-up problems found while building, reported as the
+            // constructor ends, when the engine can report.
+            var setup = new List<(string Node, string Message)>();
+            InitShared(opts.HostScopes ?? new Dictionary<string, IHostScope>(), setup);
+            // Last, so the game's handler and the decision log hear about an
+            // engine that is ready to be asked.
+            foreach (var problem in setup) ReportSetup(problem.Node, problem.Message);
+        }
+
+        /// <summary>Report a set-up problem (a "setup" PlayError, which belongs
+        /// to no flow): to the game's OnError, and to the decision log.</summary>
+        private void ReportSetup(string node, string message)
+        {
+            ReportPlayError(new PlayError { Flow = "", Kind = "setup", Node = node, Message = message });
+            EmitEngine("", new DiagnosticEvent { Where = "setup", Message = message }, null);
         }
 
         /// <summary>A hand's declared @hand state: a template instance inherits
@@ -1332,12 +1395,15 @@ namespace StoryletStudio.StoryletEngine
             return hand.Properties ?? new List<PropertyDecl>();
         }
 
-        /// <summary>Build the shared stores and register them and @world. Once,
-        /// for the engine's life: Reset and loads reseed the bags in place, so
-        /// the registry never sees them come and go. The bags are KEYED by
-        /// internal id and ADDRESSED by gameId; see AddressOf.</summary>
-        private void InitShared()
+        /// <summary>Build the shared stores, register them and the host
+        /// scopes, and set up each host scope's seam. Once, for the engine's
+        /// life: Reset and loads reseed the bags in place, so the registry
+        /// never sees them come and go. The bags are KEYED by internal id and
+        /// ADDRESSED by gameId; see AddressOf.</summary>
+        private void InitShared(Dictionary<string, IHostScope> bound, List<(string Node, string Message)> setup)
         {
+            var declared = Model.BundleHostScopes(_bundle);
+            var selfBacked = new HashSet<string>();
             var shared = new Partition { Story = BagFromDecls(_sharedDecls.Story, "story.") };
             string At(string kind, string id) => AddressOf(kind, id) + ".";
             foreach (var pair in _sharedDecls.Box) shared.Box.Set(pair.Key, BagFromDecls(pair.Value, At("box", pair.Key)));
@@ -1372,31 +1438,54 @@ namespace StoryletStudio.StoryletEngine
                         Mount(key, () => reg.MountOwned(key, bag, OwnerLabel));
                     }
                 }
-                if (_hostWorld != null)
+                // Each scope the game binds is EXTERNAL: the game keeps the
+                // values, the registry never saves them. Its declarations
+                // (types, read-only) come from the bundle.
+                foreach (var pair in bound)
                 {
-                    // The game keeps these values: an external scope, never saved.
-                    var world = _hostWorld;
-                    var decls = _bundle.World.Properties;
-                    Mount("world", () => reg.DefineForeign("world", world, decls,
-                        new ForeignScopeOptions { Normalise = Identity, Owner = OwnerLabel }));
+                    if (pair.Value == null || string.IsNullOrEmpty(pair.Key)) continue;
+                    var token = pair.Key;
+                    var resolver = pair.Value;
+                    var spec = declared.Find(sc => sc.Token == token);
+                    // Tokens are case-sensitive everywhere, so a near miss is
+                    // reported, never folded: folding would make a second
+                    // spelling of the scope. Another engine's scope the content
+                    // names is that engine's to declare.
+                    if (spec == null && (_bundle.ExternalScopes == null || !_bundle.ExternalScopes.Contains(token)))
+                    {
+                        var near = declared.Find(sc => string.Equals(sc.Token, token, StringComparison.OrdinalIgnoreCase));
+                        setup.Add((token, near != null
+                            ? $"HostScopes binds \"{token}\", which this bundle doesn't declare: it declares \"{near.Token}\", and a scope's token is case-sensitive"
+                            : $"HostScopes binds \"{token}\", which this bundle doesn't declare"));
+                    }
+                    var decls = spec?.Declarations?.Select(ToForeignDecl).ToList();
+                    var writable = spec?.Writable ?? true;
+                    Mount(token, () => reg.DefineForeign(token, resolver, decls,
+                        new ForeignScopeOptions { Normalise = Identity, Writable = writable, Owner = OwnerLabel }));
                 }
-                else if (_ownsRegistry && !reg.Has("world"))
+                // A declared host scope nobody bound. A standalone engine is its
+                // own game, so it self-backs the scope from its declared
+                // defaults, DECLARATIONS AND ALL, as a property the registry
+                // stores and SAVES (only a resolver the game binds is
+                // external). The bag keeps Writable == false so an examiner
+                // still reads it there, and the kernel lets a host write past
+                // it, which is what the game's own surface passes. Given the
+                // GAME's registry, the engine registers nothing here: those
+                // scopes are the game's to register.
+                if (_ownsRegistry)
                 {
-                    // Standalone: self-backed from the declared defaults,
-                    // DECLARATIONS AND ALL, as a property the registry stores and
-                    // SAVES (only a resolver the game binds is external). The bag
-                    // keeps Writable == false so an examiner still reads it there,
-                    // and the kernel lets a host write past it, which is what the
-                    // game's own surface passes.
-                    reg.DefineOwned("world", _bundle.World.Properties,
-                        new OwnedScopeOptions { Normalise = Identity, PathPrefix = "world.", Owner = OwnerLabel });
-                    var worldBag = reg.OwnedBag("world");
-                    registered.Add("world");
-                    _sharedMounts.Add(new SharedMount { Key = "world", Mount = () => reg.MountOwned("world", worldBag, OwnerLabel) });
-                    _selfWorld = true;
+                    foreach (var spec in declared)
+                    {
+                        var token = spec.Token;
+                        if ((bound.TryGetValue(token, out var b) && b != null) || reg.Has(token)) continue;
+                        reg.DefineOwned(token, SelfBackedDecls(spec),
+                            new OwnedScopeOptions { Normalise = Identity, PathPrefix = token + ".", Owner = OwnerLabel });
+                        var bag = reg.OwnedBag(token);
+                        registered.Add(token);
+                        _sharedMounts.Add(new SharedMount { Key = token, Mount = () => reg.MountOwned(token, bag, OwnerLabel) });
+                        selfBacked.Add(token);
+                    }
                 }
-                // Given the game's registry and no resolver, @world is the game's
-                // to register: this engine registers nothing for it.
             }
             catch (Exception e)
             {
@@ -1405,10 +1494,46 @@ namespace StoryletStudio.StoryletEngine
                 if (KernelErrors.Is(e)) throw KernelErrors.As(e);
                 throw;
             }
+            _hostScopes.Clear();
+            foreach (var spec in declared)
+            {
+                bound.TryGetValue(spec.Token, out var resolver);
+                _hostScopes.Set(spec.Token, new HostScopeState
+                {
+                    Spec = spec,
+                    Source = new HostSource { Registry = reg, Token = spec.Token },
+                    Bound = resolver,
+                    SelfBacked = selfBacked.Contains(spec.Token),
+                });
+            }
+        }
+
+        /// <summary>A host scope declaration as the registry takes it, for a
+        /// foreign scope.</summary>
+        private static ScopeDeclaration ToForeignDecl(HostScopeDecl d) => new ScopeDeclaration
+        {
+            Name = d.Name, Type = d.Type, Values = d.Values, Stages = d.Stages, Default = d.Default, Writable = d.Writable,
+        };
+
+        /// <summary>A self-backed host scope's declarations: the scope's own
+        /// Writable folded into each, since an owned bag reads writability per
+        /// declaration.</summary>
+        private static List<ScopeDeclaration> SelfBackedDecls(HostScopeSpec spec)
+        {
+            var decls = new List<ScopeDeclaration>();
+            if (spec.Declarations == null) return decls;
+            foreach (var d in spec.Declarations)
+            {
+                if (d == null || d.Name == null) continue;
+                var decl = ToForeignDecl(d);
+                decl.Writable = d.Writable ?? spec.Writable;
+                decls.Add(decl);
+            }
+            return decls;
         }
 
         /// <summary>Every shared bag back to its declared defaults, in place (the
-        /// registry keeps them registered), the self-backed @world
+        /// registry keeps them registered), the self-backed host scopes
         /// included.</summary>
         private void ReseedShared()
         {
@@ -1421,12 +1546,15 @@ namespace StoryletStudio.StoryletEngine
                     pair.Value.Reseed(decls.GetOrDefault(pair.Key) ?? new List<PropertyDecl>());
                 }
             }
-            if (_selfWorld) _registry.ReseedOwned("world", _bundle.World.Properties ?? new List<PropertyDecl>());
+            foreach (var pair in _hostScopes)
+            {
+                if (pair.Value.SelfBacked) _registry.ReseedOwned(pair.Key, SelfBackedDecls(pair.Value.Spec));
+            }
         }
 
         private void InitLadders()
         {
-            Dictionary<string, List<string>> Grab(List<PropertyDecl> decls)
+            Dictionary<string, List<string>> Grab(IEnumerable<ScopeDeclaration> decls)
             {
                 var m = new Dictionary<string, List<string>>();
                 if (decls != null)
@@ -1439,7 +1567,7 @@ namespace StoryletStudio.StoryletEngine
                 if (m.Count > 0) _hasQualities = true;
                 return m;
             }
-            foreach (var pair in Grab(_bundle.World.Properties)) _worldLadders[pair.Key] = pair.Value;
+            foreach (var spec in Model.BundleHostScopes(_bundle)) _hostLadders[spec.Token] = Grab(spec.Declarations);
             foreach (var pair in Grab(_bundle.Story.Properties)) _storyLadders[pair.Key] = pair.Value;
             foreach (var box in _bundle.Boxes)
             {
@@ -1468,41 +1596,48 @@ namespace StoryletStudio.StoryletEngine
             return p;
         }
 
-        // --- the @world seam ---------------------------------------------------
+        // --- the host-scope seam ------------------------------------------------
 
-        /// <summary>@world, read through the registry by name (the scope's own
-        /// normalisation), so a @world the game registered folded to lower case
-        /// still answers the names as authored. Null when nothing answers,
-        /// including a game's registry with no @world registered.</summary>
-        internal ExprValue WorldGet(string name)
+        /// <summary>A host scope, read through the registry by name (the
+        /// scope's own normalisation), so a scope the game registered folded to
+        /// lower case still answers the names as authored. Null when nothing
+        /// answers, including a game's registry with the scope not
+        /// registered.</summary>
+        internal ExprValue HostGet(HostScopeState host, string name)
         {
-            return _registry.Get("world", name);
+            return _registry.Get(host.Token, name);
         }
 
-        /// <summary>The story's promise about a @world value (Writable == false on its
-        /// declaration), kept at runtime as the compiler keeps it at publish. Asked by a
+        /// <summary>Is a host scope's property read-only TO THE STORY? Its own
+        /// Writable == false, or its scope's: the story's promise, kept at run
+        /// time as the compiler keeps it at publish (Reboot.md 10). Asked by a
         /// flow's outcome write; the host's own SetProperty never asks.</summary>
-        internal bool WorldReadOnly(string name)
+        internal static bool HostReadOnly(HostScopeSpec spec, string name)
         {
-            if (_bundle.World.Properties == null) return false;
-            foreach (var d in _bundle.World.Properties) if (d.Name == name) return d.Writable == false;
-            return false;
+            var decl = spec.Declarations?.Find(d => d != null && d.Name == name);
+            return (decl?.Writable ?? spec.Writable) == false;
         }
 
-        internal bool WorldCanSet => _hostWorld != null ? _hostWorld.CanSet : true;
-
-        /// <summary>The @world WRITE seam, through the registry. host: true says the
-        /// caller is the GAME's own surface - SetProperty and the tooling built on
-        /// it - which the shared kernel lets past a Writable == false (scoperegistry
-        /// 0.6.0): that flag is the story's promise, not the game's. The story's
-        /// refusal is WorldReadOnly, asked before this seam is reached. A BOUND
-        /// resolver is opaque - it takes a name and a value and keeps whatever rule
-        /// the game has - so a write to it always passes host, and the flag only
-        /// ever matters to a stored @world (self-backed, or the game's own).</summary>
-        internal void WorldSet(string name, ExprValue value, bool host = false)
+        /// <summary>A host scope's WRITE seam, through the registry. host: true
+        /// says the caller is the GAME's own surface - SetProperty and the
+        /// tooling built on it - which the shared kernel lets past a Writable ==
+        /// false (scoperegistry 0.6.0): that flag is the story's promise, not
+        /// the game's. The story's refusal is HostReadOnly, asked before this
+        /// seam is reached. A BOUND resolver is opaque - it takes a name and a
+        /// value and keeps whatever rule the game has - so a write to it always
+        /// passes host, and the flag only ever matters to a stored scope
+        /// (self-backed, or the game's own).</summary>
+        internal void HostSet(HostScopeState host, string name, ExprValue value, bool isHost = false)
         {
-            try { _registry.Set("world", name, value, host: _hostWorld != null || host); }
+            try { _registry.Set(host.Token, name, value, host: host.Bound != null || isHost); }
             catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
+        }
+
+        /// <summary>The declared host scope a two-part path names
+        /// (`player.hp`), or null.</summary>
+        internal HostScopeState HostScopeOf(string[] parts)
+        {
+            return parts.Length == 2 ? _hostScopes.GetOrDefault(parts[0]) : null;
         }
 
         // --- flow management (Patter's surface, name for name) ------------------
@@ -1607,7 +1742,7 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>Close every flow and reseed the shared state to its defaults
-        /// (the self-backed @world included; a host-bound @world is the host's
+        /// (the self-backed host scopes included; a host-bound one is the host's
         /// and is not touched, and so is one the game registered).</summary>
         public void Reset()
         {
@@ -1700,18 +1835,20 @@ namespace StoryletStudio.StoryletEngine
 
         // --- engine-level state access -------------------------------------------
 
-        /// <summary>Read shared state by path: "world.x", "story.gold" (when
+        /// <summary>Read shared state by path: "world.x" (any host scope's,
+        /// "player.hp"), "story.gold" (when
         /// shared), "box.village.heat" (when shared) - the owner segment is its
         /// GAMEID (design/engine-server.md 4.4). A ref that resolves PER-FLOW
         /// throws, naming the fix (Patter's teaching rule).</summary>
         public ExprValue GetProperty(string path)
         {
             var parts = path.Split('.');
-            if (parts.Length == 2 && parts[0] == "world")
+            var host = HostScopeOf(parts);
+            if (host != null)
             {
-                var wv = WorldGet(parts[1]);
-                if (wv == null) throw new StoryletError($"no property at \"{path}\"");
-                return wv;
+                var hv = HostGet(host, parts[1]);
+                if (hv == null) throw new StoryletError($"no property at \"{path}\"");
+                return hv;
             }
             // Another engine's game-wide scope (`patter.gold`): every engine
             // reads every scope.
@@ -1791,11 +1928,12 @@ namespace StoryletStudio.StoryletEngine
         public void SetProperty(string path, ExprValue value)
         {
             var parts = path.Split('.');
-            if (parts.Length == 2 && parts[0] == "world")
+            var host = HostScopeOf(parts);
+            if (host != null)
             {
                 CheckHostWrite(path, parts, null, value);
-                if (!WorldCanSet) throw new StoryletError("@world is read-only here: the host bound no write");
-                WorldSet(parts[1], value, host: true);
+                if (!host.CanSet) throw new StoryletError($"@{host.Token} is read-only here: the host bound no write");
+                HostSet(host, parts[1], value, isHost: true);
                 return;
             }
             if (IsOtherScope(parts))
@@ -1828,11 +1966,11 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>A two-part path whose token is a scope another engine (or the
-        /// game) registered: `patter.gold`. @world and @story are this engine's
-        /// own and route as they always did.</summary>
+        /// game) registered: `patter.gold`. The host scopes the bundle declares
+        /// and @story are this engine's own and route as they always did.</summary>
         internal bool IsOtherScope(string[] parts)
         {
-            return parts.Length == 2 && parts[0] != "world" && parts[0] != "story" && _registry.Has(parts[0]);
+            return parts.Length == 2 && parts[0] != "story" && !_hostScopes.ContainsKey(parts[0]) && _registry.Has(parts[0]);
         }
 
         internal static OrderedMap<string, PropertyBag> KindOf(Partition p, string kind)
@@ -1851,38 +1989,48 @@ namespace StoryletStudio.StoryletEngine
             return _flowDecls.Kind(kind);
         }
 
-        internal void AddWorldRows(List<PropertyRow> rows)
+        /// <summary>Every declared host scope's properties as examiner rows,
+        /// read through its resolver, in bundle order (an opaque scope declares
+        /// none, so lists none).</summary>
+        internal void AddHostRows(List<PropertyRow> rows)
         {
-            if (_bundle.World.Properties == null) return;
-            foreach (var d in _bundle.World.Properties)
+            foreach (var pair in _hostScopes)
             {
-                rows.Add(new PropertyRow
+                var host = pair.Value;
+                if (host.Spec.Declarations == null) continue;
+                foreach (var d in host.Spec.Declarations)
                 {
-                    Path = $"world.{d.Name}",
-                    Name = d.Name,
-                    Type = d.Type,
-                    Value = WorldGet(d.Name) ?? d.Default,
-                    Default = d.Default,
-                    Values = d.Values,
-                    Stages = d.Stages,
-                    // Whether the resolver can be written at all AND what the
-                    // declaration says, which is the kernel's own rule for a foreign
-                    // scope. A row is where Writable == false is meant to SHOW: it
-                    // tells a state panel this is the game's value, not the story's.
-                    // It does not stop the panel editing it - SetProperty is a host
-                    // write and passes.
-                    Writable = WorldCanSet && !WorldReadOnly(d.Name),
-                });
+                    if (d == null || d.Name == null) continue;
+                    rows.Add(new PropertyRow
+                    {
+                        Path = $"{host.Token}.{d.Name}",
+                        Name = d.Name,
+                        Type = d.Type,
+                        Value = HostGet(host, d.Name) ?? d.DefaultOrTypeDefault(),
+                        Default = d.DefaultOrTypeDefault(),
+                        Values = d.Values,
+                        Stages = d.Stages,
+                        // A host scope is FOREIGN - a host resolver backs it - so
+                        // writability is whether that resolver can be written at
+                        // all AND what the declaration says, which is the kernel's
+                        // own rule for a foreign scope. A row is where Writable ==
+                        // false is meant to SHOW: it tells a state panel this is
+                        // the game's value, not the story's. It does not stop the
+                        // panel editing it - SetProperty is a host write and
+                        // passes.
+                        Writable = host.CanSet && !HostReadOnly(host.Spec, d.Name),
+                    });
+                }
             }
         }
 
-        /// <summary>The shared surface as examiner rows: @world (read through
-        /// the resolver) then the shared partitions. Per-flow rows live on each
+        /// <summary>The shared surface as examiner rows: the host scopes (read
+        /// through their resolvers) then the shared partitions. Per-flow rows live on each
         /// Flow.</summary>
         public List<PropertyRow> ListProperties()
         {
             var rows = new List<PropertyRow>();
-            AddWorldRows(rows);
+            AddHostRows(rows);
             // The bag composes each row's address from its own PathPrefix, so this copies
             // nothing: the row arrives addressed. `prefix` stays as the caller's label for
             // the mount, which is what the state logger enumerates by.
@@ -1902,8 +2050,8 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>The SHARED kernel bags with their store path prefixes (the
-        /// state logger's mount surface). The @world container is the host's
-        /// own bag - the host mounts it itself.</summary>
+        /// state logger's mount surface). A host scope's container is the
+        /// host's own - the host mounts it itself.</summary>
         public List<BagMount> ListBags()
         {
             var mounts = new List<BagMount> { new BagMount { Prefix = "story", Bag = _shared.Story } };
@@ -1967,7 +2115,7 @@ namespace StoryletStudio.StoryletEngine
         /// The replacement is built with a copy of the options this engine was
         /// built with, which <paramref name="change"/> (when given) edits first,
         /// so only what it sets differs: <c>HotSwap(b, o => o.Log = true)</c>
-        /// keeps the Seed, the World resolver, and the rest. Registry is
+        /// keeps the Seed, the HostScopes bindings, and the rest. Registry is
         /// ignored: the replacement is on this engine's registry, or its own
         /// when this engine made its own. Re-take every flow handle from the
         /// replacement.</summary>
@@ -2060,7 +2208,7 @@ namespace StoryletStudio.StoryletEngine
         /// spent cards once, then every live flow (board, clocks, cooldowns,
         /// PRNG, play log) keyed by its id. The property values are the
         /// registry's: a standalone engine (one that made its own registry)
-        /// carries them here under Registry, self-backed @world included; a game
+        /// carries them here under Registry, self-backed host scopes included; a game
         /// that passed a registry saves it once itself, beside each engine's
         /// envelope.</summary>
         public SaveEnvelope SaveGame()
@@ -2354,7 +2502,7 @@ namespace StoryletStudio.StoryletEngine
             var scratchOptions = new EngineOptions
             {
                 Seed = _creationOptions.Seed,
-                World = _creationOptions.World,
+                HostScopes = _creationOptions.HostScopes,
                 OnError = _ => { },
             };
             try

@@ -1,6 +1,6 @@
 // The compiled bundle model, its loader, and the save envelope. Port of
 // @storylet-studio/model (packages/model/src/index.ts): the bundle schema
-// "storylets/bundle@1" ("@0" still read; world/story property decls, boxes with
+// "storylets/bundle@2" ("@1" and "@0" still read; host scopes and @story property decls, boxes with
 // decks/cards/outcomes/tag groups/hands/hand templates, ranking, fields, redraw,
 // copies, the home group, the project map, Storylet extension values), SaveEnvelope ("storylets/save@3"; @1 and @2 still read), and the gameId
 // derivation rules (GameIdify / EffectiveGameId). The loader consumes the
@@ -23,25 +23,40 @@
 
 namespace storylets
 {
-    /** The bundle schema this build of the format writes: @1 since the
-     *  project map (design/project-map-contract.md 2.4), the bundle that can
-     *  carry `map` and `Box::usesMap`.
+    /** The bundle schema this build of the format writes: @2 since host
+     *  scopes (2026-10-28), the bundle whose game scopes are `scopeRegistry`
+     *  and which has no `world` block. @1 was the project map's
+     *  (design/project-map-contract.md 2.4), the bundle that can carry `map`
+     *  and `Box::usesMap`. @2 is a new number because the `world` block is
+     *  GONE: a runtime that reads only @1 refuses it by name rather than
+     *  misreading it.
      *
-     *  Every runtime READS @0 and @1 and refuses anything else, by name.
+     *  Every runtime READS @0, @1 and @2 and refuses anything else, by name.
      *  Reading @0 is not a compatibility branch: an @0 bundle cannot carry a
      *  map, so it is the same shape with less in it. The check exists so that
      *  from this release on a runtime meeting a schema it does not know says
      *  so, rather than half-working the way an @0 runtime does on a map bundle
      *  (tag matching is by id, so its deals look right while every zone value
      *  is missing). */
-    inline const char* const BUNDLE_SCHEMA = "storylets/bundle@1";
+    inline const char* const BUNDLE_SCHEMA = "storylets/bundle@2";
+    /** The project map's schema, before host scopes: the game's scopes were
+     *  one `world` block. Still read by every runtime, its `world.properties`
+     *  as the host scope `world`. */
+    inline const char* const BUNDLE_SCHEMA_V1 = "storylets/bundle@1";
     /** The schema before the project map, still read by every runtime. */
     inline const char* const BUNDLE_SCHEMA_V0 = "storylets/bundle@0";
 
-    /** Is this a bundle schema this runtime reads (@0 or @1)? */
+    /** Is this a bundle schema this runtime reads (@0, @1 or @2)? */
     inline bool IsSupportedBundleSchema(const std::string& schema)
     {
-        return schema == BUNDLE_SCHEMA_V0 || schema == BUNDLE_SCHEMA;
+        return schema == BUNDLE_SCHEMA_V0 || schema == BUNDLE_SCHEMA_V1 || schema == BUNDLE_SCHEMA;
+    }
+
+    /** Every bundle schema this runtime reads, in words, for a refusal:
+     *  "storylets/bundle@0, storylets/bundle@1 and storylets/bundle@2". */
+    inline std::string SupportedBundleSchemasText()
+    {
+        return std::string(BUNDLE_SCHEMA_V0) + ", " + BUNDLE_SCHEMA_V1 + " and " + BUNDLE_SCHEMA;
     }
 
     /** The engine's save envelope, version 3: version 2's shape (the
@@ -62,8 +77,8 @@ namespace storylets
      *  the internal id); `storylets/flow/<flowId>/story` and
      *  `storylets/flow/<flowId>/<kind>/<id>` for a flow's own. Ids escape `%`
      *  as `%25` and `/` as `%2F`. A bag with no declared properties is not
-     *  registered. A self-backed @world (no resolver bound) is a stored
-     *  property too, under `world`. */
+     *  registered. A self-backed host scope (declared, no resolver bound) is a
+     *  stored property too, under its token (`world`, `player`). */
     inline const char* const SAVE_SCHEMA = "storylets/save@3";
     /** Version 2, keyed by internal id: still read, every key resolved as a
      *  Game ID first and an internal id second. */
@@ -560,11 +575,29 @@ namespace storylets
         double playAdvancesTurns = 1;
     };
 
+    /** The `world` block of a bundle @1 or @0: @world's declarations, the
+     *  one game scope there was. A bundle @2 has none; the loader reads it
+     *  into Bundle::hostScopes as the scope `world`. */
     struct WorldSection
     {
         std::vector<PropertyDecl> properties;
-        // The optional ScopeRegistrySpec (owned/foreign split) is host
-        // territory; the runtime ignores it at this stage.
+    };
+
+    /** One host scope a bundle declares (`@world`, `@player`, ...): the game's
+     *  own state, in Patter's shape (its HostScopeSpec). Declarations carry
+     *  name, type, values, stages, default and `writable` (false: read-only TO
+     *  THE STORY, never to the game). */
+    struct HostScopeSpec
+    {
+        /** The scope token after `@` ("world", "player"). Case-sensitive. */
+        std::string token;
+        /** The scope-level read/write default for its declarations (absent:
+         *  writable). */
+        std::optional<bool> writable;
+        /** True when the scope declares no names: an opaque scope takes any
+         *  name and any value, unchecked. */
+        bool opaque = false;
+        std::vector<PropertyDecl> declarations;
     };
 
     struct StorySection
@@ -660,7 +693,16 @@ namespace storylets
         BundleContent content;
         std::string metadata = "full";          // "full" | "stripped"
         BundleSettings settings;
+        /** Bundle @1 and @0 only: the legacy `world` block, as written. Read
+         *  hostScopes instead: it carries this block as the scope `world`. */
         WorldSection world;
+        /** The game's own scopes the bundle declares, in bundle order: its
+         *  `scopeRegistry`, or, for a bundle @1 or @0, its `world` block read
+         *  as the scope `world` (none when that block declares nothing, which
+         *  is what an empty `world` always meant). A standalone engine
+         *  self-backs each from its defaults; a game binds its own store for
+         *  any of them (EngineOptions::hostScopes). */
+        std::vector<HostScopeSpec> hostScopes;
         StorySection story;
         std::vector<Box> boxes;
         /** The project map, when the project declares one (see ProjectMap).
@@ -678,6 +720,35 @@ namespace storylets
          *  project takes none. */
         OrderedMap<std::string, BundleExtension> extensions;
     };
+
+    /** One host scope a bundle declares, by token, case-sensitive; null when
+     *  it declares none by that token. */
+    inline const HostScopeSpec* FindHostScope(const Bundle& bundle, const std::string& token)
+    {
+        for (const HostScopeSpec& spec : bundle.hostScopes) if (spec.token == token) return &spec;
+        return nullptr;
+    }
+
+    /** A host scope's declarations by token: empty when it declares none, is
+     *  opaque, or isn't there. `HostScopeDecls(bundle, "world")` is what
+     *  `bundle.world.properties` was. */
+    inline const std::vector<PropertyDecl>& HostScopeDecls(const Bundle& bundle, const std::string& token)
+    {
+        static const std::vector<PropertyDecl> none;
+        const HostScopeSpec* spec = FindHostScope(bundle, token);
+        return spec ? spec->declarations : none;
+    }
+
+    /** Is a host scope's property read-only TO THE STORY? Its own `writable:
+     *  false`, or its scope's: the story's promise (Reboot.md 10). */
+    inline bool HostScopeReadOnly(const HostScopeSpec& spec, const std::string& name)
+    {
+        for (const PropertyDecl& d : spec.declarations)
+        {
+            if (d.name == name) return d.writable.has_value() ? !*d.writable : (spec.writable.has_value() && !*spec.writable);
+        }
+        return spec.writable.has_value() && !*spec.writable;
+    }
 
     using BundlePtr = std::shared_ptr<const Bundle>;
 
@@ -1018,7 +1089,9 @@ namespace storylets
      * a game already holds: `project` (no address); `box`, `deck`, `card` and
      * `hand` by gameId; `handTemplate` as "box/template"; `outcome` as
      * "card/outcome"; `tagGroup` and `tag` as "box/name", or the bare name for
-     * the project map's. An unknown kind is empty.
+     * the project map's. An unknown kind is empty. Read-only by contract, as
+     * a view's extension values are (DealtCard::extensions); the value
+     * returned is a copy, as C++ hands it back.
      */
     inline NodeExtensions ExtensionsOf(const Bundle& bundle, const std::string& kind, const std::string& address = "")
     {
@@ -1124,11 +1197,22 @@ namespace storylets
         if (!content || !content->isObject()) problems.push_back("no content");
         const JsonValue* settings = bundle.find("settings");
         if (!settings || !settings->isObject()) problems.push_back("no settings");
+        // A bundle @1 or @0 has a `world` block; from @2 the game's scopes are
+        // `scopeRegistry`, absent when the project declares none.
+        const JsonValue* schema = bundle.find("schema");
+        const bool hostScoped = schema && schema->isString() && schema->str == BUNDLE_SCHEMA;
         for (const char* scope : {"story", "world"})
         {
+            if (hostScoped && std::string(scope) == "world") continue;
             const JsonValue* part = bundle.find(scope);
             const JsonValue* props = part && part->isObject() ? part->find("properties") : nullptr;
             if (!props || !props->isArray()) problems.push_back(std::string("no ") + scope + " properties");
+        }
+        const JsonValue* registry = bundle.find("scopeRegistry");
+        if (registry)
+        {
+            const JsonValue* scopes = registry->isObject() ? registry->find("scopes") : nullptr;
+            if (!scopes || !scopes->isArray()) problems.push_back("no host scopes in its scopeRegistry");
         }
         const JsonValue* boxes = bundle.find("boxes");
         if (!boxes || !boxes->isArray()) problems.push_back("no boxes");
@@ -1647,6 +1731,33 @@ namespace storylets
         {
             const JsonValue* props = world->find("properties");
             if (props && props->isArray()) bundle->world.properties = bundleloader::ParsePropertyDecls(*props);
+        }
+        const JsonValue* registry = b.find("scopeRegistry");
+        if (registry && registry->isObject())
+        {
+            const JsonValue* scopes = registry->find("scopes");
+            if (scopes && scopes->isArray())
+            {
+                for (const auto& item : scopes->arr)
+                {
+                    HostScopeSpec spec;
+                    spec.token = item.strOr("token");
+                    const JsonValue* writableFlag = item.find("writable");
+                    if (writableFlag && writableFlag->isBool()) spec.writable = writableFlag->b;
+                    const JsonValue* decls = item.find("declarations");
+                    if (decls && decls->isArray()) spec.declarations = bundleloader::ParsePropertyDecls(*decls);
+                    else spec.opaque = true;
+                    bundle->hostScopes.push_back(std::move(spec));
+                }
+            }
+        }
+        else if (!bundle->world.properties.empty())
+        {
+            // A bundle @1 or @0: its `world` block is the scope `world`.
+            HostScopeSpec spec;
+            spec.token = "world";
+            spec.declarations = bundle->world.properties;
+            bundle->hostScopes.push_back(std::move(spec));
         }
         const JsonValue* story = b.find("story");
         if (story && story->isObject())

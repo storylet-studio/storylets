@@ -91,7 +91,6 @@ export function runInit(opts: InitOptions): InitResult {
     // (which would mean the same) because it is a three-way choice and a shard
     // that names its rung is one an author can read.
     settings: { play: "solo", playAdvancesTurns: 1 },
-    world: { properties: [], registry: {} },
     story: {
       properties: kit === "map-story" ? MAP_STORY_PROPERTIES
         : kit === "action-game" ? ACTION_GAME_PROPERTIES

@@ -108,6 +108,8 @@ export interface InspectorHost {
   newCardAtHand(boxId: string, deckId: string, hand: { id: string; title: string }): void;
   /** Open a hand's page on its Cards tab: the place chip in a card's sentence. */
   openHand(boxId: string, handId: string): void;
+  /** Show Scene in Patterpad for a card (Edit ▸ Show Scene in Patterpad's own path). */
+  showScene(cardId: string): void;
   /** Storylet extensions: the open project's, and how a value is saved (extension-rows.ts). Absent: none. */
   extensions?: ExtensionHost;
 }
@@ -273,18 +275,67 @@ function emptySection(label: string, summary: string, expandTo?: () => Node[]): 
 // concept and never share a name. The identity header lives ABOVE the bar
 // (tab-grammar 2), so no tab switch ever hides it.
 export interface DocTabSpec { key: string; label: string; count?: number }
-export function docTabs(specs: DocTabSpec[], active: string, onPick: (key: string) => void): HTMLElement {
+export function docTabs(specs: DocTabSpec[], active: string, onPick: (key: string) => void, recount?: () => DocTabSpec[]): HTMLElement {
   const bar = el("div", { className: "doc-tabs" });
+  if (recount) recounts.set(bar, recount);
+  bar.setAttribute("role", "tablist");
+  // Picking a tab redraws the page, bar and all, so focus would fall back to
+  // the top of the window (the hands-on review, 2026-10, foundation 8): it is
+  // put back on the new bar's tab of the same key.
+  const pick = (key: string): void => {
+    if (active === key) return;
+    const hadFocus = bar.contains(document.activeElement);
+    onPick(key);
+    if (hadFocus) [...document.querySelectorAll<HTMLElement>(".doc-tabs .doc-tab.on")].find((t) => t.dataset["tab"] === key)?.focus();
+  };
+  const buttons: HTMLElement[] = [];
   for (const s of specs) {
     const b = el("button", { className: `doc-tab${active === s.key ? " on" : ""}${s.count === 0 ? " zero" : ""}`, text: s.label });
+    b.dataset["tab"] = s.key;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(active === s.key));
+    // One tab stop for the bar, the arrows move along it (the tablist pattern).
+    b.tabIndex = active === s.key ? 0 : -1;
     // The 0 shows: a dimmed tab with no number read as DISABLED to the audit,
     // which avoided clicking it. Dim-with-a-zero is learnable as "empty".
     if (s.count !== undefined) b.append(el("span", { className: "doc-tab-n", text: String(s.count) }));
-    b.addEventListener("click", () => { if (active !== s.key) onPick(s.key); });
+    b.addEventListener("click", () => pick(s.key));
+    buttons.push(b);
     bar.append(b);
   }
+  bar.addEventListener("keydown", (e) => {
+    const at = specs.findIndex((s) => s.key === active);
+    const to = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? specs.length - 1 : undefined;
+    if (to === undefined || specs.length === 0) return;
+    e.preventDefault();
+    pick(specs[(to + specs.length) % specs.length]!.key);
+  });
   return bar;
 }
+/** How each live tab bar works its counts out again (`docTabs`' `recount`). */
+const recounts = new WeakMap<HTMLElement, () => DocTabSpec[]>();
+
+/**
+ * Bring every tab bar's counts up to date in place. A save made while a page
+ * is being edited doesn't redraw the page (that would take the caret away), so
+ * a count drawn with it stayed at what it was, 0 for a list just started,
+ * until something else redrew it (the hands-on review, 2026-10). The bar
+ * works its counts out again from its `recount`; nothing else moves.
+ */
+export function recountDocTabs(root: ParentNode = document): void {
+  for (const bar of root.querySelectorAll<HTMLElement>(".doc-tabs")) {
+    const recount = recounts.get(bar);
+    if (!recount) continue;
+    for (const spec of recount()) {
+      const tab = [...bar.querySelectorAll<HTMLElement>(".doc-tab")].find((t) => t.dataset["tab"] === spec.key);
+      if (!tab || spec.count === undefined) continue;
+      tab.classList.toggle("zero", spec.count === 0);
+      const n = tab.querySelector(".doc-tab-n") ?? tab.appendChild(el("span", { className: "doc-tab-n" }));
+      n.textContent = String(spec.count);
+    }
+  }
+}
+
 // The tab memory lives in its own module (doc-tab-memory.ts), remembered at
 // PAGE TYPE level: an author moving card-to-card with Outcomes up is
 // comparing outcomes, so the choice follows them. Re-exported here so the
@@ -491,17 +542,25 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     view.append(documentHeading("Card", {
       title: { get: () => edit.title ?? "", set: (v) => { edit.title = v; }, placeholder: "Card title", commit },
       gameId: { get: () => edit.gameId ?? "", set: (v) => { edit.gameId = v; }, fallback: card.gameId, deriveFrom: () => edit.title ?? "", commit },
-      purpose: { get: () => edit.purpose ?? "", set: (v) => { edit.purpose = v; }, placeholder: "What happens when this card plays", commit },
+      purpose: { get: () => edit.purpose ?? "", set: (v) => { edit.purpose = v; }, placeholder: "For the team: what this card is for (players never see it)", commit },
       menu: [{ label: deleteLabel("card"), danger: true, onClick: () => h.deleteCard(deck.id, card.id) }],
       comments: { on: card.id, count: h.openThreads(card.id), open: (a) => h.showComments(card.id, edit.title ?? card.gameId, a) },
     }));
-    const setN = edit.fields.filter((f) => f.value.trim() !== "").length
-      + extensionsFor(extHost(h).project(), "card").reduce((n, x) => n + extensionCount(x, "card", card.id), 0);
-    view.append(docTabs([
+    // The pairing, said on the card (the hands-on review, 2026-10): nothing
+    // on a card used to say it plays a Patter scene.
+    if (card.patterScene !== undefined) {
+      const show = el("button", { className: "btn", text: "Show in Patterpad", tip: "Open this scene in the paired Patter project" });
+      show.addEventListener("click", () => h.showScene(card.id));
+      view.append(el("div", { className: "card-scene" },
+        iconNode("connect", 12), el("span", { text: `Plays the Patter scene “${card.patterScene}”` }), show));
+    }
+    const specs = (): DocTabSpec[] => [
       { key: "dealing", label: "Dealing" },
       { key: "outcomes", label: "Outcomes", count: edit.outcomes.length },
-      { key: "fields", label: "Fields", count: setN },
-    ], tab, (next) => { setDocTab(tabKey, next); drawCentre(); }));
+      { key: "fields", label: "Fields", count: edit.fields.filter((f) => f.value.trim() !== "").length
+        + extensionsFor(extHost(h).project(), "card").reduce((n, x) => n + extensionCount(x, "card", card.id), 0) },
+    ];
+    view.append(docTabs(specs(), tab, (next) => { setDocTab(tabKey, next); drawCentre(); }, specs));
 
     if (tab === "outcomes") {
       view.append(el("div", { className: "doc-panel" }, outcomeAccordion(edit, box.outcomeFields, catalogue, commit, setExpanded, h,
@@ -1055,7 +1114,7 @@ export function documentHeading(label: string, opts: {
     // type, so one word is the right answer rather than a compromise between
     // seven. "Purpose" is that word because it is what the format already calls
     // the field, so the app, the shards and the docs agree.
-    head.append(el("label", { className: "doc-purpose-label", text: "Purpose" }));
+    head.append(el("label", { className: "doc-purpose-label", text: "Design note" }));
     // One line when empty, growing as the author types (field-sizing, in the CSS).
     const ta = el("textarea", { className: "insp-input insp-beat doc-purpose" });
     ta.value = p.get(); ta.rows = 1; ta.placeholder = p.placeholder ?? "";
@@ -1225,11 +1284,11 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   // The seventh type, and labelled like the other six (B1). This one is built
   // by hand rather than through documentHeading, which is how it came to be the
   // only purpose field whose placeholder said "in the story".
-  body.append(el("label", { className: "doc-purpose-label", text: "Purpose" }));
+  body.append(el("label", { className: "doc-purpose-label", text: "Design note" }));
   const purpose = el("textarea", { className: "insp-input outcome-beat" });
   purpose.value = o.purpose ?? "";
   purpose.rows = 2;
-  purpose.placeholder = "What this outcome does";
+  purpose.placeholder = "For the team: what this outcome is for";
   bindField(purpose, { mode: "input", set: (v) => { o.purpose = v; }, commit });
   body.append(purpose);
 
@@ -1464,13 +1523,14 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     const declared = standalone() ? edit.rule?.slots ?? "unbounded" : templateNow?.slots ?? "unbounded";
     const slotsNow = /^\d+$/.test(edit.slots) ? Number(edit.slots)
       : (/^\d+$/.test(String(declared)) ? Number(declared) : undefined);
-    const bar = docTabs([
+    const specs = (): DocTabSpec[] => [
       { key: "cards", label: "Cards", ...(cards ? { count: tierCount(cards) } : {}) },
       { key: "dealing", label: "Dealing" },
       { key: "slots", label: "Slots", ...(slotsNow !== undefined ? { count: slotsNow } : {}) },
       { key: "properties", label: "Properties", count: (standalone() ? edit.properties?.length ?? 0 : 0) },
       ...extensionTabs(extHost(h).project(), "hand", detail.id),
-    ], tab, (next) => { setDocTab(tabKey, next); draw(); });
+    ];
+    const bar = docTabs(specs(), tab, (next) => { setDocTab(tabKey, next); draw(); }, specs);
     cardsTab = bar.firstElementChild as HTMLElement;
     view.append(bar);
 
@@ -1624,7 +1684,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       el("p", { text: "It happens when the game asks (arriving somewhere, starting a turn, opening a conversation) and never on its own." }),
       el("p", { text: "More cards are usually eligible than a hand has room for, so they are ranked and the best ones go. The settings below decide that order." })));
     view.append(el("div", { className: "doc-panel cfg-panel" },
-      cfgRow("Rank by specificity", "More specific cards win ties. Off, priority alone breaks them.",
+      cfgRow("Rank by specificity", "Special cases first: a card whose condition asks for more beats one that asks for less, at equal priority. Off, priority alone decides, and chance breaks ties.",
         cfgCheck(specificity, (v) => { specificity = v; h.saveBox(box.id, { ranking: { specificity: v } }); }))));
     // Only once the project is paired with a Patter project: otherwise there is nothing to perform.
     if (box.patter) {
@@ -1842,14 +1902,14 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
       menu: [{ label: deleteLabel("hand template"), danger: true, onClick: () => h.deleteTemplate(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
     }));
-    const holes = edit.bindings.filter((b) => b.hole).length;
-    const bound = edit.bindings.filter((b) => b.value !== undefined).length;
-    view.append(docTabs([
+    const specs = (): DocTabSpec[] => [
       { key: "dealing", label: "Dealing" },
-      { key: "bindings", label: "Bindings", count: bound + holes },
+      { key: "bindings", label: "Bindings",
+        count: edit.bindings.filter((b) => b.hole).length + edit.bindings.filter((b) => b.value !== undefined).length },
       { key: "properties", label: "Properties", count: edit.properties.length },
       ...extensionTabs(extHost(h).project(), "handTemplate", detail.id),
-    ], tab, (next) => { setDocTab(tabKey, next); draw(); }));
+    ];
+    view.append(docTabs(specs(), tab, (next) => { setDocTab(tabKey, next); draw(); }, specs));
 
     const extensionBody = extensionTabBody(extHost(h), tab, "handTemplate", detail.id);
     if (extensionBody !== undefined) {

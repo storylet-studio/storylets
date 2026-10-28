@@ -27,6 +27,26 @@ const boxes = [box, other];
 const problem = (path: string, over: Partial<Problem> = {}): Problem =>
   ({ severity: "error", path, message: "something is wrong", ...over });
 
+describe("an unresolved merge mark", () => {
+  // The mark's path is keyed by stable ids, and the problem carries no `where`:
+  // it used to land on the deck (the hands-on review, 2026-10, foundation 9).
+  const mark = (at: string): Problem => problem("harbour/decks/docks.storyletdeck", {
+    field: "unresolved",
+    message: `unresolved merge at ${at}: the shard holds our side of a clash; resolve it, then remove the entry from "unresolved"`,
+  });
+  it("lands on the card, on the tab its field is on", () => {
+    expect(problemTarget(mark("cards[c_1].condition"), boxes)).toEqual({ kind: "card", box: "b_1", deck: "k_1", card: "c_1", tab: "dealing" });
+    expect(problemNames(mark("cards[c_1].condition"), boxes)).toEqual({ title: "Ambush at the ford", where: "Docks" });
+  });
+  it("opens the outcome a clash is in", () => {
+    expect(problemTarget(mark("cards[c_1].outcomes[o_1].title"), boxes))
+      .toEqual({ kind: "card", box: "b_1", deck: "k_1", card: "c_1", tab: "outcomes", outcome: "o_1" });
+  });
+  it("falls back to the deck for a clash on the deck itself", () => {
+    expect(problemTarget(mark("deck.title"), boxes)).toEqual({ kind: "deck", box: "b_1", deck: "k_1" });
+  });
+});
+
 describe("the names a problem is spoken in", () => {
   it("names a card by its title, in its deck", () => {
     expect(problemNames(problem("harbour/decks/docks.storyletdeck", { where: "ambush" }), boxes))

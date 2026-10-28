@@ -33,7 +33,7 @@ import {
   findProjectDir, readProjectManifest, // merge: an extension shard merges by the project's own manifest
 } from "@storylet-studio/ops";
 import type { BoxKit, CardCoverage, GameKit, Issue, PlannedFileWrite, PlannedWrite } from "@storylet-studio/ops";
-import { EXTENSION_SCHEMA, contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
+import { EXTENSION_SCHEMA, bundleHostScopes, contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
 import pkg from "../package.json" with { type: "json" };
 import { libraryNotices, ownLicence } from "./notices.js";
 
@@ -79,7 +79,8 @@ Usage:
                  [--set path=value ...] [--seed N] [--deal-all]
                  (--deal-all deals every hand first, so claims are visible)
                  (--set takes the address listProperties prints: story.gold,
-                  world.time, box.street.mood, deck.wares.n, hand.the-elder.zone,
+                  world.time, player.hp (any host scope), box.street.mood,
+                  deck.wares.n, hand.the-elder.zone,
                   value.docks.danger - the owner named as you name it; where two
                   boxes name a tag the same, say which: value.harbour/docks.danger)
   storyletengine resolve <query> [path]  Find an item by gameId, id or title: which
@@ -95,7 +96,8 @@ Usage:
                                       DIR, else the version-control root above the
                                       project) with storylets.scopes.json and
                                       game.scopes.json; joins a folder that already
-                                      exists, adding @world only when it has none
+                                      exists, adding the project's host scopes
+                                      (@world, ...) only where it has none
   storyletengine pack [path] -o FILE   Pack a project into one portable
                  [--assets|--no-assets]  .storyletpack, to hand to someone with
                                       no shared version control (--assets carries
@@ -671,8 +673,10 @@ export async function run(
       // project that would not load or compile is not one, exit 1.
       const query = positionals[0];
       if (query === undefined) return usage(io, "usage", "no property given (e.g. @gold, story.act, @box.village.heat)");
-      if (parsePropertyQuery(query) === null) return usage(io, "usage", `"${query}" is not a property (e.g. @gold, story.act, @box.village.heat)`);
       const loaded = loadProject(positionals[1] ?? ".");
+      // Asked of the project's host scopes too, so `@player.hp` is a property where the game declares @player.
+      const hosts = new Set(loaded.source ? bundleHostScopes(loaded.source.project).map((h) => h.token) : []);
+      if (parsePropertyQuery(query, hosts) === null) return usage(io, "usage", `"${query}" is not a property (e.g. @gold, story.act, @box.village.heat)`);
       printIssues(loaded.issues, io);
       if (!loaded.source || hasError(loaded.issues)) return 1;
       const report = propertyUsageReport(loaded, query);
@@ -927,7 +931,7 @@ export async function run(
         io.log(`coverage: ${report.runs} run(s), seed ${report.seed}, max ${report.maxTurns} turns/run${asTime(report.maxTurns)}, ${report.turns} turns${asTime(report.turns)}, ${report.plays} plays`);
         io.log(report.drivers.length > 0
           ? `inputs driven: ${report.drivers.join(", ")}`
-          : "no input drivers: content gated on @world reads as never dealt");
+          : "no input drivers: content gated on @world (or any host scope) reads as never dealt");
         // How the runs ended, in the window's words: running to the cap is
         // what most runs of a branching story do, not a fault.
         const term = report.terminations;
@@ -960,13 +964,13 @@ export async function run(
           const mark = c.dealtRuns === 0 ? (hint ? "? " : "‼ ") : neverPlayed ? "! " : c.rare ? "~ " : "  ";
           const played = playableIds.has(c.id) ? String(c.played) : "n/a";
           io.log(`  ${mark}${sharePct(c.dealtRuns, report.runs).padStart(10)}  ${String(c.dealt).padStart(6)}  ${played.padStart(6)}  ${withDeck ? `[${deckLabel(c)}] ` : ""}${c.gameId}`);
-          // The remedy depends on the scope: a driver feeds @world (the host
-          // seam), so "add a driver" is only honest advice there. @story and
+          // The remedy depends on the scope: a driver feeds a host scope (@world,
+          // the game's seam), so "add a driver" is only honest advice there. @story and
           // @hand state is the content's own to write, and a misspelt name
           // never gets this far (it is a compile error), so what is left is a
           // declared property no outcome writes.
           if (c.unwrittenRefs) {
-            const anyWorld = c.unwrittenRefs.some((r) => r.startsWith("@world."));
+            const anyWorld = c.unwrittenRefs.some((r) => !r.startsWith("@story.") && !r.startsWith("@hand."));
             io.log(`        gated on ${c.unwrittenRefs.join(", ")}, which nothing writes${anyWorld ? " or drives (add a coverage driver?)" : ""}`);
           }
           // The second hop: a gate that IS written, but only by content that

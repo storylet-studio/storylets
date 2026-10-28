@@ -141,3 +141,39 @@ describe("copies becomes acrossHands", () => {
     expect(result.migrated.join()).toContain("2 cards' copies are now acrossHands");
   });
 });
+
+// Host scopes like Patter's (2026-10-28): format moves the project's `world`
+// block into `scopeRegistry` as the scope `world`, and an empty one just goes.
+describe("world becomes the host scope world", () => {
+  const proj = (dir: string): string => join(dir, "saltmarsh.storyletproj");
+  const rewrite = (dir: string, fn: (shard: Record<string, any>) => void): void => {
+    const shard = parseSource(readFileSync(proj(dir), "utf8")) as Record<string, any>;
+    fn(shard);
+    writeFileSync(proj(dir), canonicalStringify(shard));
+  };
+
+  it("moves the declarations, keeping a scope's other hosts, and says so", () => {
+    const dir = scratch();
+    let decls: unknown;
+    rewrite(dir, (s) => {
+      decls = s["scopeRegistry"].scopes[0].declarations;
+      s["world"] = { properties: decls, registry: {} };
+      s["scopeRegistry"] = { version: 1, scopes: [{ token: "player", declarations: [{ name: "hp", type: "number" }] }] };
+    });
+    const result = runFormat(loadProject(dir));
+    const written = parseSource(result.changed.find((w) => w.path === proj(dir))!.content) as Record<string, any>;
+    expect(written["world"]).toBeUndefined();
+    expect(written["scopeRegistry"].scopes.map((s: { token: string }) => s.token)).toEqual(["world", "player"]);
+    expect(written["scopeRegistry"].scopes[0].declarations).toEqual(decls);
+    expect(result.migrated.join()).toContain(`@world's declarations are now the host scope "world" in scopeRegistry`);
+  });
+
+  it("drops an empty world block", () => {
+    const dir = scratch();
+    rewrite(dir, (s) => { s["world"] = { properties: [] }; });
+    const result = runFormat(loadProject(dir));
+    const written = parseSource(result.changed.find((w) => w.path === proj(dir))!.content) as Record<string, any>;
+    expect(written["world"]).toBeUndefined();
+    expect(result.migrated.join()).toContain("the empty world block is gone");
+  });
+});

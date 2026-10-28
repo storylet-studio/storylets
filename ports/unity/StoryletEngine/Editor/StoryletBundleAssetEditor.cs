@@ -123,7 +123,7 @@ namespace StoryletStudio.StoryletEngine.Editor
                 EditorGUILayout.LabelField("  " + ScopeLabel(scope), EditorStyles.miniBoldLabel);
                 if (scope.Properties.Count == 0)
                 {
-                    EditorGUILayout.LabelField("    (none declared)");
+                    EditorGUILayout.LabelField(scope.Opaque ? "    (opaque: any name)" : "    (none declared)");
                     continue;
                 }
                 foreach (var p in scope.Properties)
@@ -134,13 +134,14 @@ namespace StoryletStudio.StoryletEngine.Editor
         }
 
         /// <summary>The scope label a declaration block files under ("world",
-        /// "box box", "tag docks (zone)").</summary>
+        /// "player", "box box", "tag docks (zone)").</summary>
         internal static string ScopeLabel(PropertyScopeSummary scope)
         {
             if (scope.Scope == PropertyScopeKinds.World || scope.Scope == PropertyScopeKinds.Story)
             {
                 return scope.Scope;
             }
+            if (scope.Scope == PropertyScopeKinds.Host) return scope.Owner;
             string group = string.IsNullOrEmpty(scope.Group) ? "" : $" ({scope.Group})";
             return $"{scope.Scope} {scope.Owner}{group}";
         }

@@ -266,7 +266,7 @@ describe("the Hamlet client", () => {
     expect(checkWorld(s, strict).join("\n")).toMatch(/time_of_day is writable in the storylet project and read-only in the Patter project/);
     // A card writing a property Patter holds read-only: legal on our side, so only this catches it.
     const writes = structuredClone(s);
-    writes.world.properties.find((d: { name: string }) => d.name === "time_of_day").writable = false;
+    writes.scopeRegistry.scopes.find((s: { token: string }) => s.token === "world").declarations.find((d: { name: string }) => d.name === "time_of_day").writable = false;
     writes.boxes[0].decks[0].cards[0].outcomes[0].changes = { "@world.time_of_day": { src: "\"night\"", ast: ["s", "night"] } };
     expect(checkWorld(writes, strict).join("\n")).toMatch(/writes @world\.time_of_day, which the Patter project declares read-only/);
   });

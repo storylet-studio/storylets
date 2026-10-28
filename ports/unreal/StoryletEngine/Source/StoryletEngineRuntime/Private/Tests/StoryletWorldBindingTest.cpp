@@ -1,5 +1,6 @@
 // The bound-@world seam at the UE boundary (the core's own behaviour is held
-// by the conformance corpus): a UStoryletWorld given to Create is read by the
+// by the conformance corpus): a UStoryletWorld given to Create as the host
+// scope "world" is read by the
 // engine, written by outcomes, refuses the game's read-only names, rides in a
 // save and is restored by a load, and survives ApplyLiveBundle. Runs via
 // -ExecCmds="Automation RunTests StoryletEngine.World".
@@ -89,9 +90,11 @@ bool FStoryletWorldBindingTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("weather is the game's"), World->IsReadOnly(TEXT("weather")));
 	TestFalse(TEXT("knows_road is not"), World->IsReadOnly(TEXT("knows_road")));
 
-	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, 0, false, World);
+	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, { { TEXT("world"), World } });
 	if (!TestNotNull(TEXT("engine with world"), Engine)) return false;
-	TestEqual(TEXT("GetBoundWorld"), Engine->GetBoundWorld(), World);
+	TestEqual(TEXT("GetHostScope(\"world\")"), Engine->GetHostScope(TEXT("world")), World);
+	TestNull(TEXT("a token is case-sensitive"), Engine->GetHostScope(TEXT("World")));
+	TestEqual(TEXT("GetBoundWorld, the deprecated name, still answers"), Engine->GetBoundWorld(), World);
 
 	UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
 	if (!TestNotNull(TEXT("flow opens"), Flow)) return false;
@@ -118,6 +121,7 @@ bool FStoryletWorldBindingTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("road dealt once known"), HandHas(Hand, TEXT("road")));
 
 	// --- the game's read-only policy refuses the story, not the host ------------
+	AddExpectedError(TEXT("game's alone"), EAutomationExpectedErrorFlags::Contains, 1);   // every refusal is logged
 	TestFalse(TEXT("rain refused"), Flow->Play(TEXT("inn"), TEXT("rain"), TEXT("board"), Error));
 	TestTrue(TEXT("refusal names the policy"), Error.Contains(TEXT("game's alone")));
 	TestFalse(TEXT("weather untouched"), World->Has(TEXT("weather")));
@@ -136,7 +140,7 @@ bool FStoryletWorldBindingTest::RunTest(const FString& Parameters)
 
 	// --- the binding survives a live refresh -------------------------------------
 	TestTrue(TEXT("live refresh"), Engine->ApplyLiveBundle(Bundle, Error));
-	TestEqual(TEXT("still bound"), Engine->GetBoundWorld(), World);
+	TestEqual(TEXT("still bound"), Engine->GetHostScope(TEXT("world")), World);
 	World->SetBool(TEXT("knows_road"), false);
 	Flow = Engine->GetFlow(TEXT("main"));
 	if (!TestNotNull(TEXT("flow survives refresh"), Flow)) return false;
@@ -144,9 +148,9 @@ bool FStoryletWorldBindingTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("road gated again through the same container"), HandHas(Hand, TEXT("road")));
 
 	// --- and the self-backed path is unchanged -------------------------------------
-	UStoryletEngine* Plain = UStoryletEngine::Create(Bundle);
+	UStoryletEngine* Plain = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("self-backed engine"), Plain)) return false;
-	TestNull(TEXT("no world bound"), Plain->GetBoundWorld());
+	TestNull(TEXT("no world bound"), Plain->GetHostScope(TEXT("world")));
 	UStoryletFlow* PlainFlow = Plain->OpenFlow(TEXT("main"));
 	TestEqual(TEXT("self-backed reads the default"), PlainFlow->GetPropertyString(TEXT("world.time_of_day")), FString(TEXT("day")));
 	return true;

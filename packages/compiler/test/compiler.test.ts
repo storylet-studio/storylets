@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
+import { hostScopeDecls } from "@storylet-studio/model";
 import { fileURLToPath } from "node:url";
 import {
   boxMapOf, bundleIsFresh, canonicalCollections, canonicalStringify, compileMaps, compileProject,
@@ -283,7 +284,7 @@ describe("the map's geometry carries where the hands stand", () => {
   it("ships in the bundle as map.geometry, beside the group the engine reads", () => {
     const { bundle, issues } = compileProject(drawn({ h_1: { x: 7, y: 8 } }));
     expect(errors(issues)).toEqual([]);
-    expect(bundle!.schema).toBe("storylets/bundle@1");
+    expect(bundle!.schema).toBe("storylets/bundle@2");
     expect(bundle!.map!.group).toEqual({ id: "g_1", gameId: "zone", tags: [{ id: "v_1", gameId: "docks" }] });
     expect(bundle!.map!.geometry).toEqual({
       zones: [{ tag: "docks", polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] }],
@@ -878,7 +879,7 @@ describe("publish-gate validation", () => {
     const result = worldProject([{ ...clock, writable: false }],
       [{ id: "c_1", gameId: "c1", condition: "@world.clock > 3", outcomes: [] }]);
     expect(errors(result.issues)).toEqual([]);
-    expect(result.bundle!.world.properties[0]).toMatchObject({ name: "clock", writable: false });
+    expect(hostScopeDecls(result.bundle!, "world")[0]).toMatchObject({ name: "clock", writable: false });
   });
 
   it("treats an absent flag as writable, which is every project written before the flag existed", () => {
@@ -1322,7 +1323,7 @@ describe("publish-gate validation", () => {
       expect(errors(result.issues)).toEqual([]);
       const b = result.bundle!;
       expect(b.story.properties.map((d) => [d.name, d.default])).toEqual([["met", false], ["act", "arrival"]]);
-      expect(b.world.properties.map((d) => [d.name, d.default])).toEqual([["gold", 0]]);
+      expect(hostScopeDecls(b, "world").map((d) => [d.name, d.default])).toEqual([["gold", 0]]);
       expect(b.boxes[0]!.decks[0]!.properties.map((d) => [d.name, d.default])).toEqual([["mood", "calm"]]);
     });
 

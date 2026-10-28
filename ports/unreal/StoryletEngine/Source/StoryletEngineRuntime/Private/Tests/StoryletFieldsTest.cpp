@@ -55,7 +55,7 @@ bool FStoryletFieldsTest::RunTest(const FString& Parameters)
 	FString Error;
 	UStoryletBundle* Bundle = UStoryletBundle::LoadFromJsonString(FieldsBundleJson, Error);
 	if (!TestNotNull(TEXT("the bundle compiles"), Bundle)) return false;
-	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+	UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("engine created"), Engine)) return false;
 	UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
 	if (!TestNotNull(TEXT("flow opened"), Flow)) return false;

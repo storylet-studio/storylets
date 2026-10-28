@@ -5,8 +5,9 @@
 //
 //   - every write of the project shard brings the Storylet Engine's own file
 //     (`storylets.scopes.json`) up to date, and rewrites the project's copy of
-//     `@world` from the game's file, in the same undoable step;
-//   - the World settings write the game's file first, then that copy;
+//     each host scope (`@world`, `@player`, ...) from the game's file, in the
+//     same undoable step;
+//   - the Host scopes settings write the game's file first, then that copy;
 //   - what the renderer and the Board are told about the folder.
 //
 // With no folder, every function here is the identity or says nothing, so a
@@ -16,15 +17,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import {
-  canonicalStringify, fromScopeDeclaration, gameTokens, parseSource, sharedWorld, storyletsScopesFile, STORYLETS_SCOPES_FILE,
+  canonicalStringify, fromScopeDeclaration, gameTokens, parseSource, projectHostScopes, sharedWorld, storyletsScopesFile, STORYLETS_SCOPES_FILE,
 } from "@storylet-studio/compiler";
 import type { SourceProject } from "@storylet-studio/compiler";
 import { OWN_SCOPES } from "@storylet-studio/dialect";
-import { planGameWorld } from "@storylet-studio/ops";
+import { planGameHostScopes, planGameScopes } from "@storylet-studio/ops";
 import type { LoadedProject, UnpackMergeResult } from "@storylet-studio/ops";
-import type { ProjectShard, PropertyDecl } from "@storylet-studio/model";
+import { bundleHostScopes, hostScopeSpec, migrateLegacyWorld } from "@storylet-studio/model";
+import type { HostScopeSpec, ProjectShard, PropertyDecl } from "@storylet-studio/model";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, parseScopesFile, serialiseScopesFile } from "@wildwinter/scoperegistry/scopes";
-import type { BoardScopesDto, ConditionProperty, GameScopesDto, PackMergeSummary } from "../shared/api.js";
+import type { BoardScopesDto, ConditionProperty, GameScopesDto, HostTokensDto, PackMergeSummary } from "../shared/api.js";
 import type { FileState } from "./history.js";
 
 const read = (path: string): string | null => (existsSync(path) ? readFileSync(path, "utf8") : null);
@@ -48,18 +50,36 @@ export function withGameScopes(source: SourceProject | undefined, dir: string, w
   let shard: ProjectShard;
   try { shard = parseSource(out[index]!.content!) as ProjectShard; } catch { return writes; }
 
-  // The synced copy of @world, from whichever file declares it (game.scopes.json, by the design).
-  const worldFile = join(gameScopes.dir, gameScopes.merged.owners.get("world")?.fileName ?? GAME_SCOPES_FILE);
-  const worldText = out.find((w) => w.path === worldFile)?.content ?? read(worldFile);
-  const world = worldText === null ? undefined
-    : parseScopesFile(worldText, GAME_SCOPES_FILE).file?.scopes.find((s) => s.token === "world");
-  if (world?.declarations) {
-    const copy: PropertyDecl[] = world.declarations.map((d) => fromScopeDeclaration(d, world.writable));
-    if (canonicalStringify(copy) !== canonicalStringify(shard.world.properties)) {
-      shard.world.properties = copy;
-      out[index] = { path: projectPath, content: canonicalStringify(shard) };
-    }
+  // The synced copy of each host scope the project declares, and of @world always, from
+  // whichever file in the folder declares it (game.scopes.json, by the design). A scope the
+  // folder declares opaque, or not at all, says nothing to copy: the project's own stands.
+  const tokens = [...new Set(["world", ...bundleHostScopes(shard).map((h) => h.token)])];
+  const texts = new Map<string, string | null>();
+  let changed = false;
+  for (const token of tokens) {
+    const file = join(gameScopes.dir, gameScopes.merged.owners.get(token)?.fileName ?? GAME_SCOPES_FILE);
+    if (file === join(gameScopes.dir, STORYLETS_SCOPES_FILE)) continue;
+    if (!texts.has(file)) texts.set(file, out.find((w) => w.path === file)?.content ?? read(file));
+    const text = texts.get(file)!;
+    const theirs = text === null ? undefined : parseScopesFile(text, GAME_SCOPES_FILE).file?.scopes.find((x) => x.token === token);
+    if (!theirs?.declarations) continue;
+    const copy: HostScopeSpec = {
+      token,
+      ...(theirs.writable !== undefined ? { writable: theirs.writable } : {}),
+      declarations: theirs.declarations.map((d) => fromScopeDeclaration(d)),
+    };
+    const mine = hostScopeSpec(shard, token);
+    if (mine !== undefined && canonicalStringify(copy) === canonicalStringify(mine)) continue;
+    // An empty scope the project doesn't declare is no scope to copy.
+    if (mine === undefined && copy.declarations!.length === 0 && copy.writable === undefined) continue;
+    migrateLegacyWorld(shard);
+    const registry = shard.scopeRegistry ?? { version: 1, scopes: [] };
+    const at = registry.scopes.findIndex((x) => x.token === token);
+    if (at >= 0) registry.scopes[at] = copy; else registry.scopes.push(copy);
+    shard.scopeRegistry = registry;
+    changed = true;
   }
+  if (changed) out[index] = { path: projectPath, content: canonicalStringify(shard) };
 
   // The Storylet Engine's own file: what the other tools read of this project.
   const ours = join(gameScopes.dir, STORYLETS_SCOPES_FILE);
@@ -69,16 +89,79 @@ export function withGameScopes(source: SourceProject | undefined, dir: string, w
 }
 
 /**
- * The World settings' write when the game shares its scopes: `game.scopes.json` with its
- * `world` replaced (re-read now, every other scope in it kept), to go FIRST in the batch,
- * ahead of the project's copy. Nothing when there is no folder or the file already says it.
+ * Is `token` one the game's own file holds: not the Storylet Engine's own, and not one another
+ * tool's file in the folder claims (Patter's `isGameToken`)? Such a token is the project's alone.
  */
-export function gameWorldWrite(source: SourceProject | undefined, world: PropertyDecl[]): FileState[] | { error: string } {
+function isGameToken(source: SourceProject, token: string): boolean {
+  if ((OWN_SCOPES as readonly string[]).includes(token) && token !== "world") return false;
+  const who = source.gameScopes?.merged.owners.get(token);
+  return who === undefined || who.fileName === GAME_SCOPES_FILE;
+}
+
+/**
+ * The write a single host scope's declarations make when the game shares its scopes (the
+ * declare quick fix, a stage or property rename): `game.scopes.json` with that scope's
+ * declarations replaced (re-read now, every other scope in it kept), to go FIRST in the batch,
+ * ahead of the project's copy. Nothing when there is no folder, another tool's file claims the
+ * token, or the file already says it.
+ */
+export function gameScopeWrite(source: SourceProject | undefined, token: string, decls: PropertyDecl[]): FileState[] | { error: string } {
   const gameScopes = source?.gameScopes;
-  if (!gameScopes) return [];
-  const planned = planGameWorld(gameScopes.dir, world);
+  if (!gameScopes || !isGameToken(source!, token)) return [];
+  const planned = planGameScopes(gameScopes.dir, { [token]: decls });
   if ("error" in planned) return planned;
   return planned.write ? [{ path: planned.write.path, content: planned.write.content }] : [];
+}
+
+/** `@world`'s write (`gameScopeWrite(source, "world", world)`). */
+export function gameWorldWrite(source: SourceProject | undefined, world: PropertyDecl[]): FileState[] | { error: string } {
+  return gameScopeWrite(source, "world", world);
+}
+
+/**
+ * The Host scopes settings' write when the game shares its scopes: `game.scopes.json` with each
+ * of the project's host scopes written as the settings left it (its `writable`, and its
+ * declarations or none when opaque), each one the settings renamed renamed where it stands, and
+ * each one the settings showed and no longer hold taken out. Every other scope in the file stays
+ * as it was. To go FIRST in the batch.
+ */
+export function gameHostScopesWrite(
+  source: SourceProject | undefined, scopes: HostScopeSpec[], removed: string[], renames: Readonly<Record<string, string>> = {},
+): FileState[] | { error: string } {
+  const gameScopes = source?.gameScopes;
+  if (!gameScopes) return [];
+  const ours = Object.fromEntries(Object.entries(renames).filter(([from]) => isGameToken(source!, from)));
+  const planned = planGameHostScopes(gameScopes.dir,
+    scopes.filter((h) => isGameToken(source!, h.token)), removed.filter((t) => isGameToken(source!, t)), ours);
+  if ("error" in planned) return planned;
+  return planned.write ? [{ path: planned.write.path, content: planned.write.content }] : [];
+}
+
+/**
+ * The host scopes Project Settings shows: the project's own, `@world` first and always there,
+ * each one the folder declares with declarations taken from there (the shared file is the
+ * source; the project holds a synced copy), and `@world` from the folder when the project has
+ * none. A scope the folder declares opaque, or not at all, is the project's own.
+ */
+export function settingsHostScopes(source: SourceProject): HostScopeSpec[] {
+  const merged = source.gameScopes?.merged;
+  const fromFolder = (token: string): HostScopeSpec | undefined => {
+    const s = token === "story" ? undefined : merged?.spec.scopes.find((x) => x.token === token);
+    return s?.declarations === undefined ? undefined : {
+      token, ...(s.writable !== undefined ? { writable: s.writable } : {}), declarations: s.declarations.map((d) => fromScopeDeclaration(d)),
+    };
+  };
+  const own = bundleHostScopes(source.project).map((h) => fromFolder(h.token) ?? h);
+  const world = own.find((h) => h.token === "world") ?? fromFolder("world") ?? { token: "world", declarations: [] };
+  return [world, ...own.filter((h) => h.token !== "world")];
+}
+
+/** The project's own host tokens besides `@world`, for the renderer's expression dialect
+ *  (`projectHostScopes`, so the folder's say wins as the compiler's does). Undefined when none. */
+export function hostTokensDto(source: SourceProject): HostTokensDto | undefined {
+  const hosts = projectHostScopes(source).map((h) => h.spec).filter((h) => !(OWN_SCOPES as readonly string[]).includes(h.token));
+  if (hosts.length === 0) return undefined;
+  return { tokens: hosts.map((h) => h.token), opaque: hosts.filter((h) => h.declarations === undefined).map((h) => h.token) };
 }
 
 /** The folder, as the renderer's expression editors need it. */
@@ -117,14 +200,16 @@ export const worldFileLabel = (source: SourceProject): string | undefined =>
   (source.gameScopes ? `${GAME_SCOPES_DIR}/${source.gameScopes.merged.owners.get("world")?.fileName ?? GAME_SCOPES_FILE}` : undefined);
 
 /** The other tools' properties for the picker: every declared scope in the folder except the
- *  engine's own (`@world` among them, which the project's catalogue already carries from the
- *  shared file), each with who declares it. */
+ *  engine's own (`@world` among them) and the project's host scopes (which the project's
+ *  catalogue already carries, from the shared file where it declares them), each with who
+ *  declares it. */
 export function otherToolsCatalogue(source: SourceProject): ConditionProperty[] {
   const merged = source.gameScopes?.merged;
   if (!merged) return [];
+  const hosts = new Set(bundleHostScopes(source.project).map((h) => h.token));
   const out: ConditionProperty[] = [];
   for (const s of merged.spec.scopes) {
-    if ((OWN_SCOPES as readonly string[]).includes(s.token)) continue;
+    if ((OWN_SCOPES as readonly string[]).includes(s.token) || hosts.has(s.token)) continue;
     const owner = merged.owners.get(s.token)?.owner;
     for (const d of s.declarations ?? []) {
       out.push({

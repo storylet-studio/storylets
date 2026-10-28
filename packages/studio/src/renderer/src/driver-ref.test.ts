@@ -14,7 +14,7 @@ const mount = (declared: string[] = ["danger", "phase"]) => {
   const host = document.createElement("div");
   const known = [...declared];
   const handle = mountDriverList(host, [{ ref: "@world.danger", kind: "recurring", values: [1, 2] }], {
-    knownWorldProperties: () => known,
+    hostScopes: () => [{ token: "world", names: known }],
   });
   const field = host.querySelector<HTMLInputElement>("input.set-name")!;
   return { host, handle, field, rename: (from: string, to: string) => { known[known.indexOf(from)] = to; } };
@@ -57,5 +57,55 @@ describe("a coverage-driver ref", () => {
     const { host, field } = mount();
     const list = host.querySelector(`datalist#${field.getAttribute("list")}`);
     expect([...list!.querySelectorAll("option")].map((o) => o.value)).toEqual(["danger", "phase"]);
+  });
+});
+
+describe("drivers on every host scope", () => {
+  const scopes = [
+    { token: "world", names: ["danger"] },
+    { token: "player", names: ["hp"] },
+    { token: "weather", names: [], opaque: true },
+  ];
+  const mountMany = (drivers: { ref: string; kind: "recurring"; values: number[] }[]) => {
+    const host = document.createElement("div");
+    const handle = mountDriverList(host, drivers, { hostScopes: () => scopes });
+    return { host, handle, drivers };
+  };
+
+  it("keeps @world fixed while it is the only scope", () => {
+    const host = document.createElement("div");
+    mountDriverList(host, [{ ref: "@world.danger", kind: "recurring", values: [1] }], { hostScopes: () => [{ token: "world", names: ["danger"] }] });
+    expect(host.querySelector("select.set-scope")).toBeNull();
+    expect(host.querySelector(".set-scope")!.textContent).toBe("@world.");
+  });
+
+  it("offers the scopes as a choice once there are more, and checks the name against the chosen one", () => {
+    const { host, drivers } = mountMany([{ ref: "@player.hp", kind: "recurring", values: [1] }]);
+    const pick = host.querySelector<HTMLSelectElement>("select.set-scope")!;
+    expect([...pick.options].map((o) => o.value)).toEqual(["world", "player", "weather"]);
+    expect(pick.value).toBe("player");
+    const field = host.querySelector<HTMLInputElement>("input.set-name")!;
+    type(field, "hp");
+    expect(field.classList.contains("illegal")).toBe(false);
+    pick.value = "world";
+    pick.dispatchEvent(new Event("change"));
+    expect(drivers[0]!.ref).toBe("@world.hp");
+    type(field, "hp");
+    expect(field.classList.contains("illegal")).toBe(true);
+  });
+
+  it("takes any name on an opaque scope", () => {
+    const { host } = mountMany([{ ref: "@weather.rain", kind: "recurring", values: [1] }]);
+    const field = host.querySelector<HTMLInputElement>("input.set-name")!;
+    type(field, "rain");
+    expect(field.classList.contains("illegal")).toBe(false);
+  });
+
+  it("does not call the same name on two scopes a clash", () => {
+    const { handle } = mountMany([
+      { ref: "@world.danger", kind: "recurring", values: [1] },
+      { ref: "@weather.danger", kind: "recurring", values: [1] },
+    ]);
+    expect(handle.firstInvalid?.() ?? null).toBeNull();
   });
 });

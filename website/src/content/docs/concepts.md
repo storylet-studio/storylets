@@ -131,7 +131,7 @@ State lives in exactly five places.
 
 | Scope | What it holds |
 |---|---|
-| `@world` | Your game's own state, declared on the project. If you also run Patter, this is the state the two share. |
+| `@world` | Your game's own state, declared on the project. If you also run Patter, this is the state the two share. A game can declare more scopes of its own beside it, such as `@player`: together they're its host scopes. |
 | `@story` | The story's internal global state, so cards in any box can share information with other cards. |
 | `@box` | Properties declared on a box, so cards about encounters can share encounter information. |
 | `@deck` | Properties declared on a deck. If a deck is a storyline, it can have its own local properties. |

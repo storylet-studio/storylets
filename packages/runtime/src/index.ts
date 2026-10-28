@@ -4,12 +4,12 @@ export { DURABLE_SCHEMA, Engine, Flow, StoryletError } from "./engine.js";
 // re-exported so a host typing a row needs no dependency on the kernel.
 export type { PropertyRow } from "@wildwinter/scoperegistry";
 export type {
-  BagMount, BoxView, DealtCard, DurableSave, EngineLogEntry, EngineOptions, EngineTraceHandler, LogEntry, OpenFlowOptions,
+  BagMount, BoxView, DealtCard, DurableSave, EngineLogEntry, EngineOptions, EngineTraceHandler, HostScope, LogEntry, OpenFlowOptions,
   OutcomeView, PlayError, PlayOptions, RankedList, TraceEvent, TraceHandler, TraceVerdict,
 } from "./engine.js";
 // What the game hands the engine and gets back from a load, so a host can type
 // them with no dependency on the model package (the hands-on review, 2026-10).
-export type { Bundle, LoadReport, SaveEnvelope } from "@storylet-studio/model";
+export type { Bundle, HostScopeDecl, HostScopeRegistry, HostScopeSpec, LoadReport, SaveEnvelope } from "@storylet-studio/model";
 export { describeBundle } from "./describe.js";
 export type {
   BoxSummary, BundleDescription, BundleIdentity, HandSummary, MapSummary, MovableHole,

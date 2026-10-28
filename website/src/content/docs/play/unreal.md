@@ -36,7 +36,10 @@ compiles a bundle from a string at runtime.
 ## Create an engine and a flow
 
 ```cpp
-UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, /*Seed=*/7, /*bRetainLog=*/true);
+FStoryletEngineOptions Options;
+Options.Seed = 7;
+Options.bLog = true;
+UStoryletEngine* Engine = UStoryletEngine::CreateWithOptions(Bundle, Options, {});
 UStoryletFlow*   Flow   = Engine->OpenFlow(TEXT("main"));
 Engine->RegisterForDebug(TEXT("main"));   // optional: lets the state panel watch it
 ```
@@ -44,11 +47,14 @@ Engine->RegisterForDebug(TEXT("main"));   // optional: lets the state panel watc
 `Create` returns null, and logs why, when the bundle is uncompiled or is one the engine can't
 read faithfully, such as a bundle that breaks the project map's rules. That error starts
 `bundle refused:` and lists every problem, so check the result before opening a flow.
+`Create(Bundle, {})` is the same engine with the default seed and no log. The last argument
+binds your game's own state ([below](#your-games-state)); `{}` binds none.
 
-The **engine** owns the bundle, the shared state, and `@world`. A **flow** is one playthrough
+The **engine** owns the bundle, the shared state, and your game's host scopes (`@world`, and
+any others the project declares). A **flow** is one playthrough
 across it, and all the dealing and playing happens on a flow, so a single-player game opens
 one, calls it what it likes, and never thinks about it again. The same seed always deals the
-same cards. `bRetainLog` keeps the event logs so the state panel, or a Blueprint polling
+same cards. `bLog` keeps the event logs so the state panel, or a Blueprint polling
 `Log()`, can read them. There are two. `Flow->Log()` is that flow's own, and
 `Engine->GetRunLog()` is the run's: every flow's events in one order, each entry naming its
 `Flow`. The run log is the only place a story action in another flow moving shared state
@@ -99,27 +105,35 @@ after it.
 
 ## Your game's state
 
-Give the engine your `@world` values in a `UStoryletWorld` when you create it. The engine
-reads them through it before every deal, outcomes write back into it, and anything else you
-bind to the same object sees the same values:
+Give the engine your `@world` values in a `UStoryletWorld` when you create it, under the
+scope's token. The engine reads them through it before every deal, outcomes write back into
+it, and anything else you bind to the same object sees the same values:
 
 ```cpp
 UStoryletWorld* World = NewObject<UStoryletWorld>(this);
 World->SetString(TEXT("time_of_day"), TEXT("night"));
 World->SetReadOnly(TEXT("time_of_day"), true);   // yours alone: a story write is refused
-UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, 0, false, World);
+UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, { { TEXT("world"), World } });
 
 bool Known = World->GetBool(TEXT("knows_road"));   // what the story has told you
 World->OnChanged.AddDynamic(this, &AMyGame::OnWorldChanged);   // (Name, Value, bFromStory)
 ```
 
+The map takes any scope the project declares, by its token without the `@`: bind a second
+container as `{ TEXT("player"), Player }` for `@player`, and so on. `GetHostScope(TEXT("world"))`
+hands back the container bound under a token. Tokens are case-sensitive: a token the bundle
+doesn't declare binds nothing the story reads, and is reported through `OnError` with the kind
+`setup`, naming the declared spelling when only the case differs. Since `OnError` can only be
+bound once `Create` has returned, that report is logged as a Warning at once and reaches
+`OnError` when you open the first flow. This is Patterplay's `Create`, parameter for parameter.
+
 `SetReadOnly` is your policy. A story write to that name makes `Play` return false with
 `@world.x is the game's alone`. It is distinct from `writable: false` on the property's
 declaration, which is the story's own promise, checked when the project compiles and refused
 by every runtime. Your own `Set*` calls and a load are never refused by either. Your game keeps
-a bound world's values, so the engine never saves them. Leave the world out and the engine
-self-backs `@world` from the declared defaults, written through the path accessors below, and
-saves it with everything else.
+a bound world's values, so the engine never saves them. Leave a scope out and the engine
+self-backs it from its declared defaults, written through the path accessors below
+(`TEXT("player.hp")`), and saves it with everything else.
 
 The other properties cross the Blueprint boundary through typed accessors, path-addressed:
 
@@ -142,8 +156,8 @@ enum options. The paths, and when to write them, are on [Your game's state](/pla
 Every property value lives in a **registry**, a `storylets::ScopeRegistry`, one per game. An
 engine you build with `Create` makes its own registry and acts as its own game, so a game with
 one engine never has to think about it. A game running more than one engine,
-[Patter](/play/with-patter/) say, makes one registry, registers `@world` in it, and hands it to
-each engine. From C++:
+[Patter](/play/with-patter/) say, makes one registry, registers `@world` (and any other host
+scope) in it, and hands it to each engine. From C++:
 
 ```cpp
 #include "Storylets/Kernel.h"   // storylets::ScopeRegistry: the shared kernel's
@@ -154,7 +168,9 @@ storylets::OwnedScopeOptions Options;
 Options.owner = std::string("Game");
 Registry->defineOwned("world", WorldDeclarations, Options);   // stored and saved with the rest
 
-UStoryletEngine* Engine = UStoryletEngine::CreateWithRegistry(Bundle, Registry, /*Seed=*/7);
+FStoryletEngineOptions EngineOptions;
+EngineOptions.Seed = 7;
+UStoryletEngine* Engine = UStoryletEngine::CreateWithRegistry(Bundle, Registry, {}, EngineOptions);
 ```
 
 `CreateWithRegistry` is C++ only: the registry is a standard C++ object shared by pointer, and
@@ -173,10 +189,10 @@ registry yourself throws the kernel's `wildwinter::expr::RegistryError`.
 
 The engine registers `@story` under `story`, and every other bag that declares something under
 a key starting `storylets/`, which no expression can name. Given your registry, it registers
-nothing for `@world`: that's yours. `defineOwned` has the registry store and save it, and
-`defineForeign("world", Resolver, &Declarations, Options)` keeps it in your game, where nothing
-saves it. Passing a `UStoryletWorld` to `CreateWithRegistry` registers that world in your
-registry for you.
+nothing for `@world` or any other host scope: those are yours. `defineOwned` has the registry
+store and save one, and `defineForeign("world", Resolver, &Declarations, Options)` keeps it in
+your game, where nothing saves it. A `UStoryletWorld` you pass to `CreateWithRegistry` under a
+token is registered in your registry for you.
 
 Every expression reads every scope in the registry, and `GetPropertyNumber(TEXT("patter.gold"))`
 and its setters reach another engine's values from your code. A card can name Patter's

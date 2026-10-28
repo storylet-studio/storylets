@@ -22,7 +22,8 @@ Four assemblies, the Patterplay split applied verbatim, plus the shared kernel:
   a game assembly definition that references this package.
 - `Runtime/` (`StoryletEngine.Runtime`) - pure C#, no UnityEngine, no JSON
   library. The storylets dialect, the bundle model, and the play
-  surface (`Engine`: the bundle, the shared state, `@world`, the run log and
+  surface (`Engine`: the bundle, the shared state, the host scopes (`@world`,
+  `@player`, ...), the run log and
   the flow manager; `Flow`: deal / peek / play / outcomes / board / turns / trace /
   property access), and `StoryletLiveLink`, the game-side Live Link
   client (a worker-thread `ClientWebSocket`; see below).
@@ -53,11 +54,13 @@ Four assemblies, the Patterplay split applied verbatim, plus the shared kernel:
 Every property value lives in a `ScopeRegistry`, one per game. Pass the game's as
 `new Engine(bundle, new EngineOptions { Registry = registry })` to share it with any other
 engine (Patter, say): the engine registers `@story` under `story` and every other bag under
-a key starting `storylets/`, `@world` is the game's to register (`DefineOwned` to have the
-registry store and save it, `DefineForeign` with a resolver to keep it yourself), and
-`SaveGame()` leaves the values to the game, which saves `registry.Save()` once and loads it
-before or after `LoadGame`. Without one the engine makes its own registry, self-backs
-`@world`, and `SaveGame()` carries every value, so one call is still the whole run.
+a key starting `storylets/`, the host scopes the bundle declares (`@world`, `@player`, ...)
+are the game's to register (`DefineOwned` to have the registry store and save one,
+`DefineForeign` with a resolver to keep it yourself), and `SaveGame()` leaves the values to
+the game, which saves `registry.Save()` once and loads it before or after `LoadGame`. Without
+one the engine makes its own registry, self-backs every host scope you don't bind through
+`EngineOptions.HostScopes`, and `SaveGame()` carries every value, so one call is still the
+whole run.
 `storylets/save@2` and `storylets/save@1` envelopes still load. A card may name another engine's scope
 (`@patter.visits`) with no setting: it is read and written through the registry, and
 `OpenFlow` and `LoadGame` refuse content that names one no engine on the registry registered. See

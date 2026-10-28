@@ -216,7 +216,8 @@ export interface SourceProject {
    *  it does. Optional as `extensions` is. */
   manifests?: SourceManifest[];
   /** The game's shared scopes, when the loader found a folder (it reads files, so the
-   *  parser never sets this). The compiler takes `@world` from it and checks references
-   *  into the other tools' scopes against it. */
+   *  parser never sets this). The compiler takes the game's own scopes from it where
+   *  it declares them (`@world` always), and checks references into the other tools'
+   *  scopes against it. */
   gameScopes?: GameScopes;
 }

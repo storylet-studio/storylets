@@ -9,21 +9,29 @@
 # "__node" cache key on each {src, ast} envelope, idempotently).
 class_name StoryletBundle
 
-## The bundle schema this build of the format writes: @1 since the project map
-## (design/project-map-contract.md 2.4), the bundle that can carry "map" and a
-## box's "usesMap".
+## The bundle schema this build of the format writes: @2 since host scopes
+## (2026-10-28), the bundle whose game scopes are "scopeRegistry" and which has
+## no "world" block. @1 was the project map's (design/project-map-contract.md
+## 2.4), the bundle that can carry "map" and a box's "usesMap".
 ##
-## The runtime READS @0 and @1 and refuses anything else, by name. Reading @0 is
+## @2 is a new number because the "world" block is GONE, not added to: a
+## runtime that reads only @1 would reach for "world" and fail, where a schema
+## it does not know is refused by name.
+##
+## The runtime READS @0, @1 and @2 and refuses anything else, by name. Reading @0 is
 ## not a compatibility branch: an @0 bundle cannot carry a map, so it is the
 ## same shape with less in it. The check exists so that a runtime meeting a
 ## schema it does not know says so, rather than half-working the way an @0
 ## runtime does on a map bundle (tag matching is by id, so its deals look right
 ## while every zone value is missing).
-const BUNDLE_SCHEMA := "storylets/bundle@1"
+const BUNDLE_SCHEMA := "storylets/bundle@2"
+## The project map's schema, before host scopes: the game's scopes were one
+## "world" block. Still read, its "world.properties" as the host scope `world`.
+const BUNDLE_SCHEMA_V1 := "storylets/bundle@1"
 ## The schema before the project map, still read.
 const BUNDLE_SCHEMA_V0 := "storylets/bundle@0"
 ## Every bundle schema this runtime accepts.
-const BUNDLE_SCHEMAS := [BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA]
+const BUNDLE_SCHEMAS := [BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA_V1, BUNDLE_SCHEMA]
 ## The engine's save envelope. Version 3 (the hands-on review, 2026-10,
 ## foundation 7): a flow's turns, cooldowns and board, and the shared spent
 ## cards, are keyed by GAME ID, as the play log always was, so a card deleted
@@ -148,8 +156,16 @@ static func load_from_dict(bundle: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "bundle has no content.project"}
 	if not (bundle.get("settings") is Dictionary):
 		return {"ok": false, "error": "bundle has no settings"}
-	if not (bundle.get("world") is Dictionary) or not (bundle.get("story") is Dictionary):
-		return {"ok": false, "error": "bundle has no world/story sections"}
+	if not (bundle.get("story") is Dictionary):
+		return {"ok": false, "error": "bundle has no story section"}
+	# A bundle @1 or @0 has a "world" block; from @2 the game's scopes are
+	# "scopeRegistry", absent when the project declares none.
+	if bundle.get("schema") != BUNDLE_SCHEMA and not (bundle.get("world") is Dictionary):
+		return {"ok": false, "error": "bundle has no world section"}
+	if bundle.has("scopeRegistry"):
+		var registry = bundle["scopeRegistry"]
+		if not (registry is Dictionary) or not (registry.get("scopes") is Array):
+			return {"ok": false, "error": "bundle scopeRegistry must have a scopes array"}
 	if not (bundle.get("boxes") is Array):
 		return {"ok": false, "error": "bundle has no boxes"}
 	if bundle.has("externalScopes"):
@@ -181,7 +197,11 @@ static func schema_error(bundle: Dictionary) -> String:
 	var schema = bundle.get("schema")
 	if schema is String and BUNDLE_SCHEMAS.has(schema):
 		return ""
-	return "unsupported bundle schema: %s (this runtime reads %s)" % [str(schema), " and ".join(BUNDLE_SCHEMAS)]
+	var all: Array[String] = []
+	for known in BUNDLE_SCHEMAS:
+		all.append(str(known))
+	var last: String = all.pop_back()
+	return "unsupported bundle schema: %s (this runtime reads %s and %s)" % [str(schema), ", ".join(all), last]
 
 
 # --- reading the project map (design/project-map-contract.md 5, Q12) ---------
@@ -228,3 +248,41 @@ static func external_scopes(bundle: Dictionary) -> Array:
 	return out
 
 
+
+
+# --- host scopes (the game's own: @world, @player, ...) -----------------------
+
+## The host scopes a bundle declares, in order, each {"token", "writable"?,
+## "declarations"?} (no "declarations": an opaque scope, any name): its
+## "scopeRegistry"'s, or, for a bundle @1 or @0, its "world" block read as the
+## scope `world` (none when that block declares nothing, which is what an empty
+## "world" always meant). The model's bundleHostScopes.
+static func host_scopes(bundle: Dictionary) -> Array:
+	var registry = bundle.get("scopeRegistry")
+	if registry is Dictionary:
+		var out: Array = []
+		for s in registry.get("scopes", []):
+			if s is Dictionary:
+				out.append(s)
+		return out
+	var world = bundle.get("world")
+	var legacy = world.get("properties") if world is Dictionary else null
+	if legacy is Array and not (legacy as Array).is_empty():
+		return [{"token": "world", "declarations": legacy}]
+	return []
+
+
+## One host scope by token, case-sensitive, or {}. The model's hostScopeSpec.
+static func host_scope_spec(bundle: Dictionary, token: String) -> Dictionary:
+	for s in host_scopes(bundle):
+		if str(s.get("token", "")) == token:
+			return s
+	return {}
+
+
+## A host scope's declarations by token: empty when it declares none, is
+## opaque, or isn't there. host_scope_decls(bundle, "world") is what
+## bundle["world"]["properties"] was. The model's hostScopeDecls.
+static func host_scope_decls(bundle: Dictionary, token: String) -> Array:
+	var decls = host_scope_spec(bundle, token).get("declarations")
+	return decls if decls is Array else []

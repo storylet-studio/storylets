@@ -20,6 +20,21 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **Host scopes, any game scope beside `@world`.** A project declares the game's own scopes in `scopeRegistry`
+  (`@world`, `@player`, ...), and `validate` and `export` check references into each as `@world`'s are checked:
+  names, types, stage ladders, and a read-only name or scope an outcome writes. A coverage driver can feed any
+  of them, `--set player.hp=3` writes one, and `share-scopes` puts each into `game.scopes.json`, where the shared
+  file wins over the project's copy as it does for `@world`.
+
+### Changed
+
+- **`format` moves the project's `world` block into `scopeRegistry`**, as the scope `world` (an empty block just
+  goes). A project not yet formatted still validates and exports as before.
+- **Bundles are `storylets/bundle@2`**: the game's scopes are `scopeRegistry`, with no `world` block, so a runtime
+  from before host scopes refuses one by its schema. Today's runtimes read `@2`, `@1` and `@0`.
+
 ## [0.19.0] - 2026-10-22
 
 ### Added

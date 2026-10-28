@@ -5,6 +5,8 @@
 // ---------------------------------------------------------------------------
 
 import { runCoverageAsync } from "@storylet-studio/ops";
+import { bundleHostScopes } from "@storylet-studio/model";
+import type { ProjectShard } from "@storylet-studio/model";
 import { pinToolWindow } from "@wildwinter/app-shell/tool-window";
 import { currentProjectHash, validate } from "../project.js";
 import { addCoverageDrivers } from "../mutate/quick-fixes.js";
@@ -111,7 +113,7 @@ export function createCoverage(ctx: Pick<MainContext, "session" | "editor" | "st
           hasProject: session !== undefined,
           name: session?.loaded.source?.project.project.name ?? "",
           driverCount: Object.keys(session?.loaded.source?.project.coverage?.drivers ?? {}).length,
-          worldCount: session?.loaded.source?.project.world?.properties?.length ?? 0,
+          ...hostScopeCounts(session?.loaded.source?.project),
           pinned: ctx.store().get().coveragePinned,
           ...(lastCoverage ? { last: lastCoverage } : {}),
           ...(lastCoverage && lastCoverageAt !== undefined ? { ran: { at: lastCoverageAt, hash: lastCoverageHash ?? null } } : {}),
@@ -138,5 +140,16 @@ export function createCoverage(ctx: Pick<MainContext, "session" | "editor" | "st
       });
       ipc.handle("coverage:close", () => { ctx.windows().get("coverage")?.close(); });
     },
+  };
+}
+
+/** What the Coverage window's driver note needs of the host scopes: how many properties a driver
+ *  could feed (an opaque scope takes any name, so it counts one), and, beside @world, which scopes. */
+function hostScopeCounts(project: ProjectShard | undefined): Pick<CoverageInfo, "worldCount" | "hostScopes"> {
+  const hosts = project ? bundleHostScopes(project) : [];
+  const tokens = ["world", ...hosts.map((h) => h.token).filter((t) => t !== "world")];
+  return {
+    worldCount: hosts.reduce((n, h) => n + (h.declarations?.length ?? 1), 0),
+    ...(tokens.length > 1 ? { hostScopes: tokens } : {}),
   };
 }

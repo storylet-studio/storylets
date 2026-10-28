@@ -1,4 +1,5 @@
 #include "StoryletEngine.h"
+#include "StoryletLog.h"
 #include "StoryletWorld.h"
 
 #include "StoryletBundle.h"
@@ -128,11 +129,11 @@ namespace
 	{
 		if (bRead)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Storylet Engine: %s - %s"), Where, *Message);
+			UE_LOG(LogStoryletEngine, Warning, TEXT("Storylet Engine: %s - %s"), Where, *Message);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("Storylet Engine: %s - %s"), Where, *Message);
+			UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: %s - %s"), Where, *Message);
 		}
 	}
 
@@ -158,11 +159,37 @@ namespace
 		return Fallback;
 	}
 
-	/** Guard for a call with nothing to hand back. */
-	template <typename TBody>
-	void GuardVoid(const TCHAR* Where, TBody&& Body)
+	/** One refusing call at the Blueprint boundary (the convention at the top
+	 *  of StoryletEngine.h): LastError cleared, the core call made, and on a
+	 *  throw its message kept in LastError and logged, with `Fallback` handed
+	 *  back. */
+	template <typename TResult, typename TBody>
+	TResult Refusing(FString& LastError, const TCHAR* Where, TResult Fallback, TBody&& Body)
 	{
-		Guard(Where, false, 0, [&] { Body(); return 0; });
+		LastError.Reset();
+		try
+		{
+			return Body();
+		}
+		catch (const std::exception& Ex)
+		{
+			LastError = Ue(Ex.what());
+		}
+		catch (...)
+		{
+			LastError = TEXT("an unknown exception");
+		}
+		LogRefusal(Where, LastError, false);
+		return Fallback;
+	}
+
+	/** A refusing setter: "" when Body landed, else its refusal, kept in
+	 *  LastError and logged as Refusing does. */
+	template <typename TBody>
+	FString Refusal(FString& LastError, const TCHAR* Where, TBody&& Body)
+	{
+		Refusing(LastError, Where, 0, [&] { Body(); return 0; });
+		return LastError;
 	}
 
 	/** One property read for either target, the engine (shared and @world
@@ -199,32 +226,40 @@ namespace
 		return storylets::StoryletValue::Flags(std::move(Flags));
 	}
 
-	/** One guarded host write, for either target: a host write is silent under
-	 *  the firing rule and visible to the audit hook. Templated because the
-	 *  engine and a flow both take setProperty and neither shares a base. */
+	/** One host write, for either target: a host write is silent under the
+	 *  firing rule and visible to the audit hook. "" when it landed, else the
+	 *  refusal (kept in LastError and logged). Templated because the engine
+	 *  and a flow both take setProperty and neither shares a base. */
 	template <typename TTarget>
-	void SetPropertyGuarded(TTarget* Target, const FString& Path,
+	FString SetPropertyRefusing(TTarget& Target, FString& LastError, const FString& Path,
 		const storylets::StoryletValue& Value, const TCHAR* Where)
 	{
-		if (!Target) return;
-		GuardVoid(Where, [&] { Target->setProperty(Std(Path), Value); });
+		return Refusal(LastError, Where, [&] { Target.setProperty(Std(Path), Value); });
 	}
+
+	const TCHAR* InvalidEngine = TEXT("the engine is invalid (Create failed)");
 }
 
-UStoryletEngine* UStoryletEngine::Create(UStoryletBundle* Bundle, int32 Seed, bool bRetainLog, UStoryletWorld* World)
+UStoryletEngine* UStoryletEngine::Create(UStoryletBundle* Bundle, const TMap<FString, UStoryletWorld*>& HostScopes)
 {
-	return CreateOn(Bundle, nullptr, Seed, bRetainLog, World);
+	return CreateOn(Bundle, nullptr, HostScopes, FStoryletEngineOptions());
 }
 
-UStoryletEngine* UStoryletEngine::CreateWithRegistry(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
-	int32 Seed, bool bRetainLog, UStoryletWorld* World)
+UStoryletEngine* UStoryletEngine::CreateWithOptions(UStoryletBundle* Bundle, const FStoryletEngineOptions& Options,
+	const TMap<FString, UStoryletWorld*>& HostScopes)
+{
+	return CreateOn(Bundle, nullptr, HostScopes, Options);
+}
+
+UStoryletEngine* UStoryletEngine::CreateWithRegistry(UStoryletBundle* Bundle, const std::shared_ptr<storylets::ScopeRegistry>& Registry,
+	const TMap<FString, UStoryletWorld*>& HostScopes, const FStoryletEngineOptions& Options)
 {
 	if (!Registry)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: CreateWithRegistry called with a null registry"));
+		UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: CreateWithRegistry called with a null registry"));
 		return nullptr;
 	}
-	return CreateOn(Bundle, MoveTemp(Registry), Seed, bRetainLog, World);
+	return CreateOn(Bundle, Registry, HostScopes, Options);
 }
 
 std::shared_ptr<storylets::ScopeRegistry> UStoryletEngine::GetRegistry() const
@@ -233,11 +268,11 @@ std::shared_ptr<storylets::ScopeRegistry> UStoryletEngine::GetRegistry() const
 }
 
 UStoryletEngine* UStoryletEngine::CreateOn(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
-	int32 Seed, bool bRetainLog, UStoryletWorld* World)
+	const TMap<FString, UStoryletWorld*>& HostScopes, const FStoryletEngineOptions& Options)
 {
 	if (!Bundle || !Bundle->GetCompiled() || !Bundle->GetCompiled()->Bundle)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: Create called with a null/uncompiled bundle"));
+		UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: Create called with a null/uncompiled bundle"));
 		return nullptr;
 	}
 	UStoryletEngine* E = NewObject<UStoryletEngine>(GetTransientPackage());
@@ -245,16 +280,20 @@ UStoryletEngine* UStoryletEngine::CreateOn(UStoryletBundle* Bundle, std::shared_
 	try
 	{
 		storylets::EngineOptions Opts;
-		Opts.seed = static_cast<double>(Seed);
-		Opts.log = bRetainLog;
+		Opts.seed = static_cast<double>(Options.Seed);
+		Opts.log = Options.bLog;
 		// Null: the engine makes its own registry and acts as its own game.
 		// The core keeps its options, so ApplyLiveBundle's hotSwap lands in the same one.
 		Opts.registry = MoveTemp(Registry);
-		if (World)
+		// Each bound container is an external scope in the registry under its
+		// token, read and written through the container. Kept by the core too,
+		// so ApplyLiveBundle's hotSwap keeps the bindings. A null container
+		// binds nothing (the scope is self-backed, as if it weren't in the map).
+		for (const TPair<FString, UStoryletWorld*>& Scope : HostScopes)
 		{
-			// Kept by the core too, so ApplyLiveBundle's hotSwap keeps the binding.
-			Opts.world = World->MakeResolver();
-			E->WorldRef = World;
+			if (!Scope.Value) continue;
+			Opts.hostScopes[Std(Scope.Key)] = Scope.Value->MakeHostScope();
+			E->HostScopeRefs.Add(Scope.Key, Scope.Value);
 		}
 		// The core's diagnostic hook, onto the Blueprint delegate. Weak, and kept
 		// in the core's options like the rest, so a live swap carries it across.
@@ -265,33 +304,50 @@ UStoryletEngine* UStoryletEngine::CreateOn(UStoryletBundle* Bundle, std::shared_
 		};
 		// A condition the core played through: the Blueprint event, or with
 		// nothing bound a Warning in the log, so a content bug is never silent.
+		// A set-up report is always a Warning, as Patterplay's is; one found
+		// while the core is being built comes before a game can bind OnError,
+		// so it is held and delivered on the first OpenFlow (as Patterplay's,
+		// ruled 2026-10-28). The core has already put it in the retained log.
 		Opts.onError = [Weak](const storylets::PlayError& Err)
 		{
 			UStoryletEngine* Self = Weak.Get();
-			if (!Self || !Self->OnError.IsBound())
+			const bool bSetup = Err.kind == "setup";
+			if (bSetup)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Storylet Engine: the condition on %s in flow '%s' failed, counted as false: %s"),
+				UE_LOG(LogStoryletEngine, Warning, TEXT("Storylet Engine: %s"), *Ue(Err.message));
+			}
+			else if (!Self || !Self->OnError.IsBound())
+			{
+				UE_LOG(LogStoryletEngine, Warning, TEXT("Storylet Engine: the condition on %s in flow '%s' failed, counted as false: %s"),
 					*Ue(Err.node), *Ue(Err.flow), *Ue(Err.message));
 				return;
 			}
+			if (!Self) return;
 			FStoryletPlayError Out;
 			Out.Flow = Ue(Err.flow);
 			Out.Kind = Ue(Err.kind);
 			Out.Node = Ue(Err.node);
 			Out.Source = Ue(Err.source);
 			Out.Message = Ue(Err.message);
+			if (Self->bBuilding)
+			{
+				Self->HeldErrors.Add(MoveTemp(Out));
+				return;
+			}
 			Self->OnError.Broadcast(Out);
 		};
 		TPimplPtr<FStoryletEngineImpl> Impl = MakePimpl<FStoryletEngineImpl>();
 		Impl->Bundle = Bundle->GetCompiled()->Bundle;
+		E->bBuilding = true;
 		Impl->Engine = std::make_unique<storylets::Engine>(Impl->Bundle, Opts);
+		E->bBuilding = false;
 		E->Impl = MoveTemp(Impl);
 		// No flow is opened here: play happens on one you open by name
 		// (design/flows.md - there is no default flow).
 	}
 	catch (const std::exception& Ex)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: %s"), *Ue(Ex.what()));
+		UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: %s"), *Ue(Ex.what()));
 		return nullptr;
 	}
 	return E;
@@ -338,11 +394,27 @@ bool UStoryletFlow::RefuseClosed(const TCHAR* Verb, bool bRead) const
 	return true;
 }
 
+bool UStoryletFlow::RefuseClosedCall(const TCHAR* Verb) const
+{
+	LastError.Reset();
+	if (!IsClosed()) return false;
+	LastError = ClosedMessage();
+	LogRefusal(Verb, LastError, false);
+	return true;
+}
+
+void UStoryletEngine::NoteRefusal(const TCHAR* Verb, const FString& Message) const
+{
+	LastError = Message;
+	LogRefusal(Verb, Message, false);
+}
+
 void UStoryletFlow::Close()
 {
+	LastError.Reset();
 	if (IsClosed()) return;
 	if (Owner) Owner->CloseFlow(Id);
-	else GuardVoid(TEXT("Close"), [this] { Impl->Flow->close(); });
+	else Refusing(LastError, TEXT("Close"), 0, [this] { Impl->Flow->close(); return 0; });
 }
 
 storylets::Flow* UStoryletFlow::GetCoreFlow() const
@@ -362,14 +434,24 @@ void UStoryletFlow::BeginDestroy()
 
 // --- UStoryletEngine: flows ---------------------------------------------------
 
+void UStoryletEngine::DeliverHeldErrors()
+{
+	if (HeldErrors.Num() == 0) return;
+	// Taken out first, so a handler that opens a flow doesn't hear them twice.
+	const TArray<FStoryletPlayError> Held = MoveTemp(HeldErrors);
+	HeldErrors.Reset();
+	for (const FStoryletPlayError& Err : Held) OnError.Broadcast(Err);
+}
+
 UStoryletFlow* UStoryletEngine::OpenFlowWith(const FString& FlowId, const storylets::OpenFlowOptions& Options, const TCHAR* Verb)
 {
 	if (!IsValidEngine())
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: %s on an invalid engine"), Verb);
+		NoteRefusal(Verb, InvalidEngine);
 		return nullptr;
 	}
-	return Guard(Verb, false, static_cast<UStoryletFlow*>(nullptr), [&]() -> UStoryletFlow*
+	DeliverHeldErrors();   // what the engine reported while it was built, now OnError can have been bound
+	return Refusing(LastError, Verb, static_cast<UStoryletFlow*>(nullptr), [&]() -> UStoryletFlow*
 	{
 		// Re-opening a name REPLACES: the core closes the old flow, so any
 		// wrapper still holding it reads as closed from that moment. A restore
@@ -401,10 +483,10 @@ FString UStoryletEngine::SaveFlowToJson(const FString& FlowId) const
 {
 	if (!IsValidEngine())
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: SaveFlowToJson on an invalid engine"));
+		NoteRefusal(TEXT("SaveFlowToJson"), InvalidEngine);
 		return FString();
 	}
-	return Guard(TEXT("SaveFlowToJson"), false, FString(), [&]
+	return Refusing(LastError, TEXT("SaveFlowToJson"), FString(), [&]
 	{
 		return Ue(storylets::serializeFlow(Impl->Engine->saveFlow(Std(FlowId))));
 	});
@@ -415,11 +497,11 @@ UStoryletFlow* UStoryletEngine::OpenFlowFromJson(const FString& FlowId, const FS
 	OutReportJson.Reset();
 	if (!IsValidEngine())
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: OpenFlowFromJson on an invalid engine"));
+		NoteRefusal(TEXT("OpenFlowFromJson"), InvalidEngine);
 		return nullptr;
 	}
 	storylets::OpenFlowOptions Options;
-	const bool bParsed = Guard(TEXT("OpenFlowFromJson"), false, false, [&]
+	const bool bParsed = Refusing(LastError, TEXT("OpenFlowFromJson"), false, [&]
 	{
 		Options.restore = storylets::deserializeFlow(Std(Json));
 		return true;
@@ -438,10 +520,10 @@ FString UStoryletEngine::PreviewFlowRestoreJson(const FString& FlowId, const FSt
 {
 	if (!IsValidEngine())
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewFlowRestoreJson on an invalid engine"));
+		NoteRefusal(TEXT("PreviewFlowRestoreJson"), InvalidEngine);
 		return FString();
 	}
-	return Guard(TEXT("PreviewFlowRestoreJson"), false, FString(), [&]
+	return Refusing(LastError, TEXT("PreviewFlowRestoreJson"), FString(), [&]
 	{
 		const storylets::FlowSave Saved = storylets::deserializeFlow(Std(Json));
 		return Ue(storylets::reportToJson(Impl->Engine->previewFlowRestore(Std(FlowId), Saved)));
@@ -454,10 +536,10 @@ FString UStoryletEngine::SaveDurableToJson() const
 {
 	if (!IsValidEngine())
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: SaveDurableToJson on an invalid engine"));
+		NoteRefusal(TEXT("SaveDurableToJson"), InvalidEngine);
 		return FString();
 	}
-	return Guard(TEXT("SaveDurableToJson"), false, FString(), [&]
+	return Refusing(LastError, TEXT("SaveDurableToJson"), FString(), [&]
 	{
 		return Ue(storylets::serializeDurable(Impl->Engine->saveDurable()));
 	});
@@ -468,12 +550,12 @@ bool UStoryletEngine::LoadDurableFromJson(const FString& Json, FString& OutRepor
 	OutReportJson.Reset();
 	if (!IsValidEngine())
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: LoadDurableFromJson on an invalid engine"));
+		NoteRefusal(TEXT("LoadDurableFromJson"), InvalidEngine);
 		return false;
 	}
 	// The core refuses a malformed, foreign or unknown half before anything
 	// moves, so a false here leaves the engine as it was.
-	return Guard(TEXT("LoadDurableFromJson"), false, false, [&]
+	return Refusing(LastError, TEXT("LoadDurableFromJson"), false, [&]
 	{
 		const storylets::DurableSave Memory = storylets::deserializeDurable(Std(Json));
 		OutReportJson = Ue(storylets::reportToJson(Impl->Engine->loadDurable(Memory)));
@@ -498,12 +580,12 @@ UStoryletFlow* UStoryletEngine::OpenFlowWithDurable(const FString& FlowId, const
 	OutReportJson.Reset();
 	if (!IsValidEngine())
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: %s on an invalid engine"), Verb);
+		NoteRefusal(Verb, InvalidEngine);
 		return nullptr;
 	}
 	storylets::OpenFlowOptions Options;
 	if (Seed.IsSet()) Options.seed = static_cast<double>(Seed.GetValue());
-	const bool bParsed = Guard(Verb, false, false, [&]
+	const bool bParsed = Refusing(LastError, Verb, false, [&]
 	{
 		Options.durable = storylets::deserializeDurable(Std(Json));
 		return true;
@@ -554,8 +636,12 @@ TArray<UStoryletFlow*> UStoryletEngine::Flows() const
 
 void UStoryletEngine::CloseFlow(const FString& FlowId)
 {
-	if (!IsValidEngine()) return;
-	GuardVoid(TEXT("CloseFlow"), [&] { Impl->Engine->closeFlow(Std(FlowId)); });
+	if (!IsValidEngine())
+	{
+		NoteRefusal(TEXT("CloseFlow"), InvalidEngine);
+		return;
+	}
+	Refusing(LastError, TEXT("CloseFlow"), 0, [&] { Impl->Engine->closeFlow(Std(FlowId)); return 0; });
 	// The wrappers hold a shared_ptr, so nothing dangles; the core's own
 	// closed flag is what makes them inert from here. The wrapper leaves the
 	// list, so a later load's re-bind cannot revive it.
@@ -564,8 +650,12 @@ void UStoryletEngine::CloseFlow(const FString& FlowId)
 
 void UStoryletEngine::Reset()
 {
-	if (!IsValidEngine()) return;
-	GuardVoid(TEXT("Reset"), [this] { Impl->Engine->reset(); });
+	if (!IsValidEngine())
+	{
+		NoteRefusal(TEXT("Reset"), InvalidEngine);
+		return;
+	}
+	Refusing(LastError, TEXT("Reset"), 0, [this] { Impl->Engine->reset(); return 0; });
 	WrappedFlows.Reset(); // every flow went with it, closed for good
 }
 
@@ -707,8 +797,8 @@ namespace
 
 TArray<FStoryletDealtCard> UStoryletFlow::Deal(const FString& HandRef)
 {
-	if (RefuseClosed(TEXT("Deal"))) return {};
-	return Guard(TEXT("Deal"), false, TArray<FStoryletDealtCard>(), [&]
+	if (RefuseClosedCall(TEXT("Deal"))) return {};
+	return Refusing(LastError, TEXT("Deal"), TArray<FStoryletDealtCard>(), [&]
 	{
 		return ConvertCards(GetCoreFlow()->deal(Std(HandRef)));
 	});
@@ -716,8 +806,8 @@ TArray<FStoryletDealtCard> UStoryletFlow::Deal(const FString& HandRef)
 
 TArray<FStoryletHandContents> UStoryletFlow::DealMany(const TArray<FString>& HandRefs)
 {
-	if (RefuseClosed(TEXT("DealMany"))) return {};
-	return Guard(TEXT("DealMany"), false, TArray<FStoryletHandContents>(), [&]
+	if (RefuseClosedCall(TEXT("DealMany"))) return {};
+	return Refusing(LastError, TEXT("DealMany"), TArray<FStoryletHandContents>(), [&]
 	{
 		std::vector<std::string> Refs;
 		Refs.reserve(static_cast<size_t>(HandRefs.Num()));
@@ -728,8 +818,8 @@ TArray<FStoryletHandContents> UStoryletFlow::DealMany(const TArray<FString>& Han
 
 TArray<FStoryletHandContents> UStoryletFlow::DealAllHands()
 {
-	if (RefuseClosed(TEXT("DealAllHands"))) return {};
-	return Guard(TEXT("DealAllHands"), false, TArray<FStoryletHandContents>(), [&]
+	if (RefuseClosedCall(TEXT("DealAllHands"))) return {};
+	return Refusing(LastError, TEXT("DealAllHands"), TArray<FStoryletHandContents>(), [&]
 	{
 		return ConvertHands(GetCoreFlow()->dealMany());
 	});
@@ -751,8 +841,8 @@ namespace
 TArray<FStoryletDealtCard> UStoryletFlow::Peek(
 	const FString& BoxRef, const TMap<FString, FString>& Criteria, int32 MaxCards)
 {
-	if (RefuseClosed(TEXT("Peek"))) return {};
-	return Guard(TEXT("Peek"), false, TArray<FStoryletDealtCard>(), [&]
+	if (RefuseClosedCall(TEXT("Peek"))) return {};
+	return Refusing(LastError, TEXT("Peek"), TArray<FStoryletDealtCard>(), [&]
 	{
 		return PeekOn(*GetCoreFlow(), BoxRef, Criteria, std::optional<int>(MaxCards));
 	});
@@ -760,8 +850,8 @@ TArray<FStoryletDealtCard> UStoryletFlow::Peek(
 
 TArray<FStoryletDealtCard> UStoryletFlow::PeekAll(const FString& BoxRef, const TMap<FString, FString>& Criteria)
 {
-	if (RefuseClosed(TEXT("PeekAll"))) return {};
-	return Guard(TEXT("PeekAll"), false, TArray<FStoryletDealtCard>(), [&]
+	if (RefuseClosedCall(TEXT("PeekAll"))) return {};
+	return Refusing(LastError, TEXT("PeekAll"), TArray<FStoryletDealtCard>(), [&]
 	{
 		return PeekOn(*GetCoreFlow(), BoxRef, Criteria, std::nullopt);
 	});
@@ -787,8 +877,8 @@ TArray<FStoryletHandContents> UStoryletFlow::BoardForBox(const FString& BoxRef) 
 
 TArray<FStoryletOutcomeView> UStoryletFlow::Outcomes(const FString& CardRef, const FString& FromHand)
 {
-	if (RefuseClosed(TEXT("Outcomes"))) return {};
-	return Guard(TEXT("Outcomes"), false, TArray<FStoryletOutcomeView>(), [&]
+	if (RefuseClosedCall(TEXT("Outcomes"))) return {};
+	return Refusing(LastError, TEXT("Outcomes"), TArray<FStoryletOutcomeView>(), [&]
 	{
 		TArray<FStoryletOutcomeView> Out;
 		for (const storylets::OutcomeView& O : GetCoreFlow()->outcomes(Std(CardRef), Std(FromHand)))
@@ -809,82 +899,66 @@ TArray<FStoryletOutcomeView> UStoryletFlow::Outcomes(const FString& CardRef, con
 
 namespace
 {
-	/** Play and PlayAdvancing: a refusal is the call's answer (OutError), not a
-	 *  log line, as it always was. */
-	bool PlayOn(storylets::Flow& Flow, const FString& CardRef, const FString& OutcomeGameId, const FString& FromHand,
-		const storylets::PlayOptions& Options, FString& OutError)
+	/** Play and PlayAdvancing: the refusal in OutError, as it always was, and
+	 *  in LastError and the log, as every refusal is. */
+	bool PlayOn(storylets::Flow& Flow, FString& LastError, const TCHAR* Verb, const FString& CardRef,
+		const FString& OutcomeGameId, const FString& FromHand, const storylets::PlayOptions& Options, FString& OutError)
 	{
-		try
+		const bool bPlayed = Refusing(LastError, Verb, false, [&]
 		{
 			Flow.play(Std(CardRef), Std(OutcomeGameId), Std(FromHand), Options);
-			OutError.Reset();
 			return true;
-		}
-		catch (const std::exception& Ex)
-		{
-			OutError = Ue(Ex.what());
-		}
-		catch (...)
-		{
-			OutError = TEXT("an unknown exception");
-		}
-		return false;
+		});
+		OutError = LastError;
+		return bPlayed;
 	}
 }
 
 bool UStoryletFlow::Play(
 	const FString& CardRef, const FString& OutcomeGameId, const FString& FromHand, FString& OutError)
 {
-	if (RefuseClosed(TEXT("Play")))
+	if (RefuseClosedCall(TEXT("Play")))
 	{
-		OutError = ClosedMessage();
+		OutError = LastError;
 		return false;
 	}
-	return PlayOn(*GetCoreFlow(), CardRef, OutcomeGameId, FromHand, storylets::PlayOptions(), OutError);
+	return PlayOn(*GetCoreFlow(), LastError, TEXT("Play"), CardRef, OutcomeGameId, FromHand, storylets::PlayOptions(), OutError);
 }
 
 bool UStoryletFlow::PlayAdvancing(
 	const FString& CardRef, const FString& OutcomeGameId, const FString& FromHand,
 	double AdvanceTurns, FString& OutError)
 {
-	if (RefuseClosed(TEXT("PlayAdvancing")))
+	if (RefuseClosedCall(TEXT("PlayAdvancing")))
 	{
-		OutError = ClosedMessage();
+		OutError = LastError;
 		return false;
 	}
 	storylets::PlayOptions Options;
 	Options.advanceTurns = AdvanceTurns;
-	return PlayOn(*GetCoreFlow(), CardRef, OutcomeGameId, FromHand, Options, OutError);
+	return PlayOn(*GetCoreFlow(), LastError, TEXT("PlayAdvancing"), CardRef, OutcomeGameId, FromHand, Options, OutError);
 }
 
 bool UStoryletFlow::Discard(const FString& CardRef, const FString& FromHand, FString& OutError)
 {
-	if (RefuseClosed(TEXT("Discard")))
+	if (RefuseClosedCall(TEXT("Discard")))
 	{
-		OutError = ClosedMessage();
+		OutError = LastError;
 		return false;
 	}
-	try
+	const bool bDiscarded = Refusing(LastError, TEXT("Discard"), false, [&]
 	{
 		GetCoreFlow()->discard(Std(CardRef), Std(FromHand));
-		OutError.Reset();
 		return true;
-	}
-	catch (const std::exception& Ex)
-	{
-		OutError = Ue(Ex.what());
-	}
-	catch (...)
-	{
-		OutError = TEXT("an unknown exception");
-	}
-	return false;
+	});
+	OutError = LastError;
+	return bDiscarded;
 }
 
-void UStoryletFlow::AdvanceTurns(const FString& BoxRef, double Turns)
+FString UStoryletFlow::AdvanceTurns(const FString& BoxRef, double Turns)
 {
-	if (RefuseClosed(TEXT("AdvanceTurns"))) return;
-	GuardVoid(TEXT("AdvanceTurns"), [&] { GetCoreFlow()->advanceTurns(Std(BoxRef), Turns); });
+	if (RefuseClosedCall(TEXT("AdvanceTurns"))) return LastError;
+	return Refusal(LastError, TEXT("AdvanceTurns"), [&] { GetCoreFlow()->advanceTurns(Std(BoxRef), Turns); });
 }
 
 double UStoryletFlow::GetTurn(const FString& BoxRef) const
@@ -917,8 +991,8 @@ TArray<FStoryletBoxView> UStoryletFlow::ListBoxes() const
 
 FString UStoryletFlow::SaveDurableToJson() const
 {
-	if (RefuseClosed(TEXT("SaveDurableToJson"))) return FString();
-	return Guard(TEXT("SaveDurableToJson"), false, FString(), [&]
+	if (RefuseClosedCall(TEXT("SaveDurableToJson"))) return FString();
+	return Refusing(LastError, TEXT("SaveDurableToJson"), FString(), [&]
 	{
 		return Ue(storylets::serializeDurable(GetCoreFlow()->saveDurable()));
 	});
@@ -959,28 +1033,28 @@ TArray<FString> UStoryletFlow::GetPropertyFlags(const FString& Path) const
 	return AsFlags(ReadProperty(*GetCoreFlow(), Path, TEXT("GetPropertyFlags")));
 }
 
-void UStoryletFlow::SetPropertyNumber(const FString& Path, double Value)
+FString UStoryletFlow::SetPropertyNumber(const FString& Path, double Value)
 {
-	if (RefuseClosed(TEXT("SetPropertyNumber"))) return;
-	SetPropertyGuarded(GetCoreFlow(), Path, storylets::StoryletValue::Num(Value), TEXT("SetPropertyNumber"));
+	if (RefuseClosedCall(TEXT("SetPropertyNumber"))) return LastError;
+	return SetPropertyRefusing(*GetCoreFlow(), LastError, Path, storylets::StoryletValue::Num(Value), TEXT("SetPropertyNumber"));
 }
 
-void UStoryletFlow::SetPropertyBool(const FString& Path, bool bValue)
+FString UStoryletFlow::SetPropertyBool(const FString& Path, bool bValue)
 {
-	if (RefuseClosed(TEXT("SetPropertyBool"))) return;
-	SetPropertyGuarded(GetCoreFlow(), Path, storylets::StoryletValue::Bool(bValue), TEXT("SetPropertyBool"));
+	if (RefuseClosedCall(TEXT("SetPropertyBool"))) return LastError;
+	return SetPropertyRefusing(*GetCoreFlow(), LastError, Path, storylets::StoryletValue::Bool(bValue), TEXT("SetPropertyBool"));
 }
 
-void UStoryletFlow::SetPropertyString(const FString& Path, const FString& Value)
+FString UStoryletFlow::SetPropertyString(const FString& Path, const FString& Value)
 {
-	if (RefuseClosed(TEXT("SetPropertyString"))) return;
-	SetPropertyGuarded(GetCoreFlow(), Path, storylets::StoryletValue::Str(Std(Value)), TEXT("SetPropertyString"));
+	if (RefuseClosedCall(TEXT("SetPropertyString"))) return LastError;
+	return SetPropertyRefusing(*GetCoreFlow(), LastError, Path, storylets::StoryletValue::Str(Std(Value)), TEXT("SetPropertyString"));
 }
 
-void UStoryletFlow::SetPropertyFlags(const FString& Path, const TArray<FString>& Values)
+FString UStoryletFlow::SetPropertyFlags(const FString& Path, const TArray<FString>& Values)
 {
-	if (RefuseClosed(TEXT("SetPropertyFlags"))) return;
-	SetPropertyGuarded(GetCoreFlow(), Path, FlagsValue(Values), TEXT("SetPropertyFlags"));
+	if (RefuseClosedCall(TEXT("SetPropertyFlags"))) return LastError;
+	return SetPropertyRefusing(*GetCoreFlow(), LastError, Path, FlagsValue(Values), TEXT("SetPropertyFlags"));
 }
 
 // --- UStoryletFlow: the log and the trace ------------------------------------------
@@ -1001,7 +1075,7 @@ TArray<FStoryletLogEntry> UStoryletFlow::Log() const
 
 void UStoryletFlow::ClearLog()
 {
-	if (RefuseClosed(TEXT("ClearLog"))) return;
+	if (RefuseClosedCall(TEXT("ClearLog"))) return;
 	GetCoreFlow()->clearLog();
 }
 
@@ -1145,24 +1219,44 @@ TArray<FString> UStoryletEngine::GetPropertyFlags(const FString& Path) const
 	return AsFlags(ReadProperty(*Impl->Engine, Path, TEXT("GetPropertyFlags")));
 }
 
-void UStoryletEngine::SetPropertyNumber(const FString& Path, double Value)
+FString UStoryletEngine::SetPropertyNumber(const FString& Path, double Value)
 {
-	SetPropertyGuarded(GetCoreEngine(), Path, storylets::StoryletValue::Num(Value), TEXT("SetPropertyNumber"));
+	if (!IsValidEngine())
+	{
+		NoteRefusal(TEXT("SetPropertyNumber"), InvalidEngine);
+		return LastError;
+	}
+	return SetPropertyRefusing(*Impl->Engine, LastError, Path, storylets::StoryletValue::Num(Value), TEXT("SetPropertyNumber"));
 }
 
-void UStoryletEngine::SetPropertyBool(const FString& Path, bool bValue)
+FString UStoryletEngine::SetPropertyBool(const FString& Path, bool bValue)
 {
-	SetPropertyGuarded(GetCoreEngine(), Path, storylets::StoryletValue::Bool(bValue), TEXT("SetPropertyBool"));
+	if (!IsValidEngine())
+	{
+		NoteRefusal(TEXT("SetPropertyBool"), InvalidEngine);
+		return LastError;
+	}
+	return SetPropertyRefusing(*Impl->Engine, LastError, Path, storylets::StoryletValue::Bool(bValue), TEXT("SetPropertyBool"));
 }
 
-void UStoryletEngine::SetPropertyString(const FString& Path, const FString& Value)
+FString UStoryletEngine::SetPropertyString(const FString& Path, const FString& Value)
 {
-	SetPropertyGuarded(GetCoreEngine(), Path, storylets::StoryletValue::Str(Std(Value)), TEXT("SetPropertyString"));
+	if (!IsValidEngine())
+	{
+		NoteRefusal(TEXT("SetPropertyString"), InvalidEngine);
+		return LastError;
+	}
+	return SetPropertyRefusing(*Impl->Engine, LastError, Path, storylets::StoryletValue::Str(Std(Value)), TEXT("SetPropertyString"));
 }
 
-void UStoryletEngine::SetPropertyFlags(const FString& Path, const TArray<FString>& Values)
+FString UStoryletEngine::SetPropertyFlags(const FString& Path, const TArray<FString>& Values)
 {
-	SetPropertyGuarded(GetCoreEngine(), Path, FlagsValue(Values), TEXT("SetPropertyFlags"));
+	if (!IsValidEngine())
+	{
+		NoteRefusal(TEXT("SetPropertyFlags"), InvalidEngine);
+		return LastError;
+	}
+	return SetPropertyRefusing(*Impl->Engine, LastError, Path, FlagsValue(Values), TEXT("SetPropertyFlags"));
 }
 
 bool UStoryletEngine::ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutError)
@@ -1174,14 +1268,17 @@ bool UStoryletEngine::ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutEr
 bool UStoryletEngine::ApplyLiveBundleWithReport(UStoryletBundle* NewBundle, FString& OutError, FString& OutReportJson)
 {
 	OutReportJson.Reset();
+	LastError.Reset();
 	if (!IsValidEngine())
 	{
 		OutError = TEXT("invalid engine");
+		NoteRefusal(TEXT("ApplyLiveBundle"), OutError);
 		return false;
 	}
 	if (!NewBundle || !NewBundle->GetCompiled() || !NewBundle->GetCompiled()->Bundle)
 	{
 		OutError = TEXT("null or uncompiled bundle");
+		NoteRefusal(TEXT("ApplyLiveBundle"), OutError);
 		return false;
 	}
 	try
@@ -1230,7 +1327,7 @@ bool UStoryletEngine::ApplyLiveBundleWithReport(UStoryletBundle* NewBundle, FStr
 	{
 		OutError = TEXT("an unknown exception");
 	}
-	UE_LOG(LogTemp, Error, TEXT("Storylet Engine: ApplyLiveBundle - %s"), *OutError);
+	NoteRefusal(TEXT("ApplyLiveBundle"), OutError);
 	return false;
 }
 
@@ -1265,9 +1362,15 @@ void UStoryletEngine::RebindFlowsAfterLoad()
 	WrappedFlows.RemoveAll([](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid() || W->IsClosed(); });
 }
 
-UStoryletWorld* UStoryletEngine::GetBoundWorld() const
+UStoryletWorld* UStoryletEngine::GetHostScope(const FString& Token) const
 {
-	return WorldRef;
+	// Matched case-sensitively, as the engine matches a token: an FString map's
+	// own Find ignores case.
+	for (const TPair<FString, TObjectPtr<UStoryletWorld>>& Scope : HostScopeRefs)
+	{
+		if (Scope.Key.Equals(Token, ESearchCase::CaseSensitive)) return Scope.Value.Get();
+	}
+	return nullptr;
 }
 
 void UStoryletEngine::BeginDestroy()

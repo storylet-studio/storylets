@@ -1,4 +1,5 @@
 #include "StoryletBundle.h"
+#include "StoryletLog.h"
 
 #include "StoryletCompiledBundle.h"
 #include "StoryletJsonBridge.h"
@@ -24,7 +25,7 @@ UStoryletBundle* UStoryletBundle::LoadFromJsonString(const FString& Json, FStrin
 	if (!Bundle->Rebuild())
 	{
 		OutError = Bundle->LoadError;
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: failed to compile bundle - %s"), *OutError);
+		UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: failed to compile bundle - %s"), *OutError);
 		return nullptr;
 	}
 	OutError.Reset();
@@ -60,6 +61,7 @@ namespace
 		if (S == storylets::scopekind::Deck) return EStoryletScopeKind::Deck;
 		if (S == storylets::scopekind::Hand) return EStoryletScopeKind::Hand;
 		if (S == storylets::scopekind::Tag) return EStoryletScopeKind::Tag;
+		if (S == storylets::scopekind::Host) return EStoryletScopeKind::Host;
 		return EStoryletScopeKind::World;
 	}
 }
@@ -135,6 +137,7 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 		FStoryletPropertyScope Scope;
 		Scope.Scope = ScopeKindFrom(S.scope);
 		Scope.Owner = Ue(S.owner);
+		Scope.bOpaque = S.opaque;
 		Scope.Box = Ue(S.box);
 		Scope.Group = Ue(S.group);
 		Scope.Label = Ue(storylets::ScopeLabel(S));
@@ -188,12 +191,13 @@ bool UStoryletBundle::Rebuild()
 	}
 	// The schema tag is the bundle boundary rule: refuse a foreign blob, or a
 	// bundle schema this runtime does not read, before handing it to the
-	// loader. @0 and @1 are both read (design/project-map-contract.md 2.4).
+	// loader. @0, @1 and @2 are all read (design/project-map-contract.md 2.4;
+	// host scopes, 2026-10-28).
 	const std::string Schema = Tree.strOr("schema");
 	if (!storylets::IsSupportedBundleSchema(Schema))
 	{
-		LoadError = FString::Printf(TEXT("not a storylets bundle this runtime reads: schema \"%s\" (expected \"%s\" or \"%s\")"),
-			UTF8_TO_TCHAR(Schema.c_str()), UTF8_TO_TCHAR(storylets::BUNDLE_SCHEMA_V0), UTF8_TO_TCHAR(storylets::BUNDLE_SCHEMA));
+		LoadError = FString::Printf(TEXT("not a storylets bundle this runtime reads: schema \"%s\" (expected %s)"),
+			UTF8_TO_TCHAR(Schema.c_str()), UTF8_TO_TCHAR(storylets::SupportedBundleSchemasText().c_str()));
 		return false;
 	}
 	try
@@ -216,7 +220,7 @@ void UStoryletBundle::PostLoad()
 	if (!SourceJson.IsEmpty() && !Rebuild())
 	{
 		// A broken bundle still loads; the error stays readable on the asset.
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: bundle '%s' failed to compile - %s"),
+		UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: bundle '%s' failed to compile - %s"),
 			*GetName(), *LoadError);
 	}
 }

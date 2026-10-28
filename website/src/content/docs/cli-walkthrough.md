@@ -113,11 +113,13 @@ The check caught it. A card can't read a property nothing has declared. Add the 
 to `the-tavern.storyletproj`:
 
 ```json5
-world: {
-  properties: [
-    { default: false, name: "market_day", type: "boolean" },
+scopeRegistry: {
+  version: 1,
+  scopes: [
+    { token: "world", declarations: [
+      { default: false, name: "market_day", type: "boolean" },
+    ] },
   ],
-  registry: {},
 },
 ```
 
@@ -158,7 +160,7 @@ what actually came up.
 ```
 $ storyletengine coverage tavern.storylets --runs 20 --seed 1
 coverage: 20 run(s), seed 1, max 100 turns/run, 2000 turns, 2000 plays
-no input drivers: content gated on @world reads as never dealt
+no input drivers: content gated on @world (or any host scope) reads as never dealt
 runs ended: 0 saw everything, 20 ran to the turn cap, 0 stuck
 cards dealt 2/3, played 2/3; outcomes played 2/3
 never dealt 1, rarely dealt 0 (under 5% of runs), dealt but never played 0

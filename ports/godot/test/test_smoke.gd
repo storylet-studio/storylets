@@ -151,6 +151,76 @@ func _refusals(bundle: Dictionary) -> void:
 	_check("a flow's id is read-only", flow.id == "main", flow.id)
 
 
+## Refusals the game can see (a family ruling, 2026-10-28, as Patterplay's): a
+## setter returns its refusal, a call that returns something else keeps it for
+## last_error(), and the next call that succeeds clears it, on the flow and on
+## the engine alike.
+func _last_errors(bundle: Dictionary) -> void:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	var flow := engine.open_flow("main")
+	var box: String = StoryletBundle.effective_game_id(bundle["boxes"][0])
+	var hand: String = StoryletBundle.effective_game_id(bundle["boxes"][0]["hands"][0])
+	print("(expected refusal errors follow)")
+	var caught := _Caught.new()
+	OS.add_logger(caught)
+
+	var dealt := flow.deal("no-such-hand")
+	_check("a refused deal returns nothing and says why in last_error()",
+		dealt.is_empty() and flow.last_error() == 'unknown hand "no-such-hand"', flow.last_error())
+	_check("and push_errors it as well", caught.errors.has("StoryletFlow.deal: " + flow.last_error()), str(caught.errors))
+	flow.deal(hand)
+	_check("the next good deal clears it", flow.last_error() == "", flow.last_error())
+	flow.board("no-such-box")
+	_check("a refused board sets it", flow.last_error() == 'unknown box "no-such-box"', flow.last_error())
+	flow.board(box)
+	_check("a good board clears it", flow.last_error() == "", flow.last_error())
+	flow.outcomes("no-such-card", hand)
+	_check("refused outcomes set it", flow.last_error() != "", flow.last_error())
+	var peeked := flow.peek("no-such-box")
+	_check("a refused peek sets it, as its error key says", flow.last_error() != "" and flow.last_error() == peeked.get("error"), flow.last_error())
+	flow.peek(box)
+	_check("a good peek clears it", flow.last_error() == "", flow.last_error())
+	var advanced := flow.advance_turns("no-such-box")
+	_check("advance_turns returns its refusal and keeps it",
+		advanced == 'unknown box "no-such-box"' and flow.last_error() == advanced, advanced)
+	_check("and a good advance_turns returns and keeps \"\"", flow.advance_turns(box) == "" and flow.last_error() == "", flow.last_error())
+	var played := flow.play("no-such-card", "go", hand)
+	_check("play keeps the refusal it returns", played != "" and flow.last_error() == played, played)
+	var discarded := flow.discard("no-such-card", hand)
+	_check("so does discard", discarded != "" and flow.last_error() == discarded, discarded)
+	var set_refused := flow.set_property("story.no-such-property", 1)
+	_check("so does set_property", set_refused != "" and flow.last_error() == set_refused, set_refused)
+	flow.turn(box)
+	_check("a good turn clears it", flow.last_error() == "", flow.last_error())
+
+	_check("an engine refuses nothing yet", engine.last_error() == "", engine.last_error())
+	var opened := engine.open_flow("other", {"no-such-option": 1})
+	_check("a refused open_flow returns null and says why in last_error()",
+		opened == null and engine.last_error().begins_with('unknown option "no-such-option"'), engine.last_error())
+	_check("and push_errors it as well", caught.errors.has("StoryletEngine.open_flow: " + engine.last_error()), str(caught.errors))
+	_check("and the flow's own last_error() is not the engine's", flow.last_error() == "", flow.last_error())
+	engine.open_flow("other")
+	_check("the next good open_flow clears it", engine.last_error() == "", engine.last_error())
+	flow = engine.get_flow("main")
+	var saved := engine.save_game()
+	var loaded := engine.load_game({"schema": "nonsense"})
+	_check("a refused load_game returns {} and says why", loaded.is_empty() and engine.last_error() != "", engine.last_error())
+	engine.preview_load(saved)
+	_check("a good preview_load clears it", engine.last_error() == "", engine.last_error())
+	engine.get_property("story.no-such-property")
+	_check("a refused get_property sets it", engine.last_error() != "", engine.last_error())
+	var engine_set := engine.set_property("story.no-such-property", 1)
+	_check("set_property returns its refusal and keeps it", engine_set != "" and engine.last_error() == engine_set, engine_set)
+	engine.save_flow("no-such-flow")
+	_check("a refused save_flow sets it", engine.last_error() == 'unknown flow "no-such-flow"', engine.last_error())
+	var world = StoryletSave.deserialize_state(engine, "{not json")
+	_check("a refused deserialize_state returns null and keeps it on the engine",
+		world == null and engine.last_error() == "malformed JSON", engine.last_error())
+	world = StoryletSave.deserialize_state(engine, StoryletSave.serialize_state(engine))
+	_check("a good deserialize_state clears it", world != null and engine.last_error() == "", engine.last_error())
+	OS.remove_logger(caught)
+
+
 ## Ruling F (2026-10-06), a host API, so checked per runtime rather than in the
 ## corpus: the same handler subscribed twice is registered once, and delivery is
 ## from a copy, so a subscribe during an event is heard from the next one.
@@ -353,6 +423,128 @@ func _durable_halves() -> void:
 
 
 ## A run that has spent every one-shot and moved every durable value.
+## Host scopes like Patter's (ruled 2026-10-28): what the corpus can't say, as
+## the JS runtime's host-scopes.test.ts has it. The corpus pins self-backing a
+## second scope, binding one through "host_scopes", the wrong-case report, an
+## opaque scope and a scope-level `writable: false`; the retired option key,
+## the examiner rows, describe_bundle and the game's-registry rule have no
+## script op, so they are asserted here.
+func _host_scopes() -> void:
+	var corpus = JSON.parse_string(FileAccess.get_file_as_string(
+		ProjectSettings.globalize_path("res://").path_join("../../packages/conformance/corpus.json")))
+	var bundle = null
+	for c in (corpus["scripted"] if corpus is Dictionary else []):
+		if str(c["name"]).begins_with("a second host scope, @player"):
+			bundle = (c["bundle"] as Dictionary).duplicate(true)
+	_check("the host-scope bundle is in the corpus", bundle != null)
+	if bundle == null:
+		return
+	bundle["scopeRegistry"] = {"version": 1, "scopes": [
+		{"token": "world", "declarations": [{"name": "alarm", "type": "number", "default": 0}]},
+		{"token": "player", "declarations": [{"name": "hp", "type": "number", "default": 10},
+			{"name": "name", "type": "string", "default": "", "writable": false}]},
+		{"token": "fx"},
+	]}
+	_check("a bundle with host scopes is @2, with no world block",
+		bundle["schema"] == StoryletBundle.BUNDLE_SCHEMA and not bundle.has("world"))
+
+	# The engine option "world" has gone: reported as set-up, in Patter's words,
+	# and binds nothing.
+	var errors: Array = []
+	var engine := StoryletEngine.create(bundle, {"world": {"get": func(_n): return 99},
+		"on_error": func(e: Dictionary) -> void: errors.append(e)})
+	_check("the retired world option still creates an engine", engine != null)
+	if engine == null:
+		return
+	_check("the retired world option is reported, in Patterplay's words", JSON.stringify(errors) == JSON.stringify([
+		{"flow": "", "kind": "setup", "node": "world",
+			"message": 'the engine option "world" has gone: bind the scope as "host_scopes": {"world": ...}'}]), JSON.stringify(errors))
+	_check("and binds nothing: @world is self-backed", engine.get_property("world.alarm") == 0, str(engine.get_property("world.alarm")))
+	errors.clear()
+	StoryletEngine.create(bundle, {"sede": 3, "on_error": func(e: Dictionary) -> void: errors.append(e)})
+	_check("any other key is reported", JSON.stringify(errors) == JSON.stringify([
+		{"flow": "", "kind": "setup", "node": "sede", "message": '"sede" isn\'t an engine option, so it\'s ignored'}]), JSON.stringify(errors))
+	errors.clear()
+	var logged := StoryletEngine.create(bundle, {"log": true, "host_scopes": {"Player": {"get": func(_n): return 1}},
+		"on_error": func(e: Dictionary) -> void: errors.append(e)})
+	_check("a near miss names the declared spelling", errors.size() == 1 and str(errors[0]["message"]).begins_with(
+		'"host_scopes" binds "Player", which this bundle doesn\'t declare: it declares "player"'), JSON.stringify(errors))
+	var in_log := false
+	for e in logged.log():
+		in_log = in_log or (e["type"] == "diagnostic" and e.get("where") == "setup")
+	_check("and the run log says so when logging", in_log)
+	_check("a host_scopes entry of the wrong shape refuses the engine",
+		StoryletEngine.create(bundle, {"host_scopes": {"player": {"set": func(_n, _v): pass}}}) == null)
+
+	# The rows: every declared scope's, in bundle order, before @story; an opaque
+	# one lists none.
+	var rows_engine := StoryletEngine.create(bundle)   # held: a flow holds its engine weakly
+	var flow := rows_engine.open_flow("main")
+	var paths: Array = []
+	var name_row := {}
+	for r in flow.list_properties():
+		paths.append(r["path"])
+		if r["path"] == "player.name":
+			name_row = r
+	_check("the host scopes' rows come first, in bundle order", paths.slice(0, 3) == ["world.alarm", "player.hp", "player.name"], str(paths))
+	_check("an opaque scope lists no rows", not paths.any(func(p): return str(p).begins_with("fx.")), str(paths))
+	_check("a read-only declaration's row says so", name_row.get("writable") == false, str(name_row))
+
+	# A bound scope with no set is read-only to everyone.
+	var read_only := StoryletEngine.create(bundle, {"host_scopes": {"player": {"get": func(n): return 4 if n == "hp" else "Ana"}}})
+	_check("a bound scope reads the game's value", read_only.get_property("player.hp") == 4, str(read_only.get_property("player.hp")))
+	var hp_row := {}
+	for r in read_only.list_properties():
+		if r["path"] == "player.hp":
+			hp_row = r
+	_check("its row is the game's value, not writable", hp_row.get("value") == 4 and hp_row.get("writable") == false, str(hp_row))
+	print("(an expected refusal error follows)")
+	_check("set_property on it is refused", read_only.set_property("player.hp", 5) == "@player is read-only here: the host bound no write",
+		read_only.last_error())
+
+	# reset reseeds a self-backed scope and never touches a bound one.
+	var store := {"alarm": 7}
+	var mixed := StoryletEngine.create(bundle, {"host_scopes": {"world": {
+		"get": func(n): return store.get(n), "set": func(n, v) -> void: store[n] = v}}})
+	mixed.set_property("player.hp", 2)
+	mixed.reset()
+	_check("reset reseeds a self-backed scope", mixed.get_property("player.hp") == 10, str(mixed.get_property("player.hp")))
+	_check("and leaves a bound one alone", mixed.get_property("world.alarm") == 7, str(mixed.get_property("world.alarm")))
+
+	# Given the game's registry, the engine registers only what it binds.
+	var registry := StoryletScopeRegistry.new()
+	var on_game := StoryletEngine.create(bundle, {"registry": registry, "host_scopes": {"world": {"get": func(_n): return 0}}})
+	_check("given the game's registry, it registers what it binds", on_game != null and registry.has("world"))
+	_check("and leaves the rest to the game", not registry.has("player") and not registry.has("fx"))
+
+	# describe_bundle: the host scopes before @story, @world as itself and the
+	# others by token.
+	var scopes: Array = []
+	for p in StoryletBundleInspector.describe_bundle(bundle)["properties"].slice(0, 4):
+		scopes.append([p["scope"], p["owner"], p.get("opaque", false)])
+	_check("describe_bundle lists the host scopes first", JSON.stringify(scopes) == JSON.stringify(
+		[["world", "", false], ["host", "player", false], ["host", "fx", true], ["story", "", false]]), JSON.stringify(scopes))
+
+	# Bundles before host scopes: a world block is the host scope `world`, bound
+	# through host_scopes like any other.
+	var legacy: Dictionary = (bundle as Dictionary).duplicate(true)
+	legacy.erase("scopeRegistry")
+	legacy["schema"] = StoryletBundle.BUNDLE_SCHEMA_V1
+	legacy["world"] = {"properties": [{"name": "alarm", "type": "number", "default": 2}]}
+	_check("an older bundle's world block is self-backed", StoryletEngine.create(legacy).get_property("world.alarm") == 2)
+	errors.clear()
+	var bound_legacy := StoryletEngine.create(legacy, {"host_scopes": {"world": {"get": func(_n): return 5}},
+		"on_error": func(e: Dictionary) -> void: errors.append(e)})
+	_check("and bound through host_scopes with nothing to report", errors.is_empty() and bound_legacy.get_property("world.alarm") == 5,
+		JSON.stringify(errors))
+	legacy["schema"] = StoryletBundle.BUNDLE_SCHEMA
+	legacy.erase("world")
+	_check("a bundle @2 needs no world block", StoryletEngine.create(legacy) != null)
+	legacy["schema"] = StoryletBundle.BUNDLE_SCHEMA_V1
+	print("(an expected refusal error follows)")
+	_check("a bundle @1 does", StoryletEngine.create(legacy) == null)
+
+
 func _durable_played(bundle: Dictionary) -> StoryletEngine:
 	var engine := StoryletEngine.create(bundle, {"seed": 7})
 	var flow := engine.open_flow("alice")
@@ -564,9 +756,11 @@ func _initialize() -> void:
 
 	_lifetime(bundle)
 	_refusals(bundle)
+	_last_errors(bundle)
 	_handlers(bundle)
 	_reports_and_bytes(bundle, saved)
 	_durable_halves()
+	_host_scopes()
 
 	print("SMOKE %s" % ("ALL PASS" if _fails == 0 else "%d FAILED" % _fails))
 	quit(0 if _fails == 0 else 1)

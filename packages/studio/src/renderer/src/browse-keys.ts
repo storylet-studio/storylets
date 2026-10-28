@@ -25,7 +25,7 @@ export function keyIsTheCards(target: EventTarget | null, doc: Document = docume
   if (overlayOpen(doc)) return false;
   if (!(target instanceof Element) || target === doc.body || target === doc.documentElement) return true;
   if (target.matches(".scard:not(.ghost)")) return true;
-  // A table row is not focusable, so a key there lands on a cell; a control
-  // inside the row is still its own.
+  // A table row (focusable now, row-keys.ts) or a cell in it; a control inside
+  // the row is still its own.
   return target.closest(".ctable tr") !== null && target.closest("button, a, input, select, textarea, [contenteditable]") === null;
 }

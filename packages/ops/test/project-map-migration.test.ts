@@ -66,7 +66,7 @@ function project(boxes: BoxOpts[], extra: { contract?: unknown; rootMap?: unknow
     schema: "storylets/project@0",
     project: { id: "p", name: "P", version: "0.0.1" },
     settings: { play: "solo", playAdvancesTurns: 1 },
-    world: { properties: [] }, story: { properties: [] }, templates: {},
+    story: { properties: [] }, templates: {},
     export: { bundle: "../dist/p.storyletsc", metadata: "full", map: true },
   });
   if (extra.rootMap !== undefined) write(join(dir, "map.storyletmap"), extra.rootMap);

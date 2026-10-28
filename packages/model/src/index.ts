@@ -36,12 +36,12 @@ export interface PropertyDecl {
    */
   stages?: string[];
   /**
-   * `@world` only. `false` makes the property read-only TO THE STORY: a
-   * condition may read it, an outcome that writes it is a compile error. The
-   * game still moves it through its resolver; this is the story's statement
-   * of intent, not the game's policy. Mirrors Patter's `HostScopeDecl.writable`
-   * name for name (Reboot.md 10, ruled 2026-09-03). Ignored on every other
-   * scope. Absent = writable.
+   * Host scopes only (`@world`, `@player`, ...; see `HostScopeDecl`). `false`
+   * makes the property read-only TO THE STORY: a condition may read it, an
+   * outcome that writes it is a compile error. The game still moves it through
+   * its resolver; this is the story's statement of intent, not the game's
+   * policy. Mirrors Patter's `HostScopeDecl.writable` name for name (Reboot.md
+   * 10, ruled 2026-09-03). Ignored on every other scope. Absent = writable.
    */
   writable?: boolean;
   /**
@@ -73,6 +73,113 @@ export interface PropertyDecl {
    */
   durable?: boolean;
   purpose?: string;
+}
+
+/**
+ * A property of a host scope (`@world`, `@player`, ...): the game's own state,
+ * declared by the project. The same shape as Patter's `HostScopeDecl` and the
+ * `@wildwinter/scoperegistry` `ScopeDeclaration`. `default` seeds the
+ * standalone engine's self-backed bag; `writable: false` makes the property
+ * read-only to the story (an outcome may not write it), never to the game.
+ */
+export interface HostScopeDecl {
+  name: string;
+  type: PropertyType;
+  values?: string[];
+  /** For quality: the ordered stage ladder (see `PropertyDecl.stages`). */
+  stages?: string[];
+  default?: ScalarValue;
+  writable?: boolean;
+  /** Free-text author note documenting the property (authoring only). */
+  purpose?: string;
+}
+
+/** One scope (`token`) in a project's host-scope registry. Patter's shape. */
+export interface HostScopeSpec {
+  /** The scope token after `@` (`"world"`, `"player"`). Never one of the
+   *  Storylet Engine's own (`story`, `box`, `deck`, `hand`). */
+  token: string;
+  /** Scope-level read/write default for its declarations (default true). */
+  writable?: boolean;
+  /** Property declarations; omit for an opaque scope (any name, unchecked). */
+  declarations?: HostScopeDecl[];
+}
+
+/** A project's host-scope registry: every scope the game provides itself.
+ *  Structurally scoperegistry's `ScopeRegistrySpec`, and Patter's. */
+export interface HostScopeRegistry {
+  version: number;
+  scopes: HostScopeSpec[];
+}
+
+/** The `world` block of a bundle @1 or @0, and of a project shard before
+ *  host scopes: @world's declarations, the one game scope there was. */
+export interface LegacyWorldBlock {
+  properties: PropertyDecl[];
+  /** Never read. */
+  registry?: unknown;
+}
+
+/**
+ * The host scopes a bundle or a project shard declares, in order: its
+ * `scopeRegistry`'s, or, for a bundle @1 or @0 and a project not yet
+ * formatted, its `world` block read as the scope `world` (none when that block
+ * declares nothing, which is what an empty `world` always meant).
+ */
+export function bundleHostScopes(of: { scopeRegistry?: HostScopeRegistry; world?: LegacyWorldBlock }): HostScopeSpec[] {
+  if (of.scopeRegistry !== undefined) return of.scopeRegistry.scopes;
+  const legacy = of.world?.properties;
+  return legacy !== undefined && legacy.length > 0 ? [{ token: "world", declarations: legacy }] : [];
+}
+
+/** One host scope by token, case-sensitive, from `bundleHostScopes`. */
+export function hostScopeSpec(of: { scopeRegistry?: HostScopeRegistry; world?: LegacyWorldBlock }, token: string): HostScopeSpec | undefined {
+  return bundleHostScopes(of).find((s) => s.token === token);
+}
+
+/** A host scope's declarations by token (empty when it declares none, is
+ *  opaque, or isn't there). `hostScopeDecls(bundle, "world")` is what
+ *  `bundle.world.properties` was. */
+export function hostScopeDecls(of: { scopeRegistry?: HostScopeRegistry; world?: LegacyWorldBlock }, token: string): HostScopeDecl[] {
+  return hostScopeSpec(of, token)?.declarations ?? [];
+}
+
+/**
+ * A project shard with one host scope's declarations replaced (the scope
+ * added, last, when it is new), in place: the legacy `world` block moves into
+ * `scopeRegistry` first, so a shard is never written with both. The scope's
+ * own `writable` is kept.
+ */
+export function setHostScopeDecls(shard: { scopeRegistry?: HostScopeRegistry; world?: LegacyWorldBlock }, token: string, declarations: HostScopeDecl[]): void {
+  migrateLegacyWorld(shard);
+  const registry = shard.scopeRegistry ?? { version: 1, scopes: [] };
+  const at = registry.scopes.findIndex((s) => s.token === token);
+  if (at >= 0) registry.scopes[at] = { ...registry.scopes[at]!, declarations };
+  else registry.scopes.push({ token, declarations });
+  shard.scopeRegistry = registry;
+}
+
+/**
+ * Move a project shard's legacy `world` block into `scopeRegistry`, in place
+ * (what `storyletengine format` does): `world.properties` becomes the scope
+ * `world`, its `shared` and `durable` flags dropped, since neither means
+ * anything on a game's scope. An empty block just goes. Returns whether
+ * anything moved.
+ */
+export function migrateLegacyWorld(shard: { scopeRegistry?: HostScopeRegistry; world?: LegacyWorldBlock }): boolean {
+  if (shard.world === undefined) return false;
+  const properties = shard.world.properties ?? [];
+  delete shard.world;
+  if (properties.length === 0 || shard.scopeRegistry?.scopes.some((s) => s.token === "world")) return true;
+  const declarations: HostScopeDecl[] = properties.map((d) => {
+    const { shared: _shared, durable: _durable, ...rest } = d;
+    return rest;
+  });
+  shard.scopeRegistry = {
+    version: shard.scopeRegistry?.version ?? 1,
+    scopes: [{ token: "world", declarations }, ...(shard.scopeRegistry?.scopes ?? [])],
+  };
+  return true;
 }
 
 /**
@@ -803,22 +910,31 @@ export interface Box<E> {
 // --- the compiled bundle (.storyletsc) ---------------------------------------
 
 /**
- * The bundle schema this build of the format writes: @1 since the project map
- * (design/project-map-contract.md 2.4), the bundle that can carry `map` and
- * `Box.usesMap`.
+ * The bundle schema this build of the format writes: @2 since host scopes
+ * (2026-10-28), the bundle whose game scopes are `scopeRegistry` and which has
+ * no `world` block. @1 was the project map's (design/project-map-contract.md
+ * 2.4), the bundle that can carry `map` and `Box.usesMap`.
  *
- * Every runtime READS @0 and @1 and refuses anything else, by name. Reading @0
+ * @2 is a new number because the `world` block is GONE, not added to: a runtime
+ * that reads only @1 would reach for `world.properties` and fail as a raw
+ * error, where a schema it does not know is refused by name.
+ *
+ * Every runtime READS @0, @1 and @2 and refuses anything else, by name. Reading @0
  * is not a compatibility branch: an @0 bundle cannot carry a map, so it is the
  * same shape with less in it. The check exists so that from this release on a
  * runtime meeting a schema it does not know says so, rather than half-working
  * the way an @0 runtime does on a map bundle (tag matching is by id, so its
  * deals look right while every zone value is missing).
  */
-export const BUNDLE_SCHEMA = "storylets/bundle@1";
+export const BUNDLE_SCHEMA = "storylets/bundle@2";
+/** The project map's schema, before host scopes: the game's scopes were one
+ *  `world` block. Still read by every runtime, its `world.properties` as the
+ *  host scope `world`. */
+export const BUNDLE_SCHEMA_V1 = "storylets/bundle@1";
 /** The schema before the project map, still read by every runtime. */
 export const BUNDLE_SCHEMA_V0 = "storylets/bundle@0";
 /** Every bundle schema a runtime accepts. */
-export const BUNDLE_SCHEMAS: readonly string[] = [BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA];
+export const BUNDLE_SCHEMAS: readonly string[] = [BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA_V1, BUNDLE_SCHEMA];
 
 /** Binds bundles to shards (staleness gate) and saves to bundles. */
 export interface BundleContent {
@@ -913,16 +1029,20 @@ export interface BundleBackground {
 }
 
 export interface Bundle {
-  schema: typeof BUNDLE_SCHEMA | typeof BUNDLE_SCHEMA_V0;
+  schema: typeof BUNDLE_SCHEMA | typeof BUNDLE_SCHEMA_V1 | typeof BUNDLE_SCHEMA_V0;
   content: BundleContent;
   metadata: "full" | "stripped";
   settings: BundleSettings;
-  world: {
-    properties: PropertyDecl[];
-    /** ScopeRegistrySpec (@wildwinter/scoperegistry): the owned/foreign
-     *  split. Absent = engine-owned @world (standalone play). */
-    registry?: unknown;
-  };
+  /** The game's own scopes the project declares (`@world`, `@player`, ...),
+   *  Patter's shape: each one's token, its scope-level `writable` and its
+   *  declarations, every default resolved (absent declarations: an opaque
+   *  scope). A standalone engine self-backs each from its defaults; a game
+   *  binds its own store for any of them (`hostScopes`). Absent when the
+   *  project declares none. */
+  scopeRegistry?: HostScopeRegistry;
+  /** Bundle @1 and @0 only: the one game scope there was, read as the host
+   *  scope `world` (see `bundleHostScopes`). A bundle @2 has none. */
+  world?: LegacyWorldBlock;
   story: {
     properties: PropertyDecl[];
   };
@@ -933,7 +1053,8 @@ export interface Bundle {
   map?: ProjectMap;
   /** Other engines' game-wide scopes the content names (`patter`), sorted: the
    *  family's shared vocabulary, let through unchecked by the compiler. The
-   *  engine reports when the game has not registered one. Absent when none. */
+   *  engine reports when the game has not registered one. Absent when none.
+   *  A token the project declares (`scopeRegistry`) is the game's, never here. */
   externalScopes?: string[];
   /**
    * The extensions the project takes, by id: each one's version and its
@@ -1663,7 +1784,7 @@ export interface ProjectMapShard extends CanvasFurniture {
 }
 
 /** A coverage input driver: during a coverage run the harness feeds a
- *  host-seam property (`@world.x`) values from `values`, so content gated on
+ *  host-scope property (`@world.x`, `@player.y`) values from `values`, so content gated on
  *  external state gets exercised (Patter's coverageDrivers, carried whole). */
 export interface CoverageDriver {
   /** "initial": set once as each playthrough starts. "recurring": re-rolled
@@ -1677,7 +1798,7 @@ export interface CoverageDriver {
 
 /** Authoring-side coverage configuration (never compiled into the bundle). */
 export interface CoverageConfig {
-  /** Property drivers, keyed by ref ("@world.danger"). */
+  /** Property drivers, keyed by ref ("@world.danger", "@player.hp"): any host scope's. */
   drivers?: Record<string, CoverageDriver>;
 
 }
@@ -1747,10 +1868,18 @@ export interface ProjectShard {
    * whose manifest is missing is a warning, and its data is left untouched.
    */
   extensions?: Record<string, ProjectExtension>;
-  world: {
-    properties: PropertyDecl[];
-    registry?: unknown;
-  };
+  /**
+   * The game's own scopes this project declares (`@world`, `@player`, ...), in
+   * Patter's shape: a token, a scope-level `writable` (true when absent), and
+   * declarations (absent: an opaque scope, any name, unchecked). Where the game
+   * has a scopes folder, `game.scopes.json` is the source and this is the
+   * project's synced copy. Absent when the project declares none.
+   */
+  scopeRegistry?: HostScopeRegistry;
+  /** The one game scope a project declared before host scopes: read as the
+   *  scope `world` until `storyletengine format` moves it into
+   *  `scopeRegistry`. Never written. */
+  world?: LegacyWorldBlock;
   story: {
     properties: PropertyDecl[];
   };

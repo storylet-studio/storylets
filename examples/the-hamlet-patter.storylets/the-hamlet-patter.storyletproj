@@ -31,6 +31,32 @@
   patterBoxes: [
     "b_village",
   ],
+  scopeRegistry: {
+    scopes: [
+      {
+        declarations: [
+          {
+            default: false,
+            name: "knows_road",
+            purpose: "Written by DIALOGUE (Mira, about the road north) and read here: the one value in the joint demo that flows from Patter to the Storylet Engine, through the shared @world. Declared in both projects; the demo build checks they agree.",
+            type: "boolean",
+          },
+          {
+            default: "day",
+            name: "time_of_day",
+            purpose: "The host owns time. Read-only to the story, as the Patter project declares it too, and the game refuses a write at runtime as well: three places saying one thing, on purpose.",
+            type: "enum",
+            values: [
+              "day",
+              "night",
+            ],
+          },
+        ],
+        token: "world",
+      },
+    ],
+    version: 1,
+  },
   settings: {
     playAdvancesTurns: 1,
   },
@@ -101,25 +127,4 @@
     ],
   },
   templates: {},
-  world: {
-    properties: [
-      {
-        default: false,
-        name: "knows_road",
-        purpose: "Written by DIALOGUE (Mira, about the road north) and read here: the one value in the joint demo that flows from Patter to the Storylet Engine, through the shared @world. Declared in both projects; the demo build checks they agree.",
-        type: "boolean",
-      },
-      {
-        default: "day",
-        name: "time_of_day",
-        purpose: "The host owns time. Read-only to the story, as the Patter project declares it too, and the game refuses a write at runtime as well: three places saying one thing, on purpose.",
-        type: "enum",
-        values: [
-          "day",
-          "night",
-        ],
-      },
-    ],
-    registry: {},
-  },
 }

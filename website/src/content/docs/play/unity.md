@@ -119,15 +119,27 @@ the registry and the rest of the shared expression kernel, so add `using Wildwin
 `using System.Collections.Generic;`) beside `using StoryletStudio.StoryletEngine;`, as the
 first sample does.
 
-`@world` is your game's. Hand the engine a resolver, an `IScopeResolver` with `Get`, `CanSet`,
-and `Set`, and conditions read your live game state directly:
+`@world` is your game's, and so is any other scope the project declares, such as `@player`. Bind
+each one through `HostScopes`, keyed by its token, to an `IHostScope` with `Get`, `CanSet` and
+`Set`, and conditions read your live game state directly:
 
 ```csharp
-_engine = new Engine(Bundle.Bundle, new EngineOptions { Seed = 7, World = new MyWorld() });
+_engine = new Engine(Bundle.Bundle, new EngineOptions
+{
+    Seed = 7,
+    HostScopes = new Dictionary<string, IHostScope> { ["world"] = new MyWorld() },
+    OnError = e => Debug.LogWarning($"{e.Kind} {e.Node}: {e.Message}"),
+});
 ```
 
-Your game keeps those values, so the engine never saves them. Hand it nothing, and the engine
-backs `@world` itself from the declared defaults, as a property it saves with the rest.
+Your game keeps those values, so the engine never saves them. Leave a scope out, and the engine
+backs it itself from its declared defaults, as a property it saves with the rest. Patter's
+`IHostScope` has the same `Get` and `Set`, so one object can serve both engines.
+
+A token is case-sensitive. Bind one the bundle doesn't declare (`"World"` for `world`, say) and
+`OnError` hears about it as the constructor ends, as a `PlayError` with `Kind` `"setup"`, naming
+the declared spelling when only the case differs. `OnError` also hears every condition the engine
+couldn't evaluate and counted as false. Without one, each goes to `Debug.LogWarning`.
 
 ## One registry per game
 
@@ -138,16 +150,17 @@ say, makes one registry, registers `@world` in it, and hands it to each engine:
 
 ```csharp
 var registry = new ScopeRegistry()
-    .DefineOwned("world", Bundle.Bundle.World.Properties,
+    .DefineOwned("world", Model.HostScopeDecls(Bundle.Bundle, "world"),
         new OwnedScopeOptions { Owner = "Game" });              // stored and saved with the rest
 _engine = new Engine(Bundle.Bundle, new EngineOptions { Seed = 7, Registry = registry });
 ```
 
 The engine registers `@story` under `story`, and every other bag that declares something under
 a key starting `storylets/`, which no expression can name. Given your registry, it registers
-nothing for `@world`: that's yours. `DefineOwned` has the registry store and save it;
-`DefineForeign("world", resolver, declarations)` keeps it in your game, and nothing saves it.
-Passing both `Registry` and `World` registers your resolver in your registry for you.
+nothing for `@world`, or any other scope the project declares: those are yours. `DefineOwned` has
+the registry store and save one; `DefineForeign("world", resolver, declarations)` keeps it in your
+game, and nothing saves it. Passing both `Registry` and `HostScopes` registers your resolvers in
+your registry for you.
 
 Every expression reads every scope in the registry, so a card's condition can read
 `@patter.gold`, and `GetProperty("patter.gold")` and `SetProperty("patter.gold", value)` reach
@@ -181,7 +194,7 @@ _flow = _engine.GetFlow("main");             // ...so re-take your handles
 
 The envelope is `storylets/save@2`. It holds what isn't a property: boards, clocks, cooldowns,
 random streams, play logs, and spent cards. An engine built on its own also carries its
-registry's values on `env.Registry`, a self-backed `@world` included, so those two lines are the
+registry's values on `env.Registry`, its self-backed host scopes included, so those two lines are the
 whole run. A game that passed its own registry saves that once, beside each engine's envelope,
 and `env.Registry` is null:
 
@@ -287,7 +300,7 @@ foreach (var p in swap.Report.DroppedProperties) Debug.Log($"dropped {p.Path}");
 
 To build the replacement with a different option, pass a callback that changes a copy of the
 engine's own options: `_engine.HotSwap(newBundle, o => o.Log = true)` turns the log on and keeps
-the seed, the `World` resolver, and everything else it leaves alone. `Apply` takes the same
+the seed, the `HostScopes` bindings, and everything else it leaves alone. `Apply` takes the same
 callback.
 
 It works on your game's registry too. The old engine hands its values to the replacement on that

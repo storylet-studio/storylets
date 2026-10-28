@@ -145,10 +145,12 @@ namespace StoryletStudio.StoryletEngine
 
     /// <summary>The scope kinds a declaration block can belong to. Tag
     /// declarations compose into @hand for any ask that binds the tag
-    /// (schema 3.6).</summary>
+    /// (schema 3.6). Host is a host scope other than @world (`@player`), its
+    /// token the Owner.</summary>
     public static class PropertyScopeKinds
     {
         public const string World = "world";
+        public const string Host = "host";
         public const string Story = "story";
         public const string Box = "box";
         public const string Deck = "deck";
@@ -157,13 +159,16 @@ namespace StoryletStudio.StoryletEngine
     }
 
     /// <summary>One scope's declared properties. Owner is the owning entity's
-    /// gameId (empty for world / story); Box names its box; Group names a tag's
-    /// group. A zone of the project map is a tag scope with Group set and Box
-    /// null: it belongs to none.</summary>
+    /// gameId (empty for world / story), or a host scope's token; Box names its
+    /// box; Group names a tag's group. A zone of the project map is a tag scope
+    /// with Group set and Box null: it belongs to none.</summary>
     public sealed class PropertyScopeSummary
     {
         public string Scope;
         public string Owner = "";
+        /// <summary>A host scope that declares no names, so takes any (world
+        /// or host only). False for every other scope.</summary>
+        public bool Opaque;
         /// <summary>Null for world / story, and for a project-map zone.</summary>
         public string Box;
         /// <summary>Null except on tag scopes.</summary>
@@ -215,10 +220,12 @@ namespace StoryletStudio.StoryletEngine
         public List<BoxSummary> Boxes = new List<BoxSummary>();
         /// <summary>Every hand in the bundle, box by box: the Deal() surface.</summary>
         public List<HandSummary> Hands = new List<HandSummary>();
-        /// <summary>world, story, then per box: the box, its decks, its hands,
-        /// its tags; then the project map's zones, once. Scopes that declare
+        /// <summary>The host scopes in bundle order (world, and any others such
+        /// as player), story, then per box: the box, its decks, its hands, its
+        /// tags; then the project map's zones, once. Scopes that declare
         /// nothing are omitted (world and story always show, so their absence
-        /// reads as "this bundle declares none").</summary>
+        /// reads as "this bundle declares none"; an undeclared world shows
+        /// first, empty).</summary>
         public List<PropertyScopeSummary> Properties = new List<PropertyScopeSummary>();
         /// <summary>The project map, when the bundle has one. Null is the bundle
         /// with no map at all.</summary>
@@ -245,11 +252,32 @@ namespace StoryletStudio.StoryletEngine
                 Hash = bundle.Content?.Hash,
                 Metadata = bundle.Metadata,
             };
-            d.Properties.Add(new PropertyScopeSummary
+            var hosts = Model.BundleHostScopes(bundle);
+            if (!hosts.Exists(h => h.Token == "world"))
             {
-                Scope = PropertyScopeKinds.World,
-                Properties = Summarise(bundle.World?.Properties),
-            });
+                d.Properties.Add(new PropertyScopeSummary { Scope = PropertyScopeKinds.World });
+            }
+            foreach (var host in hosts)
+            {
+                var summary = new PropertyScopeSummary
+                {
+                    Scope = host.Token == "world" ? PropertyScopeKinds.World : PropertyScopeKinds.Host,
+                    Owner = host.Token == "world" ? "" : host.Token,
+                    Opaque = host.Declarations == null,
+                };
+                if (host.Declarations != null)
+                {
+                    foreach (var decl in host.Declarations)
+                    {
+                        summary.Properties.Add(new PropertySummary
+                        {
+                            Name = decl.Name, Type = decl.Type, Default = decl.DefaultOrTypeDefault(),
+                            Values = decl.Values, Purpose = decl.Purpose,
+                        });
+                    }
+                }
+                d.Properties.Add(summary);
+            }
             d.Properties.Add(new PropertyScopeSummary
             {
                 Scope = PropertyScopeKinds.Story,

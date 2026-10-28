@@ -12,7 +12,7 @@ open HamletDemo.uproject        # Unreal 5.7 or 5.8, let it build, press Play
 
 Read `Source/HamletDemo/Public/HamletGame.h` and `Private/HamletGame.cpp` first:
 the whole integration, each half through its plugin's wrapper: `UStoryletBundle`
-then `UStoryletEngine::Create(Bundle, Seed, false, World)`, and `UPatterBundle`
+then `UStoryletEngine::CreateWithOptions(Bundle, Options, { { "world", World } })`, and `UPatterBundle`
 then `UPatterEngine::Create(Bundle, World)`. Two Create calls, one world. Each
 plugin takes only its own container type (`UStoryletWorld`, `UPatterWorld`), so
 `HamletWorldSync.cpp` keeps the two equal: a change in either is copied across as

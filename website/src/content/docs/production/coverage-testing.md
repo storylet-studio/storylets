@@ -39,9 +39,9 @@ and reopening the window shows you what you last measured. Opening a different p
 it.
 
 Under the bar, one line says whether you've told it how your game's own state moves: either
-*"3 coverage drivers feeding @world."* or *"No coverage drivers. Content gated on @world will
-read as never dealt."* Beside it, **Coverage drivers…** takes you straight to where
-they're edited.
+*"3 game values for coverage, feeding @world."* or *"No game values for coverage. Content gated
+on @world will read as never dealt."* Beside it, **Game values for coverage…** takes you
+straight to where they're edited.
 
 <figure class="doc-shot">
   <img src="/doc-images/Coverage.png" alt="The Coverage window after a run on the Hamlet example: runs 200, max turns 100 and seed 0 across the top, then '2 coverage drivers feeding @world'. The headline reads 17 of 17 cards, 100% of cards dealt over 200 runs, with 0 never dealt, 1 rarely dealt, and 0 dealt but never played. Under it, 4 runs saw everything and 196 ran to the turn cap. The card table, captioned 'How often each card came up, over 200 runs' and set to Least reached first, has columns for card, deck, runs dealt, times dealt, and times played. Its first row is Gareth's Gratitude from Gareth's Debt, tagged Rare, dealt in 4.5% of runs, followed by cards dealt in half the runs or more and a long run of cards dealt in every run." />
@@ -155,8 +155,9 @@ so the overlay only ever points at a problem.
 
 ## Content gated on your game's state
 
-`@world` belongs to your game. Coverage can't invent your game's behaviour, so content gated
-on `@world` can't be reached unless you tell coverage how that state moves. Rather than
+`@world` belongs to your game, and so does any other host scope it provides (`@player`, say).
+Coverage can't invent your game's behaviour, so content gated on them can't be reached unless
+you tell coverage how that state moves. Rather than
 reporting such a card as dead, coverage says why it couldn't get there.
 
 The fix is a **driver**, and when there's a driver-shaped gap the window offers one button:
@@ -166,15 +167,15 @@ anything still never dealt after that is a real gap.
 
 ## Writing drivers by hand
 
-The quick fix gets you a starting point, and **Project Settings ▸ World** is where you tune it.
-The `@world` declarations and the drivers that feed them sit on one page, because they're two
-halves of one statement: the game owns this value, and here's how it moves.
+The quick fix gets you a starting point, and **Project Settings ▸ Game scopes** is where you
+tune it. The host-scope declarations and the drivers that feed them sit on one page, because
+they're two halves of one statement: the game owns this value, and here's how it moves.
 
 Each driver is a property, a pool of values, and when it fires:
 
 | Field | What it means |
 |---|---|
-| Property | The `@world` property to drive. Only `@world` is drivable: `@story` is written by your outcomes, so play already covers it. |
+| Property | The host-scope property to drive: `@world`'s, or `@player`'s, or any other scope your game provides (once there's more than `@world`, the row offers a choice of scope). Only host scopes are drivable: `@story` is written by your outcomes, so play already covers it. |
 | Values | The pool, comma separated. `true, false` drives a flag; `0, 50, 51` drives a number; anything else is text. A run picks from the pool at random. |
 | When | *at the start* fixes the value for a whole playthrough (a difficulty setting, a chosen class). *each turn* re-rolls it as the run goes (weather, time of day). |
 | How often | For *each turn* drivers: rarely, sometimes, or often. |

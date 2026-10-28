@@ -24,12 +24,12 @@
 // reads @hand refs statically against the hands that ask them.
 // ---------------------------------------------------------------------------
 
-import { compileProject, worldDeclarations } from "@storylet-studio/compiler";
+import { compileProject, projectHostScopes } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { previewRegistry } from "./game-scopes.js";
 import { Engine, makePrng } from "@storylet-studio/runtime";
 import type { Flow, Prng } from "@storylet-studio/runtime";
-import { PLACE_GROUP, effectiveGameId, groupsOfBox } from "@storylet-studio/model";
+import { PLACE_GROUP, bundleHostScopes, effectiveGameId, groupsOfBox } from "@storylet-studio/model";
 import { RARE_DEALT_PCT, rarelyDealt } from "./coverage-order.js";
 import { handReach } from "./reach.js";
 import { flagKey, handDeclarations, writesOf } from "./analysis-common.js";
@@ -629,7 +629,7 @@ function runOnce(s: SweepState): void {
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(prng.next() * arr.length)]!;
   const applyDriver = (session: Flow, ref: string, driver: CoverageDriver): void => {
     if (driver.values.length === 0) return;
-    session.setProperty(ref.slice(1), pick(driver.values));   // "@world.x" -> "world.x"
+    session.setProperty(ref.slice(1), pick(driver.values));   // "@world.x" -> "world.x", any host scope's
   };
   // When nothing could be played, the sweep plays the game's part: it moves
   // the clocks the GAME moves (a timed box, a calendar), and no other. A box
@@ -820,13 +820,15 @@ function report(s: SweepState): CoverageReport {
   // Only tag GROUP names clear the flag: chosen tags / criteria vary across
   // hands, while a tag or hand property's default never varies unless some
   // outcome writes it (then `written` clears it) or a driver drives it.
+  // The game's own scopes: inputs only the game (or a driver) moves.
+  const hostTokens = ["world", ...bundleHostScopes(bundle).map((h) => h.token)];
   const composedNames = new Set<string>(
     bundle.boxes.flatMap((b) => groupsOfBox(bundle, b).map((g) => effectiveGameId(g))));
   const unwritten = (ref: string): boolean => {
     if (ref.includes(":")) return false;   // a flag key: the second hop's business, not this one's
     if (analysis.written.has(ref) || driven.has(ref)) return false;
     if (ref.startsWith("@hand.")) return !composedNames.has(ref.slice("@hand.".length));
-    return ref.startsWith("@world.") || ref.startsWith("@story.");
+    return hostTokens.some((t) => ref.startsWith(`@${t}.`)) || ref.startsWith("@story.");
   };
   const unwrittenInputs = [...analysis.allRefs].filter(unwritten).sort();
 
@@ -985,7 +987,7 @@ export async function runCoverageAsync(
 
 // --- proposal ---------------------------------------------------------------------
 
-/** Auto-propose a coverage block from the conditions: @world literal pools
+/** Auto-propose a coverage block from the conditions: host scope (@world) literal pools
  *  (plus declared boolean/enum domains), skipping refs an outcome writes. */
 const sortValues = (values: ScalarValue[]): ScalarValue[] =>
   [...values].sort((a, b) =>
@@ -996,11 +998,13 @@ export function proposeCoverage(source: SourceProject): { coverage: CoverageConf
   if (!bundle) return { coverage: {}, issues };
   const analysis = analyse(bundle);
 
-  const declByName = new Map(worldDeclarations(source).map((d) => [d.name, d]));
+  // Every host scope's declarations, keyed by ref ("@world.x", "@player.hp").
+  const declByRef = new Map(projectHostScopes(source).flatMap(({ spec }) =>
+    (spec.declarations ?? []).map((d): [string, typeof d] => [`@${spec.token}.${d.name}`, d])));
   const drivers: Record<string, CoverageDriver> = {};
   for (const ref of [...analysis.allRefs].sort()) {
-    if (!ref.startsWith("@world.") || analysis.written.has(ref)) continue;
-    const decl = declByName.get(ref.slice("@world.".length));
+    if (analysis.written.has(ref)) continue;
+    const decl = declByRef.get(ref);
     if (!decl) continue;   // undeclared refs are validate's problem
     let values = [...(analysis.pools.get(ref) ?? [])];
     if (values.length === 0) {

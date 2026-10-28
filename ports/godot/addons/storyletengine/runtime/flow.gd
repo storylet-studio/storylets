@@ -4,16 +4,19 @@
 # section 3, transliterated from the reference runtime
 # (packages/runtime/src/engine.ts, class Flow) and held to the conformance
 # corpus. The engine owns the bundle, the lookups, the SHARED property
-# partitions and @world; this flow owns its own PRNG, per-box clocks,
+# partitions and the host scopes (@world, ...); this flow owns its own PRNG, per-box clocks,
 # cooldowns, board, claims, play history and per-flow partitions. Every
 # name is shared XOR per-flow by declaration, so a read is a union of two
 # bags and a write routes by name.
 #
-# Error model (GDScript has no exceptions): methods whose failures are part
-# of play - play(), set_property() - RETURN an error String ("" on
-# success). Programmer errors ALSO push_error. A CLOSED flow's handle is
-# inert: every verb refuses (peek carries "error", play returns it, the
-# rest push_error and return their empty shape).
+# Error model (GDScript has no exceptions; the convention at the head of
+# engine.gd): the setters - play(), discard(), advance_turns(),
+# set_property() - RETURN an error String ("" on success); every other verb
+# returns its empty shape. Every refusal is kept for last_error(), cleared by
+# the next call that succeeds. Programmer errors ALSO push_error; a refusal
+# that is part of play (a gated-shut outcome) is returned and kept, not
+# pushed. A CLOSED flow's handle is inert: every verb refuses (peek carries
+# "error" too).
 #
 # Lifetime: a flow holds its engine WEAKLY. The engine owns its flows (it keeps
 # every one alive for get_flow and the shared ledger), so a strong reference
@@ -41,6 +44,8 @@ var id: String:
 		push_error('StoryletFlow: id is read-only (flow "%s")' % _id)
 var _id: String
 var _closed := false
+## Why the last refusing verb was refused, or "" when it wasn't: see last_error().
+var _last_error := ""
 ## Set when the engine was freed rather than the flow closed: the refusal then
 ## names the cause, since nothing the host did to the flow explains it.
 var _engine_gone := false
@@ -133,6 +138,25 @@ func close() -> void:
 		return
 	_engine.drop_flow(id, self)
 	mark_closed()
+
+
+## Why the last refusing verb on this flow was refused (also push_error'd), or
+## "" when it succeeded: turn, peek, deal, deal_many, board, outcomes, play,
+## discard, advance_turns, list_boxes, list_bags, list_properties,
+## get_property, set_property, save_durable. Set on a refusal and cleared by
+## the next of those calls that succeeds; a setter (play, discard,
+## advance_turns, set_property) also returns it (the convention at the head of
+## engine.gd).
+func last_error() -> String:
+	return _last_error
+
+
+## Refuse the verb under way: push_error the message and keep it for
+## last_error(). Returns the message, for a setter.
+func _refuse(verb: String, message: String) -> String:
+	_last_error = message
+	push_error("StoryletFlow.%s: %s" % [verb, message])
+	return message
 
 
 func _put(key: String, bag: StoryletPropertyBag) -> void:
@@ -237,12 +261,13 @@ func _values_of(kind: String, owner_id: String) -> Dictionary:
 ## A box's current turn (schema 3.4), on THIS flow's clock. NAN (with
 ## push_error) on an unknown box or a closed flow.
 func turn(box_ref: String) -> float:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow: " + _closed_message())
+		_refuse("turn", _closed_message())
 		return NAN
 	var box = _resolve_box(box_ref)
 	if box == null:
-		push_error('StoryletFlow: unknown box "%s"' % box_ref)
+		_refuse("turn", 'unknown box "%s"' % box_ref)
 		return NAN
 	return _turn_counts.get(box["id"], 0.0)
 
@@ -447,7 +472,7 @@ var _scope_view = null
 # under evaluation; in hand-condition contexts @deck is an empty bag, so any
 # reference is an eval error (missing-policy throw). Every scope is the
 # flow's MERGED view - its own copies over the shared values, names
-# disjoint - and @world reads through the engine's resolver. Every OTHER
+# disjoint - and each host scope reads through the engine's resolver. Every OTHER
 # scope in the registry (another engine's `patter`, a game's own) reaches the
 # context too, under the five own tokens. Quality ladders live on the engine
 # (declaration-level, partition-blind), falling back to the registry's.
@@ -464,7 +489,8 @@ func _eval_ctx(box: Dictionary, deck, hand_env: Dictionary) -> Dictionary:
 		# Every other engine's game-wide scope first (every engine reads every
 		# scope); this engine's own tokens are its merged views, over the top.
 		base = (others["scopes"] as Dictionary).duplicate()
-		base["world"] = _engine.world_get
+		for token in _engine._host_scopes:
+			base[token] = _engine.host_read.bind(token)
 		base["story"] = _read_story
 		base["box"] = _read_owned.bind("box", box_id)
 		base["deck"] = _read_owned.bind("deck", deck_id) if deck_id != null else {}
@@ -491,11 +517,6 @@ func _read_owned(name: String, kind: String, owner_id: String) -> Variant:
 # The quality channel for one ask, bound per context by _eval_ctx.
 func _ladder_of(scope: String, name: String, box_id: String, deck_id, hand_env: Dictionary, other_qualities) -> Variant:
 	match scope:
-		"world":
-			var ladder = _engine._world_ladders.get(name)
-			if ladder == null and other_qualities != null:
-				return (other_qualities as Callable).call(scope, name)
-			return ladder
 		"story":
 			return _engine._story_ladders.get(name)
 		"box":
@@ -507,6 +528,11 @@ func _ladder_of(scope: String, name: String, box_id: String, deck_id, hand_env: 
 				return (_engine._deck_ladders.get(deck_id, {}) as Dictionary).get(name)
 		"hand":
 			return _hand_ladder(hand_env, name)
+	# A host scope's ladder (@world, @player, ...), then the registry's answer,
+	# as for any token this engine does not own.
+	var host_ladder = (_engine._host_ladders.get(scope, {}) as Dictionary).get(name)
+	if host_ladder != null:
+		return host_ladder
 	if other_qualities != null:
 		return (other_qualities as Callable).call(scope, name)
 	return null
@@ -1110,7 +1136,8 @@ static func _cap_trace(trace: Array, taken: Dictionary) -> void:
 
 # A card view in a dealt hand or a peeked list. Carries NO outcome
 # availability - ask outcomes() for current truth (schema 5). Fields and
-# extension values ride out raw, absent when the card has none.
+# extension values ride out raw, absent when the card has none. Fields are the
+# game's own copy; extension values are the bundle's own, READ-ONLY.
 func _view(entry: Dictionary) -> Dictionary:
 	var card: Dictionary = entry["card"]
 	var v := {"id": card["id"], "gameId": StoryletBundle.effective_game_id(card)}
@@ -1121,12 +1148,16 @@ func _view(entry: Dictionary) -> Dictionary:
 	if card.has("fields"):
 		v["fields"] = _copy(card["fields"])
 	if card.has("extensions"):
-		v["extensions"] = _copy(card["extensions"])
+		# NOT copied: extension values are the extension runtime's data, read-only
+		# by contract, and can be large, so a copy per deal would charge every
+		# game for a mistake good readers don't make (a family ruling, 2026-10-28,
+		# as Patter's). Changing them changes them for every later deal.
+		v["extensions"] = card["extensions"]
 	return v
 
 
-# A deep copy of what a view hands out. The bundle's own maps are shared by
-# every deal and every engine on it, so a game changing what it was handed
+# A deep copy of the fields a view hands out. The bundle's own maps are shared
+# by every deal and every engine on it, so a game changing what it was handed
 # must never change them (the hands-on review, 2026-10, foundation 6).
 static func _copy(value: Variant) -> Variant:
 	if value is Dictionary or value is Array:
@@ -1176,18 +1207,19 @@ func _resolve_box(box_ref) -> Variant:
 ## one return nothing, as JS's `slice(0, Math.max(n, 0))` reads them. null was
 ## "no cap" here until 2026-10-06, and JS has always read it as zero.
 func peek(box_ref: String, criteria: Dictionary = {}, n = INF) -> Dictionary:
+	_last_error = ""
 	if _closed:
 		var closed_msg := _closed_message()
-		push_error("StoryletFlow.peek: " + closed_msg)
+		_refuse("peek", closed_msg)
 		return {"box": box_ref, "cards": [], "error": closed_msg}
 	var box = _resolve_box(box_ref)
 	if box == null:
 		var msg := 'unknown box "%s"' % box_ref
-		push_error("StoryletFlow.peek: " + msg)
+		_refuse("peek", msg)
 		return {"box": box_ref, "cards": [], "error": msg}
 	var ask := _ask_for_peek(box, criteria)
 	if ask.has("error"):
-		push_error("StoryletFlow.peek: " + ask["error"])
+		_refuse("peek", ask["error"])
 		return {"box": StoryletBundle.effective_game_id(box), "cards": [], "error": ask["error"]}
 	var claim_counts := _claims()
 	# Skipped outright when the bundle shares nothing, which is most bundles:
@@ -1221,12 +1253,13 @@ func peek(box_ref: String, criteria: Dictionary = {}, n = INF) -> Dictionary:
 
 ## Refresh one hand (schema 3.5); returns its new shape (Array of card views).
 func deal(hand_ref: String) -> Array:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.deal: " + _closed_message())
+		_refuse("deal", _closed_message())
 		return []
 	var found = _resolve_hand(hand_ref)
 	if found == null:
-		push_error('StoryletFlow.deal: unknown hand "%s"' % hand_ref)
+		_refuse("deal", 'unknown hand "%s"' % hand_ref)
 		return []
 	return deal_many([hand_ref]).get(StoryletBundle.effective_game_id(found["hand"]), [])
 
@@ -1325,8 +1358,9 @@ func drop_unqualified() -> Array:
 ## the dealt slice - the new contents of exactly the hands this call dealt,
 ## keyed by hand gameId (board() stays the whole-board read).
 func deal_many(hand_refs = null) -> Dictionary:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.deal_many: " + _closed_message())
+		_refuse("deal_many", _closed_message())
 		return {}
 	var refs: Array = []
 	if hand_refs == null:
@@ -1339,7 +1373,7 @@ func deal_many(hand_refs = null) -> Dictionary:
 	for ref in refs:
 		var found = _resolve_hand(ref)
 		if found == null:
-			push_error('StoryletFlow.deal_many: unknown hand "%s"' % ref)
+			_refuse("deal_many", 'unknown hand "%s"' % ref)
 			return {}
 		dealt.append(found)
 	StoryletMulberry32.shuffle_in_place(dealt, _prng)
@@ -1353,7 +1387,7 @@ func deal_many(hand_refs = null) -> Dictionary:
 		var box: Dictionary = f["box"]
 		var evicted = _evict_unavailable(hand, box)
 		if evicted is String:
-			push_error("StoryletFlow.deal_many: " + evicted)
+			_refuse("deal_many", evicted)
 			continue
 		if _tracing():
 			var turn_now: float = _turn_counts.get(box["id"], 0.0)
@@ -1457,14 +1491,15 @@ func deal_many(hand_refs = null) -> Dictionary:
 ## every engine rather than silently getting everything in two. Unity uses an
 ## overload pair for the same reason; GDScript has null, so it uses that.
 func board(box_ref = null) -> Dictionary:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.board: " + _closed_message())
+		_refuse("board", _closed_message())
 		return {}
 	var keep := ""
 	if box_ref != null:
 		var box = _resolve_box(box_ref)
 		if box == null:
-			push_error('StoryletFlow.board: unknown box "%s"' % box_ref)
+			_refuse("board", 'unknown box "%s"' % box_ref)
 			return {}
 		keep = box["id"]
 	var out := {}
@@ -1504,14 +1539,16 @@ func _resolve_dealt(card_id: String, hand_ref: String) -> Dictionary:
 ## "title"?, "purpose"?, "fields"?, "extensions"?, "available"}; a bad reference
 ## push_errors and returns []. "fields" is the outcome's game data, declared by
 ## the box's outcomeFields, and "extensions" its Storylet extension values by
-## extension id, both handed over exactly as the bundle wrote them.
+## extension id, both handed over exactly as the bundle wrote them: the fields
+## a copy, the extension values the bundle's own, READ-ONLY.
 func outcomes(card_id: String, from_hand: String) -> Array:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.outcomes: " + _closed_message())
+		_refuse("outcomes", _closed_message())
 		return []
 	var rd := _resolve_dealt(card_id, from_hand)
 	if rd.has("error"):
-		push_error("StoryletFlow.outcomes: " + rd["error"])
+		_refuse("outcomes", rd["error"])
 		return []
 	var entry: Dictionary = rd["entry"]
 	var ctx := _eval_ctx(entry["box"], entry["deck"], _build_hand_env(rd["ask"]))
@@ -1525,7 +1562,7 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 		if o.has("fields"):
 			view["fields"] = _copy(o["fields"])
 		if o.has("extensions"):
-			view["extensions"] = _copy(o["extensions"])
+			view["extensions"] = o["extensions"]   # read-only, as a dealt card's
 		view["available"] = _passes(o.get("condition"), ctx, "outcome", o, entry["card"])
 		out.append(view)
 	return out
@@ -1545,21 +1582,26 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 ## new: "" on a card that has outcomes is refused, and a named outcome on a card
 ## with none is refused as before.
 func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dictionary = {}) -> String:
+	_last_error = _play(card_id, outcome_game_id, from_hand, opts)
+	return _last_error
+
+
+func _play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dictionary) -> String:
 	if _closed:
 		var closed_msg := _closed_message()
-		push_error("StoryletFlow.play: " + closed_msg)
+		_refuse("play", closed_msg)
 		return closed_msg
 	for key in opts:
 		if not PLAY_OPTION_KEYS.has(key):
 			var msg := 'unknown play option "%s" (valid: %s)' % [key, ", ".join(PLAY_OPTION_KEYS)]
-			push_error("StoryletFlow.play: " + msg)
+			_refuse("play", msg)
 			return msg
 	var rd := _resolve_dealt(card_id, from_hand)
 	if rd.has("error"):
 		# A bad reference is a programmer error, which push_errors as well as
 		# returning (the rule at the head of this file), as outcomes() does for
 		# the same resolve. The refusals below are part of play: returned only.
-		push_error("StoryletFlow.play: " + rd["error"])
+		_refuse("play", rd["error"])
 		return rd["error"]
 	var entry: Dictionary = rd["entry"]
 	var ask: Dictionary = rd["ask"]
@@ -1684,13 +1726,18 @@ func _remove_one(hand_id: String, card_id: String) -> void:
 ## Returns "" on success or the error message; a bad reference push_errors as
 ## well, as play's does.
 func discard(card_id: String, from_hand: String) -> String:
+	_last_error = _discard(card_id, from_hand)
+	return _last_error
+
+
+func _discard(card_id: String, from_hand: String) -> String:
 	if _closed:
 		var closed_msg := _closed_message()
-		push_error("StoryletFlow.discard: " + closed_msg)
+		_refuse("discard", closed_msg)
 		return closed_msg
 	var rd := _resolve_dealt(card_id, from_hand)
 	if rd.has("error"):
-		push_error("StoryletFlow.discard: " + rd["error"])
+		_refuse("discard", rd["error"])
 		return rd["error"]
 	var entry: Dictionary = rd["entry"]
 	var ask: Dictionary = rd["ask"]
@@ -1711,7 +1758,7 @@ func discard(card_id: String, from_hand: String) -> String:
 
 # \z, not $: PCRE's $ also matches before a trailing newline, so "@story.gold\n"
 # was a target here and is refused in JS (2026-10-06).
-static var _change_target_re := RegEx.create_from_string("^@([a-z]+)\\.([A-Za-z_][A-Za-z0-9_-]*)\\z")
+static var _change_target_re := RegEx.create_from_string("^@([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_-]*)\\z")
 
 
 # Find the bag that declares one change's name: the flow's bag when the
@@ -1738,7 +1785,7 @@ func _plan_bag(target: String, kind: String, owner_id, name: String, path: Strin
 # Resolve and check one change target, writing nothing: every refusal a write
 # can meet that the engine can know in advance is met HERE, so a play checks
 # all its targets before any write lands (ruling B). Returns the plan
-# {"kind": "world" | "bag" | "scope", "target", "name", "path", ...} or
+# {"kind": "host" | "bag" | "scope", "target", "name", "path", ...} or
 # {"error": message}.
 func _plan_write(target: String, entry: Dictionary, hand_env: Dictionary) -> Dictionary:
 	var m := _change_target_re.search(target)
@@ -1746,19 +1793,19 @@ func _plan_write(target: String, entry: Dictionary, hand_env: Dictionary) -> Dic
 		return {"error": 'bad change target "%s"' % target}
 	var scope := m.get_string(1)
 	var name := m.get_string(2)
+	if _engine.is_host_scope(scope):
+		if not _engine.host_can_set(scope):
+			return {"error": "@%s.%s cannot be written: the host bound @%s read-only" % [scope, name, scope]}
+		# The story's own promise (writable: false on the declaration, or on its
+		# scope), kept HERE and only here, because here is where the story does
+		# the writing: asked before the write seam, so an outcome never reaches the
+		# bag (which would let a host write past it) nor a bound resolver (which
+		# cannot tell the two apart). The host is not bound: set_property is its
+		# own path. Parity with the JS runtime and Patterplay.
+		if _engine.host_read_only(scope, name):
+			return {"error": "'@%s.%s' is read-only (writable: false)" % [scope, name]}
+		return {"kind": "host", "target": target, "scope": scope, "name": name, "path": "%s.%s" % [scope, name]}
 	match scope:
-		"world":
-			if not _engine.world_can_set():
-				return {"error": "@world.%s cannot be written: the host bound @world read-only" % name}
-			# The story's own promise (writable: false on the declaration), kept HERE
-			# and only here, because here is where the story does the writing: asked
-			# before the write seam, so an outcome never reaches the bag (which would
-			# let a host write past it) nor a bound resolver (which cannot tell the two
-			# apart). The host is not bound: set_property is its own path. Parity with
-			# the JS runtime and Patterplay.
-			if _engine.world_read_only(name):
-				return {"error": "'@world.%s' is read-only (writable: false)" % name}
-			return {"kind": "world", "target": target, "name": name, "path": "world.%s" % name}
 		"story":
 			return _plan_bag(target, "story", null, name, "story.%s" % name)
 		"box":
@@ -1792,9 +1839,9 @@ func _land_write(plan: Dictionary, value) -> Dictionary:
 	var prev = null
 	var refused := ""
 	match plan["kind"]:
-		"world":
-			prev = _engine.world_get(plan["name"])
-			refused = _engine.world_set(plan["name"], value)
+		"host":
+			prev = _engine.host_get(plan["scope"], plan["name"])
+			refused = _engine.host_set(plan["scope"], plan["name"], value)
 		"bag":
 			var change: Dictionary = (plan["bag"] as StoryletPropertyBag).set_value(plan["name"], value)
 			if change.has("error"):
@@ -1816,8 +1863,8 @@ func _undo_write(plan: Dictionary, prev) -> void:
 	if prev == null:
 		return
 	match plan["kind"]:
-		"world":
-			_engine.world_set(plan["name"], prev, true)
+		"host":
+			_engine.host_set(plan["scope"], plan["name"], prev, true)
 		"bag":
 			(plan["bag"] as StoryletPropertyBag).set_value(plan["name"], prev, {"silent": true, "reason": "play refused", "host": true})
 		"scope":
@@ -1830,28 +1877,31 @@ func _address(kind: String, owner_id: String) -> String:
 
 
 ## Advance one box's clock (schema 3.4): a turn is one draw-from-stock session
-## for that box. An unknown box push_errors and does nothing.
-func advance_turns(box_ref: String, n: float = 1.0) -> void:
+## for that box. Returns "" or the refusal (also push_error'd and kept for
+## last_error()): an unknown box, or a closed flow, changes nothing.
+func advance_turns(box_ref: String, n: float = 1.0) -> String:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.advance_turns: " + _closed_message())
-		return
+		return _refuse("advance_turns", _closed_message())
 	var box = _resolve_box(box_ref)
 	if box == null:
-		push_error('StoryletFlow.advance_turns: unknown box "%s"' % box_ref)
-		return
+		return _refuse("advance_turns", 'unknown box "%s"' % box_ref)
 	var next: float = float(_turn_counts.get(box["id"], 0.0)) + n
 	_turn_counts[box["id"]] = next
 	if _tracing():
 		_emit({"type": "turns", "box": StoryletBundle.effective_game_id(box), "turn": next}, next)
+	return ""
 
 
 # --- state access (host surface + test tooling) -----------------------------------
 
-## Every box, bundle order: identity, its extension values when it carries any,
-## + THIS flow's clock (parity member).
+## Every box, bundle order: identity, its extension values when it carries any
+## (the bundle's own, READ-ONLY, as a dealt card's), + THIS flow's clock (parity
+## member).
 func list_boxes() -> Array:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.list_boxes: " + _closed_message())
+		_refuse("list_boxes", _closed_message())
 		return []
 	var out: Array = []
 	for b in _engine._bundle["boxes"]:
@@ -1859,7 +1909,7 @@ func list_boxes() -> Array:
 		if b.has("title"):
 			row["title"] = b["title"]
 		if b.has("extensions"):
-			row["extensions"] = _copy(b["extensions"])
+			row["extensions"] = b["extensions"]   # read-only and uncopied, as a dealt card's
 		row["turn"] = _turn_counts.get(b["id"], 0.0)
 		out.append(row)
 	return out
@@ -1869,8 +1919,9 @@ func list_boxes() -> Array:
 ## logger's mount surface; parity member). The shared bags are the engine's
 ## list_bags; flows are rebuilt by load_game, so consumers re-enumerate.
 func list_bags() -> Array:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.list_bags: " + _closed_message())
+		_refuse("list_bags", _closed_message())
 		return []
 	var mounts: Array = [{"prefix": "story", "bag": _stores["story"]}]
 	for kind in StoryletEngine.OWNED_KINDS:
@@ -1879,27 +1930,15 @@ func list_bags() -> Array:
 	return mounts
 
 
-## The flow's FULL merged view as examiner rows: @world read through the
-## engine's resolver, then per scope the shared values and this flow's own.
+## The flow's FULL merged view as examiner rows: the host scopes read through
+## the engine's resolvers (in bundle order), then per scope the shared values
+## and this flow's own.
 func list_properties() -> Array:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.list_properties: " + _closed_message())
+		_refuse("list_properties", _closed_message())
 		return []
-	var out: Array = []
-	for d in _engine._bundle["world"].get("properties", []):
-		var value = _engine.world_get(d["name"])
-		var row := {"path": "world.%s" % d["name"], "name": d["name"], "type": d.get("type", "string"),
-			"value": value if value != null else d.get("default"), "default": d.get("default"),
-			# The bag rows carry this from PropertyBag.rows(); the @world rows are built
-			# here by hand and were missing it, so a read-only world property looked
-			# writable to an examiner. Whether the resolver can be written at all
-			# counts too, which is the kernel's rule for a foreign scope.
-			"writable": _engine.world_can_set() and not _engine.world_read_only(d["name"])}
-		if d.has("values"):
-			row["values"] = d["values"]
-		if d.has("stages"):
-			row["stages"] = d["stages"]
-		out.append(row)
+	var out: Array = _engine.host_rows()
 	StoryletEngine._add_rows(out, _engine._shared["story"])
 	StoryletEngine._add_rows(out, _stores["story"])
 	for kind in StoryletEngine.OWNED_KINDS:
@@ -1928,13 +1967,14 @@ func list_properties() -> Array:
 ## earns a `diagnostic` naming the address to move to; the next lockstep release
 ## refuses it.
 func get_property(path: String) -> Variant:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.get_property: " + _closed_message())
+		_refuse("get_property", _closed_message())
 		return null
 	var parts := path.split(".")
 	var value = null
-	if parts.size() == 2 and parts[0] == "world":
-		value = _engine.world_get(parts[1])
+	if parts.size() == 2 and _engine.is_host_scope(parts[0]):
+		value = _engine.host_get(parts[0], parts[1])
 	elif parts.size() == 2 and parts[0] != "story" and _engine._registry.has(parts[0]):
 		# Another engine's game-wide scope (`patter.gold`): every engine reads every scope.
 		value = _engine._registry.get_value(parts[0], parts[1])
@@ -1943,21 +1983,21 @@ func get_property(path: String) -> Variant:
 	elif parts.size() == 3 and StoryletEngine.OWNED_KINDS.has(parts[0]):
 		var owner := _resolve_owner(parts[0], parts[1], parts[2])
 		if owner.has("error"):
-			push_error("StoryletFlow.get_property: " + str(owner["error"]))
+			_refuse("get_property", str(owner["error"]))
 			return null
 		if owner.is_empty():
-			push_error('StoryletFlow.get_property: no %s store "%s"' % [parts[0], parts[1]])
+			_refuse("get_property", 'no %s store "%s"' % [parts[0], parts[1]])
 			return null
 		var owner_id: String = owner["id"]
 		if _stores[parts[0]].get(owner_id) == null and _engine._shared[parts[0]].get(owner_id) == null:
-			push_error('StoryletFlow.get_property: no %s store "%s"' % [parts[0], parts[1]])
+			_refuse("get_property", 'no %s store "%s"' % [parts[0], parts[1]])
 			return null
 		value = _read_pair(parts[0], owner_id, parts[2])
 	else:
-		push_error('StoryletFlow.get_property: bad property path "%s"' % path)
+		_refuse("get_property", 'bad property path "%s"' % path)
 		return null
 	if value == null:
-		push_error('StoryletFlow.get_property: no property at "%s"' % path)
+		_refuse("get_property", 'no property at "%s"' % path)
 		return null
 	return value
 
@@ -1965,21 +2005,26 @@ func get_property(path: String) -> Variant:
 ## Write by path. A host write: silent under the firing rule, visible to
 ## the bag's audit hook. Returns "" or the error message (with push_error).
 func set_property(path: String, value) -> String:
+	_last_error = _set_property(path, value)
+	return _last_error
+
+
+func _set_property(path: String, value) -> String:
 	if _closed:
 		var closed_msg := _closed_message()
-		push_error("StoryletFlow.set_property: " + closed_msg)
+		_refuse("set_property", closed_msg)
 		return closed_msg
 	var parts := path.split(".")
-	if parts.size() == 2 and parts[0] == "world":
-		var unfit_world := _engine.host_write_refusal(path, value)
-		if unfit_world != "":
-			push_error("StoryletFlow.set_property: " + unfit_world)
-			return unfit_world
-		if not _engine.world_can_set():
-			var msg := "@world is read-only here: the host bound no write"
-			push_error("StoryletFlow.set_property: " + msg)
+	if parts.size() == 2 and _engine.is_host_scope(parts[0]):
+		var unfit_host := _engine.host_write_refusal(path, value)
+		if unfit_host != "":
+			_refuse("set_property", unfit_host)
+			return unfit_host
+		if not _engine.host_can_set(parts[0]):
+			var msg := "@%s is read-only here: the host bound no write" % parts[0]
+			_refuse("set_property", msg)
 			return msg
-		return _engine.world_set(parts[1], value, true)
+		return _engine.host_set(parts[0], parts[1], value, true)
 	if parts.size() == 2 and parts[0] != "story" and _engine._registry.has(parts[0]):
 		return _engine._registry.set_value(parts[0], parts[1], value, {"host": true})
 	var kind := ""
@@ -1994,28 +2039,28 @@ func set_property(path: String, value) -> String:
 		var owner := _resolve_owner(kind, parts[1], name)
 		if owner.has("error"):
 			var refused := str(owner["error"])
-			push_error("StoryletFlow.set_property: " + refused)
+			_refuse("set_property", refused)
 			return refused
 		if owner.is_empty():
 			var unknown := 'no %s store "%s"' % [kind, parts[1]]
-			push_error("StoryletFlow.set_property: " + unknown)
+			_refuse("set_property", unknown)
 			return unknown
 		owner_id = owner["id"]
 	else:
 		var bad := 'bad property path "%s"' % path
-		push_error("StoryletFlow.set_property: " + bad)
+		_refuse("set_property", bad)
 		return bad
 	# What the game hands in must fit what the content declared (the hands-on
 	# review, 2026-10, foundation 5), checked once the address resolves.
 	var unfit := _engine.host_write_refusal(path, value)
 	if unfit != "":
-		push_error("StoryletFlow.set_property: " + unfit)
+		_refuse("set_property", unfit)
 		return unfit
 	var own = _stores["story"] if kind == "story" else _stores[kind].get(owner_id)
 	var shared = _engine._shared["story"] if kind == "story" else _engine._shared[kind].get(owner_id)
 	if own == null and shared == null:
 		var missing := 'no %s store "%s"' % [kind, str(owner_id)]
-		push_error("StoryletFlow.set_property: " + missing)
+		_refuse("set_property", missing)
 		return missing
 	var bag = null
 	if own != null and (own as StoryletPropertyBag).get_value(name) != null:
@@ -2024,7 +2069,7 @@ func set_property(path: String, value) -> String:
 		bag = shared
 	if bag == null:
 		var none := 'no property at "%s"' % path
-		push_error("StoryletFlow.set_property: " + none)
+		_refuse("set_property", none)
 		return none
 	# A HOST write: silent under the firing rule, visible to the audit hook, and
 	# flagged host so a `writable: false` does not refuse the game its own value.
@@ -2061,8 +2106,9 @@ func _resolve_owner(kind: String, segment: String, name: String) -> Dictionary:
 # this (a diagnostic path, so it must not push_error on a missing name).
 func _resolve_path(path: String) -> Dictionary:
 	var parts := path.split(".")
-	if parts.size() == 2 and parts[0] == "world":
-		var wv = _engine.world_get(parts[1])
+	if parts.size() == 2 and parts[0] != "story":
+		# A host scope (@world), or a scope the game registered itself.
+		var wv = _engine.host_get(parts[0], parts[1])
 		if wv == null:
 			return {"error": 'no property at "%s"' % path}
 		return {"value": wv}
@@ -2083,8 +2129,9 @@ func _resolve_path(path: String) -> Dictionary:
 ## engine.save_durable(), and the shape is the same. A copy. Refused on a closed
 ## flow, as every verb is: {} with push_error.
 func save_durable() -> Dictionary:
+	_last_error = ""
 	if _closed:
-		push_error("StoryletFlow.save_durable: " + _closed_message())
+		_refuse("save_durable", _closed_message())
 		return {}
 	var never := float(StoryletBundle.MAX_SAFE_INTEGER)
 	var spent: Array = []

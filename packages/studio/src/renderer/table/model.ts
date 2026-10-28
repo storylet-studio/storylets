@@ -7,7 +7,7 @@
 
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceVerdict } from "@storylet-studio/runtime";
-import { SAVEFILE_SCHEMA, effectiveGameId, groupsOfBox, valueAddresses } from "@storylet-studio/model";
+import { SAVEFILE_SCHEMA, bundleHostScopes, effectiveGameId, groupsOfBox, hostScopeDecls, valueAddresses } from "@storylet-studio/model";
 import type { Bundle, LoadReport, PropertyBag, SaveFile, ScalarValue, TagGroup } from "@storylet-studio/model";
 import { ENGINE_SCOPES } from "@storylet-studio/dialect";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, standInRegistry } from "@wildwinter/scoperegistry/scopes";
@@ -194,9 +194,13 @@ export function boardRegistry(bundle: Bundle, scopes: BoardScopesDto | undefined
   const registry = scopes !== undefined
     ? standInRegistry({ spec: scopes.spec, owners: new Map(Object.entries(scopes.owners)), issues: [] }, { except })
     : new ScopeRegistry();
-  if (!registry.has("world")) {
-    registry.defineOwned("world", bundle.world.properties as unknown as ScopeDeclaration[],
-      { normalise: (name) => name, pathPrefix: "world.", owner: "Game" });
+  // Every host scope the bundle declares (@world, @player, ...), as ops' previewRegistry does.
+  for (const host of bundleHostScopes(bundle)) {
+    if (registry.has(host.token)) continue;
+    registry.defineOwned(host.token, (host.declarations ?? []).map((d) => {
+      const writable = d.writable ?? host.writable;
+      return { ...d, ...(writable !== undefined ? { writable } : {}) } as ScopeDeclaration;
+    }), { normalise: (name) => name, pathPrefix: `${host.token}.`, owner: "Game" });
   }
   return registry;
 }
@@ -207,6 +211,10 @@ export function boardRegistry(bundle: Bundle, scopes: BoardScopesDto | undefined
  *  here, carries them itself. Any other reader of the file ignores the extra key. */
 export type BoardSaveFile = SaveFile & {
   registry?: Record<string, Record<string, ScalarValue>>;
+  /** The game's other host scopes' values (`@player`, ...), by token, beside `world` (which
+   *  the family's file carries as it always has): the Board is the game here, so saving the
+   *  game's containers is its job. Absent when the bundle declares none besides `@world`. */
+  hostScopes?: Record<string, PropertyBag>;
   /** Patter's part, when the Board plays Patter scenes: its flows, not its properties (those are
    *  the registry's, above). The combined game's one save, `{ registry, patter, storylets }`. */
   patter?: unknown;
@@ -232,7 +240,8 @@ export class Table {
   /** The stand-in registry, when the Board built its engine on one (see `boardRegistry`). */
   readonly registry: ScopeRegistry | undefined;
   /** The other engines' stood-in scopes, for the State tab: what the folder declares, less
-   *  this engine's own and `@world` (which has rows of its own). Empty with no registry. */
+   *  this engine's own and the bundle's host scopes (which have rows of their own). Empty with
+   *  no registry. */
   private readonly standIns: BoardScopesDto["spec"]["scopes"];
 
   /** Patter, when the project is paired and names boxes Patter performs: the engine, on this
@@ -253,7 +262,8 @@ export class Table {
     // other engines (and @world) are stood in on a registry of the Board's.
     this.registry = boardRegistry(bundle, scopes, patter !== undefined);
     this.standIns = this.registry === undefined ? []
-      : (scopes?.spec.scopes ?? []).filter((x) => x.token !== "story" && x.token !== "world" && (patter === undefined || x.token !== "patter") && x.declarations !== undefined);
+      : (scopes?.spec.scopes ?? []).filter((x) => x.token !== "story" && x.token !== "world" && !bundleHostScopes(bundle).some((h) => h.token === x.token)
+        && (patter === undefined || x.token !== "patter") && x.declarations !== undefined);
     this.engine = new Engine(bundle, { seed, log: { cap: 200 }, ...(this.registry ? { registry: this.registry } : {}) });
     // Patter joins the same registry BEFORE the flow opens: the Storylet Engine refuses content
     // naming @patter unless something provides it by then (the combined game's order).
@@ -306,11 +316,36 @@ export class Table {
   /** The Board's @world values (the engine self-backs the container; the
    *  Board is the host, so saving them is the Board's job). */
   worldValues(): PropertyBag {
+    return this.scopeValues("world");
+  }
+
+  /** One host scope's declared values, read live. */
+  private scopeValues(token: string): PropertyBag {
     const out: PropertyBag = {};
-    for (const d of this.bundle.world.properties) {
-      try { out[d.name] = this.engine.getProperty(`world.${d.name}`); } catch { /* default only */ }
+    for (const d of hostScopeDecls(this.bundle, token)) {
+      try { out[d.name] = this.engine.getProperty(`${token}.${d.name}`); } catch { /* default only */ }
     }
     return out;
+  }
+
+  /** Every host scope's values but @world's (`@player`, ...), by token: the game's other
+   *  containers, which the Board saves and keeps across a new run as it does @world. */
+  hostValues(): Record<string, PropertyBag> {
+    const out: Record<string, PropertyBag> = {};
+    for (const h of bundleHostScopes(this.bundle)) {
+      if (h.token === "world" || h.declarations === undefined) continue;
+      out[h.token] = this.scopeValues(h.token);
+    }
+    return out;
+  }
+
+  /** Put host-scope values back, by token: a key the build no longer declares is dropped. */
+  private restoreScopes(values: Record<string, PropertyBag>): void {
+    for (const [token, bag] of Object.entries(values)) {
+      for (const [name, value] of Object.entries(bag)) {
+        try { this.engine.setProperty(`${token}.${name}`, value); } catch { /* an orphaned key: dropped */ }
+      }
+    }
   }
 
   /** The .storyletsave FILE: the engine's envelope plus the Board's @world
@@ -318,6 +353,7 @@ export class Table {
   saveFile(): BoardSaveFile {
     return {
       schema: SAVEFILE_SCHEMA, engine: this.engine.saveGame(), world: this.worldValues(),
+      ...(() => { const h = this.hostValues(); return Object.keys(h).length > 0 ? { hostScopes: h } : {}; })(),
       ...(this.registry ? { registry: this.registry.save() } : {}),
       ...(this.patter ? { patter: this.patter.saveGame() } : {}),
     };
@@ -339,9 +375,7 @@ export class Table {
     if (this.registry && file.registry) this.registry.load(file.registry);
     this.session = this.engine.getFlow("main") ?? this.engine.openFlow("main");
     this.meddles = [];
-    for (const [name, value] of Object.entries(file.world ?? {})) {
-      try { this.engine.setProperty(`world.${name}`, value); } catch { /* an orphaned key: dropped */ }
-    }
+    this.restoreScopes({ world: file.world ?? {}, ...(file.hostScopes ?? {}) });
     return report;
   }
 
@@ -356,23 +390,22 @@ export class Table {
    * the verbs a game would call: `saveDurable` on the flow and the engine,
    * reset, `loadDurable`, and `openFlow` with the pocket.
    *
-   * @world is untouched. It is the host's container, not the engine's, and
-   * neither this nor Forget everyone is the game's business (4.2).
+   * @world is untouched, and so is every other host scope (`@player`, ...).
+   * They are the host's containers, not the engine's, and neither this nor
+   * Forget everyone is the game's business (4.2).
    */
   newRun(): void {
     // Keep everything durable BEFORE the reset, while it still exists.
     const pocket = this.session.saveDurable();
     const memory = this.engine.saveDurable();
-    const world = this.worldValues();
+    const hosts = { world: this.worldValues(), ...this.hostValues() };
 
     this.engine.reset();
     this.engine.loadDurable(memory);
     // openFlow REPLACES the name, on the run's seed with its clocks at zero,
     // and the pocket goes in on top of the defaults.
     this.session = this.engine.openFlow("main", { durable: pocket });
-    for (const [name, value] of Object.entries(world)) {
-      try { this.engine.setProperty(`world.${name}`, value); } catch { /* an orphaned key: dropped */ }
-    }
+    this.restoreScopes(hosts);
     // Patter starts the run over too: its flows close, and its own properties go back to where
     // they began. @world stays the game's, as above.
     this.performer?.reset();
@@ -382,8 +415,12 @@ export class Table {
     this.meddles = [];
   }
 
-  /** The author's pokes (State tab), interleaved into the record. */
-  private meddles: MeddleEntry[] = [];
+  /** How many properties the last `perform` step changed. */
+  lastPerformWrites = 0;
+
+  /** The author's pokes (State tab) and a Patter scene's writes, interleaved
+   *  into the record. */
+  private meddles: (MeddleEntry | SceneWriteEntry)[] = [];
 
   /** The session's retained event log, oldest first, with the author's own
    *  pokes interleaved where they happened - the journal must not silently
@@ -400,14 +437,43 @@ export class Table {
     let prev: ScalarValue | undefined;
     try { prev = this.session.getProperty(path); } catch { /* undeclared: no prev */ }
     this.session.setProperty(path, value);
-    // A seq between the last logged event and the next: fractional, and each
-    // further poke halves the remaining gap so a run of pokes stays ordered
-    // without ever reaching the next integer seq.
+    this.meddles.push({ type: "meddle", seq: this.syntheticSeq(), label, ...(prev !== undefined ? { prev } : {}), value });
+  }
+
+  /** A seq between the last logged event and the next: fractional, and each
+   *  further synthetic entry halves the remaining gap so a run of them stays
+   *  ordered without ever reaching the next integer seq. */
+  private syntheticSeq(): number {
     const logged = this.session.log();
     const base = logged.length > 0 ? logged[logged.length - 1]!.seq : 0;
     const prevSeq = this.meddles[this.meddles.length - 1]?.seq ?? 0;
-    const seq = prevSeq > base ? prevSeq + (Math.ceil(prevSeq) - prevSeq) / 2 : base + 0.5;
-    this.meddles.push({ type: "meddle", seq, label, ...(prev !== undefined ? { prev } : {}), value });
+    return prevSeq > base ? prevSeq + (Math.ceil(prevSeq) - prevSeq) / 2 : base + 0.5;
+  }
+
+  /**
+   * Run a step of a card's Patter scene (the Performer's start or choose) ON
+   * THE RECORD: Patter writes straight to the shared registry, so the engine's
+   * log never sees it, and the Journal left out what the scene wrote (the
+   * hands-on review, 2026-10). Every property the step changed is journalled
+   * as the scene's. Patter's own scope (visits and the like) is its
+   * bookkeeping, not the story, and is left out.
+   */
+  perform<T>(scene: string, step: () => T): T {
+    this.lastPerformWrites = 0;
+    if (!this.registry) return step();
+    const before = this.registry.save();
+    const result = step();
+    const after = this.registry.save();
+    for (const [scope, values] of Object.entries(after)) {
+      if (scope === "patter") continue;
+      for (const [name, value] of Object.entries(values)) {
+        const prev = before[scope]?.[name];
+        if (JSON.stringify(prev) === JSON.stringify(value)) continue;
+        this.meddles.push({ type: "sceneWrite", seq: this.syntheticSeq(), scene, label: `@${scope}.${name}`, ...(prev !== undefined ? { prev } : {}), value });
+        this.lastPerformWrites++;
+      }
+    }
+    return result;
   }
 
   /** Every box in the bundle with its tag groups, for the box navigator and
@@ -589,8 +655,9 @@ export class Table {
     }));
   }
 
-  /** The declared state a writer pokes: @world, @story, and tag properties
-   *  (the ones that visibly change an ask). Read live. */
+  /** The declared state a writer pokes: @world, @story, the game's other host
+   *  scopes (`@player`, ...), and tag properties (the ones that visibly change
+   *  an ask). Read live. */
   stateRows(): StateRow[] {
     const rows: StateRow[] = [];
     const readable = (path: string): ScalarValue | undefined => {
@@ -604,8 +671,12 @@ export class Table {
         ...(decl.type === "quality" && decl.stages !== undefined ? { stages: decl.stages } : {}),
       });
     };
-    for (const decl of this.bundle.world.properties) push(`world.${decl.name}`, decl.name, "world", decl);
+    for (const decl of hostScopeDecls(this.bundle, "world")) push(`world.${decl.name}`, decl.name, "world", decl);
     for (const decl of this.bundle.story.properties) push(`story.${decl.name}`, decl.name, "story", decl);
+    for (const h of bundleHostScopes(this.bundle)) {
+      if (h.token === "world") continue;
+      for (const decl of h.declarations ?? []) push(`${h.token}.${decl.name}`, decl.name, h.token, decl);
+    }
     // The other engines, stood in (patterkit design/shared-scopes.md): a tester pokes
     // `@patter.visits` to see what a card gated on it does, exactly as they poke @world.
     for (const scope of this.standIns) {
@@ -756,7 +827,7 @@ export function attributeRipple(
   const items: RippleItem[] = [];
   for (let i = playIndex + 1; i < entries.length; i++) {
     const e = entries[i]!;
-    if (e.type === "play" || e.type === "write" || e.type === "turns" || e.type === "meddle") break;
+    if (e.type === "play" || e.type === "write" || e.type === "turns" || e.type === "meddle" || e.type === "sceneWrite") break;
     if (e.type === "deal") {
       for (const c of e.cards) {
         if (c.verdict !== "dealt") continue;
@@ -793,7 +864,20 @@ export interface MeddleEntry {
   value: ScalarValue;
 }
 
-export type BoardLogEntry = LogEntry | MeddleEntry;
+/** What a card's Patter scene wrote, as a journal entry: Board-side and
+ *  synthetic, like a meddle, since Patter's writes are not the engine's. */
+export interface SceneWriteEntry {
+  type: "sceneWrite";
+  seq: number;
+  /** The scene's card, by id or gameId (the Board's label resolves either). */
+  scene: string;
+  /** The property, as `@scope.name`. */
+  label: string;
+  prev?: ScalarValue;
+  value: ScalarValue;
+}
+
+export type BoardLogEntry = LogEntry | MeddleEntry | SceneWriteEntry;
 
 type WriteE = Extract<LogEntry, { type: "write" }>;
 type TurnsE = Extract<LogEntry, { type: "turns" }>;

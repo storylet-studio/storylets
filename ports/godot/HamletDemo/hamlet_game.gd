@@ -52,10 +52,9 @@ func setup(storylet_bundle: Dictionary, patter_bundle: Dictionary) -> void:
 	# ONE resolver, handed to BOTH. Not two copies kept in step: two copies kept
 	# in step is the bug this design exists to make impossible.
 	var resolver := _resolver()
-	story_engine = StoryletEngine.create(storylet_bundle, {"seed": SEED, "world": resolver})
-	# Patter's Godot addon takes the host resolver under "host_scopes", keyed by
-	# scope token; its JS runtime, and our addon here, take "world". Same
-	# resolver, two option names (findings 10).
+	# Both addons take the game's scopes under "host_scopes", keyed by scope
+	# token: the same option, and the same resolver.
+	story_engine = StoryletEngine.create(storylet_bundle, {"seed": SEED, "host_scopes": {"world": resolver}})
 	patter = PatterEngine.new(patter_bundle, {"host_scopes": {"world": resolver}})
 	story = story_engine.open_flow(FLOW)
 	performance = patter.open_flow(BOX)

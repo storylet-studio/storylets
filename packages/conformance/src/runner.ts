@@ -12,7 +12,7 @@ import type { EvalContext, ScalarValue } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
 import { Engine, Flow, effectiveFields, extensionDecls, extensionsOf, fieldDecls, makePrng } from "@storylet-studio/runtime";
-import type { DurableSave, PlayError } from "@storylet-studio/runtime";
+import type { DurableSave, HostScope, PlayError } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle, FlowSave, LoadProperty, LoadReport, SaveEnvelope } from "@storylet-studio/model";
 import type {
@@ -69,6 +69,9 @@ const applyState = (session: Flow, selector: StateSelector): void => {
     for (const [name, value] of Object.entries(selector[scope] ?? {})) {
       session.setProperty(`${scope}.${name}`, value);
     }
+  }
+  for (const [token, bag] of Object.entries(selector.host ?? {})) {
+    for (const [name, value] of Object.entries(bag)) session.setProperty(`${token}.${name}`, value);
   }
   for (const kind of ["box", "deck", "hand", "value"] as const) {
     for (const [id, bag] of Object.entries(selector[kind] ?? {})) {
@@ -209,8 +212,28 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   const seed = c.seed ?? 0;
   // What the engine reported to its onError (corpus 18), as `node`s.
   let playErrorSink: string[] = [];
-  const onError = (e: PlayError): void => { playErrorSink.push(e.node); };
-  let engine = new Engine(c.bundle, { seed, onError });
+  // Set-up reports (corpus 23), apart from a deal's condition errors.
+  const setupSink: { node: string; message: string }[] = [];
+  const onError = (e: PlayError): void => {
+    if (e.kind === "setup") setupSink.push({ node: e.node, message: e.message });
+    else playErrorSink.push(e.node);
+  };
+  // The case's host scopes (corpus 23): a plain resolver per token over a store
+  // kept for the whole case, shared by every engine it makes.
+  const hostScopes: Record<string, HostScope> = {};
+  for (const [token, values] of Object.entries(c.hostScopes ?? {})) {
+    const store = new Map<string, ScalarValue>(Object.entries(values));
+    hostScopes[token] = { get: (name) => store.get(name), set: (name, value) => { store.set(name, value); } };
+  }
+  const options = { seed, onError, ...(c.hostScopes !== undefined ? { hostScopes } : {}) };
+  let engine = new Engine(c.bundle, options);
+  // In any order: a binding map's order is not every language's to keep.
+  const expectedSetup = [...c.expectSetupErrors ?? []].sort((a, b) => a.node.localeCompare(b.node));
+  const reportedSetup = [...setupSink].sort((a, b) => a.node.localeCompare(b.node));
+  if (reportedSetup.length !== expectedSetup.length
+    || expectedSetup.some((want, i) => reportedSetup[i]!.node !== want.node || !reportedSetup[i]!.message.includes(want.message))) {
+    failures.push(`setup: onError expected ${show(expectedSetup)}, got ${show(reportedSetup)}`);
+  }
   // The bundle the engine runs now: a kept durable half must carry its content.
   let running = c.bundle;
   let handles = new Map<string, Flow>();
@@ -554,7 +577,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
       case "loadEnvelope": {
         let error: string | undefined;
         try {
-          new Engine(c.bundle, { seed, onError }).loadGame(op.envelope as SaveEnvelope);
+          new Engine(c.bundle, options).loadGame(op.envelope as SaveEnvelope);
         } catch (e) {
           error = String(e);
         }
@@ -570,7 +593,6 @@ export function runScriptedCase(c: ScriptedCase): string[] {
           scribbleView(card);
           for (const outcome of flow.outcomes(card.id, op.from)) scribbleView(outcome);
         }
-        for (const box of flow.listBoxes()) scribbleView(box);
         break;
       }
       case "assertBoxExtensions": {
@@ -610,7 +632,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         // case's EDITED bundle: the drifted-content contract. loadGame
         // rebuilds every flow, so the script's handles are re-taken.
         const envelope = engine.saveGame();
-        const target = new Engine(op.into === "B" ? c.bundleB! : c.bundle, { seed, onError });
+        const target = new Engine(op.into === "B" ? c.bundleB! : c.bundle, options);
         if (op.previewOnly) {
           // The purity claim, checked rather than asserted: the engine that
           // was asked what a load would cost writes the same envelope after
@@ -702,7 +724,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         // The world restarts: a fresh engine, no flow, no handle. What crosses
         // is what the script kept, and only through the durable verbs.
         running = op.into === "B" ? c.bundleB! : c.bundle;
-        engine = new Engine(running, { seed, onError });
+        engine = new Engine(running, options);
         handles = new Map();
         if (memory === undefined) break;
         let report: LoadReport | undefined;
@@ -755,7 +777,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         break;
       }
       case "reset":
-        engine = new Engine(c.bundle, { seed, onError });
+        engine = new Engine(c.bundle, options);
         running = c.bundle;
         handles = new Map();
         break;
@@ -785,13 +807,10 @@ export function runLoadCase(c: LoadCase): string[] {
     .map((want) => `expected the refusal to name "${want}", got ${show(error)}`);
 }
 
-/** The `scribble` op on one view: its fields and every extension's values. */
-function scribbleView(view: { fields?: Record<string, unknown>; extensions?: Record<string, Record<string, unknown>> }): void {
+/** The `scribble` op on one view: its fields (extension values are read-only,
+ *  and handed out uncopied). */
+function scribbleView(view: { fields?: Record<string, unknown> }): void {
   if (view.fields) scribbleMap(view.fields);
-  if (view.extensions) {
-    for (const values of Object.values(view.extensions)) scribbleMap(values);
-    view.extensions["scribbled"] = {};
-  }
 }
 
 /** Deface a map in place, deepest first: nested maps gain the key, nested

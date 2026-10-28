@@ -33,7 +33,7 @@
 import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import type { Bundle, Expression, PropertyDecl } from "@storylet-studio/model";
-import { effectiveGameId } from "@storylet-studio/model";
+import { bundleHostScopes, effectiveGameId } from "@storylet-studio/model";
 import { disjuncts, latchOf, terms } from "@wildwinter/expr";
 import type { Term } from "@wildwinter/expr";
 import { flagKey, keyOf, splitKey, writesOf } from "./analysis-common.js";
@@ -140,7 +140,8 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
   //
   // Another engine's game-wide scope (`@patter.visits`) is the same case: that engine
   // moves it, both ways, where nothing here can see.
-  const otherEngines = bundle.externalScopes ?? [];
+  // Every host scope the bundle declares is the game's to move, @world among them.
+  const otherEngines = [...bundle.externalScopes ?? [], ...bundleHostScopes(bundle).map((h) => h.token)];
   const hostDriven = (key: string): boolean =>
     key.startsWith("@world.") || otherEngines.some((t) => key.startsWith(`@${t}.`));
   // `@hand` is composed per HAND, from the hand's own bag or the tags it

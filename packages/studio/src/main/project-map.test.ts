@@ -197,6 +197,14 @@ describe("box colours on the map", () => {
     expect((await projectMapView(s)).layers.map((l) => l.colour)).toEqual(colours);
   });
 
+  it("shows each box the colour the map will store before the map is first drawn, so drawing it changes none", async () => {
+    const s = scratch();
+    const before = new Map(toDto(s.loaded).boxes.map((b) => [b.id, b.colour]));
+    expect(stored(s, "news")).toBeUndefined();
+    const view = await projectMapView(s);
+    for (const l of view.layers) expect(before.get(l.box)).toBe(l.colour);
+  });
+
   it("keeps each box's colour when the boxes are reordered", async () => {
     const s = scratch();
     const before = new Map((await projectMapView(s)).layers.map((l) => [l.box, l.colour]));

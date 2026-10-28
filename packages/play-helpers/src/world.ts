@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// The host's @world container (design/flows.md; engine-runtimes.md 3.1).
+// The host's container for a host scope, @world or any other the bundle
+// declares (design/flows.md; engine-runtimes.md 3.1).
 //
-// @world is the game's own state: the engine resolves it through a resolver
-// and NEVER saves it - "host saves its container once, each engine saves its
+// A host scope is the game's own state: the engine resolves it through a
+// resolver and NEVER saves it - "host saves its container once, each engine saves its
 // own envelope". A real game binds its own state here; a host that has no
 // state of its own (the demos, the playable page, the Board) uses this
 // ready-made container so @world still persists across its save/load.
@@ -15,10 +16,11 @@
 import { PropertyBag as StateBag } from "@wildwinter/scoperegistry";
 import type { ScalarValue } from "@wildwinter/expr";
 import type { ScopeResolver } from "@wildwinter/expr";
+import { hostScopeDecls } from "@storylet-studio/model";
 import type { Bundle, PropertyBag } from "@storylet-studio/model";
 
 export interface WorldContainer {
-  /** Pass as `new Engine(bundle, { world: container.resolver })`. */
+  /** Pass as `new Engine(bundle, { hostScopes: { world: container.resolver } })`. */
   resolver: ScopeResolver;
   /** The kernel bag itself (subscribe, audit, rows live there) - mount it
    *  into a state logger or examiner beside the engine's own bags. Writing it
@@ -34,7 +36,8 @@ export interface WorldContainer {
   load(values: PropertyBag): void;
 }
 
-/** A world container seeded from the bundle's @world declarations.
+/** A container seeded from one host scope's declarations in the bundle:
+ *  `@world`'s unless `token` names another (`"player"`).
  *
  *  The container is the GAME's state, so it WRITES - even a declaration
  *  carrying `writable: false`. That flag is the STORY's promise not to write
@@ -54,8 +57,8 @@ export interface WorldContainer {
  *  rather than this one; the ports' container (Unreal's UStoryletWorld) draws
  *  the same line, with HostSet never refused and StorySet asking the game's own
  *  read-only list. */
-export function createWorldContainer(bundle: Bundle): WorldContainer {
-  const bag = new StateBag(bundle.world.properties, { normalise: (n) => n });
+export function createWorldContainer(bundle: Bundle, token = "world"): WorldContainer {
+  const bag = new StateBag(hostScopeDecls(bundle, token), { normalise: (n) => n });
   return {
     resolver: {
       get: (n) => bag.get(n),

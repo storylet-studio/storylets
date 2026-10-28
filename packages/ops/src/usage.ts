@@ -20,7 +20,7 @@ import type { Box, Bundle, Card, Expression } from "@storylet-studio/model";
 import { byDisplayOrder } from "@storylet-studio/model";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { AstNode } from "@storylet-studio/model";
-import { propertyRefs } from "./influence.js";
+import { hostTokens, propertyRefs } from "./influence.js";
 import type { InfluenceScopeName } from "./influence.js";
 import { writesOf } from "./analysis-common.js";
 import type { LoadedProject } from "./load.js";
@@ -53,17 +53,22 @@ interface Query {
   name: string;
 }
 
-/** `@gold`, `gold`, `@story.act`, `world.time_of_day`, `@box.village.heat`.
+/** `@gold`, `gold`, `@story.act`, `world.time_of_day`, `@box.village.heat`,
+ *  and a host scope the project declares (`@player.hp`, given `hosts`).
  *  A bare name matches that name in any scope; a scoped one only its scope.
- *  Null when the text is not a property reference at all. */
-export function parsePropertyQuery(query: string): Query | null {
+ *  Null when the text is not a property reference at all. A host scope has no
+ *  container to name, so `@player.x.hp` is none. */
+export function parsePropertyQuery(query: string, hosts: ReadonlySet<string> = new Set()): Query | null {
   const m = /^@?([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_-]*){0,2})$/i.exec(query.trim());
   if (!m) return null;
   const parts = m[1]!.toLowerCase().split(".");
   if (parts.length === 1) return { name: parts[0]! };
-  if (!SCOPES.has(parts[0]!)) return null;
-  const scope = parts[0] as InfluenceScopeName;
+  // The query is folded as a reference is; a host token keeps its declared spelling.
+  const host = SCOPES.has(parts[0]!) ? undefined : [...hosts].find((h) => h.toLowerCase() === parts[0]);
+  if (!SCOPES.has(parts[0]!) && host === undefined) return null;
+  const scope = (host ?? parts[0]) as InfluenceScopeName;
   if (parts.length === 2) return { scope, name: parts[1]! };
+  if (!SCOPES.has(parts[0]!)) return null;
   return { scope, container: parts[1]!, name: parts[2]! };
 }
 
@@ -114,7 +119,8 @@ function usagesOf(
   entries: Map<string, ResolveEntry>,
   query: string,
 ): PropertyUsage[] {
-  const q = parsePropertyQuery(query);
+  const hosts = hostTokens(bundle);
+  const q = parsePropertyQuery(query, hosts);
   if (!q) return [];
   const out: PropertyUsage[] = [];
 
@@ -134,7 +140,7 @@ function usagesOf(
 
   const reads = (expr: Expression | undefined, item: ResolveEntry | undefined, where: string, box: Box<Expression>, deckId?: string): void => {
     if (!expr || !item) return;
-    for (const ref of propertyRefs(expr.ast as AstNode)) {
+    for (const ref of propertyRefs(expr.ast as AstNode, hosts)) {
       if (matches(ref.scope, ref.name, box, deckId)) {
         out.push({ property: `@${ref.scope}.${ref.name}`, use: "read", where, text: expr.src, item });
       }
@@ -144,7 +150,7 @@ function usagesOf(
   for (const box of bundle.boxes) {
     for (const deck of box.decks) {
       reads(deck.condition, entries.get(deck.id), "deck gate", box, deck.id);
-      for (const card of deck.cards) usesOfCard(card, box, deck.id, entries, matches, reads, out);
+      for (const card of deck.cards) usesOfCard(card, box, deck.id, entries, matches, reads, out, hosts);
     }
     for (const t of box.handTemplates) reads(t.condition, entries.get(t.id), "When", box);
     for (const h of box.hands) reads(h.rule?.condition, entries.get(h.id), "When", box);
@@ -158,6 +164,7 @@ function usesOfCard(
   matches: (scope: InfluenceScopeName, name: string, box: Box<Expression>, deckId?: string) => boolean,
   reads: (expr: Expression | undefined, item: ResolveEntry | undefined, where: string, box: Box<Expression>, deckId?: string) => void,
   out: PropertyUsage[],
+  hosts: ReadonlySet<string>,
 ): void {
   const cardEntry = entries.get(card.id);
   reads(card.condition, cardEntry, "When", box, deckId);
@@ -175,14 +182,14 @@ function usesOfCard(
       // so it is folded here as the parser folds a read (see the note on case
       // in influence.ts); a scope the analysis does not know is no property.
       const folded = name.toLowerCase();
-      if (SCOPES.has(scope) && matches(scope as InfluenceScopeName, folded, box, deckId)) {
+      if ((SCOPES.has(scope) || hosts.has(scope)) && matches(scope as InfluenceScopeName, folded, box, deckId)) {
         const key = `@${scope}.${folded}`;
         seen.add(key);
         out.push({ property: key, use: "write", where: "outcome change", text, item: entry });
       }
       // The value may read OTHER properties (`@reputation + 1` reads what it
       // writes, which is the write already listed; `@gold - @price` reads price).
-      for (const ref of propertyRefs(expr.ast as AstNode)) {
+      for (const ref of propertyRefs(expr.ast as AstNode, hosts)) {
         const key = `@${ref.scope}.${ref.name}`;
         if (seen.has(key) || !matches(ref.scope, ref.name, box, deckId)) continue;
         out.push({ property: key, use: "read", where: "outcome change", text, item: entry });

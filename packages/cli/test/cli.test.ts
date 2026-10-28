@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
+import { hostScopeDecls } from "@storylet-studio/model";
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -409,9 +410,8 @@ describe("asks against the saltmarsh example", () => {
     const dir = join(mkdtempSync(join(tmpdir(), "storyletengine-readonly-")), "copy.storylets");
     cpSync(exampleDir, dir, { recursive: true });
     const projPath = join(dir, "saltmarsh.storyletproj");
-    const shard = parseSource(readFileSync(projPath, "utf8")) as
-      { world: { properties: { name: string }[] } };
-    for (const d of shard.world.properties) if (d.name === "danger") Object.assign(d, { writable: false });
+    const shard = parseSource(readFileSync(projPath, "utf8")) as Parameters<typeof hostScopeDecls>[0];
+    for (const d of hostScopeDecls(shard, "world")) if (d.name === "danger") Object.assign(d, { writable: false });
     writeFileSync(projPath, canonicalStringify(shard));
 
     const r = (await call("deal", "docks-street", dir, "--set", "world.danger=3"));
@@ -1052,8 +1052,8 @@ describe("a game that shares its scopes", () => {
   };
   const worldEdit = (theirs: string): void => {
     const proj = join(theirs, "saltmarsh.storyletproj");
-    const shard = parseSource(readFileSync(proj, "utf8")) as { world: { properties: unknown[] } };
-    shard.world.properties.push({ name: "tide", type: "number", default: 3 });
+    const shard = parseSource(readFileSync(proj, "utf8")) as Parameters<typeof hostScopeDecls>[0];
+    hostScopeDecls(shard, "world").push({ name: "tide", type: "number", default: 3 });
     writeFileSync(proj, canonicalStringify(shard));
   };
 

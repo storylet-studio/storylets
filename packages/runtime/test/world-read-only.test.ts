@@ -28,10 +28,10 @@ describe("read-only @world with a host resolver bound", () => {
   it("refuses the story's write before it reaches the host, and says why", () => {
     const sets: [string, unknown][] = [];
     const values = new Map<string, unknown>([["clock", 0], ["mood", 0]]);
-    const engine = new Engine(theCase().bundle, { seed: 0, world: {
+    const engine = new Engine(theCase().bundle, { seed: 0, hostScopes: { world: {
       get: (n) => values.get(n) as never,
       set: (n, v) => { sets.push([n, v]); values.set(n, v); },
-    } });
+    } } });
     const flow = engine.openFlow("main");
     flow.deal("h_q");
     expect(() => flow.play("c_tick", "tick", "h_q")).toThrow(/'@world\.clock' is read-only/);
@@ -42,9 +42,9 @@ describe("read-only @world with a host resolver bound", () => {
   it("still lets the story write a property with no flag, through the same resolver", () => {
     const sets: [string, unknown][] = [];
     const values = new Map<string, unknown>([["clock", 0], ["mood", 0]]);
-    const engine = new Engine(theCase().bundle, { seed: 0, world: {
+    const engine = new Engine(theCase().bundle, { seed: 0, hostScopes: { world: {
       get: (n) => values.get(n) as never, set: (n, v) => { sets.push([n, v]); values.set(n, v); },
-    } });
+    } } });
     const flow = engine.openFlow("main");
     flow.deal("h_q");
     flow.play("c_cheer", "cheer", "h_q");
@@ -53,9 +53,9 @@ describe("read-only @world with a host resolver bound", () => {
 
   it("does not bind the host: the game's own setProperty moves a read-only value", () => {
     const values = new Map<string, unknown>([["clock", 0], ["mood", 0]]);
-    const engine = new Engine(theCase().bundle, { seed: 0, world: {
+    const engine = new Engine(theCase().bundle, { seed: 0, hostScopes: { world: {
       get: (n) => values.get(n) as never, set: (n, v) => { values.set(n, v); },
-    } });
+    } } });
     engine.setProperty("world.clock", 5);
     expect(values.get("clock")).toBe(5);
   });
@@ -74,16 +74,16 @@ describe("the examiner over a read-only @world", () => {
 
   it("reports it with a resolver bound too, and a flow's rows agree with the engine's", () => {
     const values = new Map<string, unknown>([["clock", 0], ["mood", 0]]);
-    const engine = new Engine(theCase().bundle, { seed: 0, world: {
+    const engine = new Engine(theCase().bundle, { seed: 0, hostScopes: { world: {
       get: (n) => values.get(n) as never, set: (n, v) => { values.set(n, v); },
-    } });
+    } } });
     const flow = engine.openFlow("main");
     expect(rowFor(engine, "world.clock")).toMatchObject({ writable: false });
     expect(flow.listProperties().find((r) => r.path === "world.clock")).toMatchObject({ writable: false });
   });
 
   it("reports every @world row read-only when the host bound no write at all", () => {
-    const engine = new Engine(theCase().bundle, { seed: 0, world: { get: () => 0 as never } });
+    const engine = new Engine(theCase().bundle, { seed: 0, hostScopes: { world: { get: () => 0 as never } } });
     expect(rowFor(engine, "world.mood")).toMatchObject({ writable: false });
     expect(() => engine.setProperty("world.mood", 1)).toThrow(/the host bound no write/);
   });

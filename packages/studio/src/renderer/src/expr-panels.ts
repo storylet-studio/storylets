@@ -9,7 +9,7 @@ import { mountEffectsEditor, mountExpressionEditor, renderConditionPreview, rend
 import type { EditorEffect, EffectsEditorHandle, ExpressionEditorHandle } from "@wildwinter/expr-editor";
 import type { Dialect } from "@wildwinter/expr";
 import { storyletsDialect, storyletsDialectWith, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
-import type { ConditionProperty, GameScopesDto } from "../../shared/api.js";
+import type { ConditionProperty, GameScopesDto, HostTokensDto } from "../../shared/api.js";
 import { catalogueFrom, schemaFrom, SCOPE_ORDER, storyletFunctions } from "./expr-shared.js";
 
 /**
@@ -21,15 +21,25 @@ import { catalogueFrom, schemaFrom, SCOPE_ORDER, storyletFunctions } from "./exp
  * which scopes are still unchecked.
  */
 let shared: { dialect: Dialect; otherEngineScopes: readonly string[] } = { dialect: storyletsDialect, otherEngineScopes: EXTERNAL_SCOPES };
-export function setGameScopes(scopes: GameScopesDto | undefined): void {
-  if (scopes === undefined) { shared = { dialect: storyletsDialect, otherEngineScopes: EXTERNAL_SCOPES }; return; }
-  // A token the folder declares names its properties, which the catalogue carries, so a name
-  // missing from it is worth a mark. The shared vocabulary's tokens nobody declares, and a
-  // scope declared opaque, stay the other engine's to check: an ordinary pill.
-  const declared = new Set(scopes.tokens.filter((t) => !scopes.opaque.includes(t)));
+/**
+ * `hosts` are the project's own host scopes besides `@world` (`@player`, ...), sent with every
+ * project whether or not the game has a scopes folder: without them a project that declares
+ * `@player` and has no folder would not parse `@player.hp` here, while the compiler accepts it.
+ * A declared one is checked against the catalogue like `@world`; an opaque one is unchecked.
+ */
+export function setGameScopes(scopes: GameScopesDto | undefined, hosts?: HostTokensDto): void {
+  if (scopes === undefined && hosts === undefined) { shared = { dialect: storyletsDialect, otherEngineScopes: EXTERNAL_SCOPES }; return; }
+  // A token the folder or the project declares names its properties, which the catalogue
+  // carries, so a name missing from it is worth a mark. The shared vocabulary's tokens nobody
+  // declares, and a scope declared opaque, stay unchecked: an ordinary pill. Where the project
+  // declares a token, its say wins over the folder's (the compiler's rule).
+  const tokens = [...new Set([...(hosts?.tokens ?? []), ...(scopes?.tokens ?? [])])];
+  const isOpaque = (t: string): boolean => (hosts?.tokens.includes(t) === true ? hosts.opaque : scopes?.opaque ?? []).includes(t);
+  const declared = new Set(tokens.filter((t) => !isOpaque(t)));
+  const opaque = tokens.filter(isOpaque);
   shared = {
-    dialect: storyletsDialectWith(scopes.tokens),
-    otherEngineScopes: [...EXTERNAL_SCOPES.filter((t) => !declared.has(t)), ...scopes.opaque],
+    dialect: storyletsDialectWith(tokens),
+    otherEngineScopes: [...EXTERNAL_SCOPES.filter((t) => !declared.has(t)), ...opaque],
   };
 }
 

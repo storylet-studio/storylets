@@ -19,9 +19,9 @@
 // ---------------------------------------------------------------------------
 
 import { compile } from "@wildwinter/expr";
-import type { Expression } from "@wildwinter/expr";
-import { storyletsDialect } from "@storylet-studio/dialect";
-import { BUNDLE_SCHEMA, BUNDLE_SCHEMA_V0, PLACE_GROUP } from "@storylet-studio/model";
+import type { Dialect, Expression } from "@wildwinter/expr";
+import { storyletsDialect, storyletsDialectWith } from "@storylet-studio/dialect";
+import { BUNDLE_SCHEMA, BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA_V1, PLACE_GROUP } from "@storylet-studio/model";
 import type {
   Bundle, Box, Card, Deck, Hand, HandTemplate, NodeExtensions, Outcome, PropertyDecl, TagGroup,
 } from "@storylet-studio/model";
@@ -84,10 +84,22 @@ import type {
  *  evicted "outranked" and a full hand is dealt too; weights order a run of equal cards (equal weights
  *  shuffle as before); a card's `inOneHand` and `acrossHands`; the op `discard` and its trace line; a box
  *  whose clock the game moves (`turn` without seconds). Changed: the pinned random() draw count case's
- *  second deal, since a full hand now draws. */
-export const CORPUS_VERSION = 21;
+ *  second deal, since a full hand now draws.
+ *  22: extension values are handed out uncopied and read-only by contract (a family ruling, 2026-10-28, as
+ *  Patter's), so `scribble` defaces fields only and the extensions case no longer scribbles.
+ *  23: host scopes like Patter's (ruled 2026-10-28): a bundle's `scopeRegistry` (schema @2, no `world`
+ *  block; a fixture's `scopeRegistry`), any game scope self-backed from its defaults, bound through the
+ *  `hostScopes` option (a case's `hostScopes`), the `setup` report for a token the bundle doesn't declare
+ *  (a case's `expectSetupErrors`), an opaque scope, a scope-level `writable: false`; `setState`'s `host`.
+ *  24: a set-up report's expected `message` starts after the option's name, which each runtime spells its
+ *  own way, so every port matches it as written (ruled 2026-10-28). */
+export const CORPUS_VERSION = 24;
 
-const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
+/** The dialect a fixture's expressions compile in: the engine's own, plus the
+ *  host scopes the fixture being expanded declares (`@player`), as a project's
+ *  are read (`projectDialect`). Set for the length of one `expandBundle`. */
+let fixtureDialect: Dialect = storyletsDialect;
+const compileSrc = (src: string): Expression => compile(src, fixtureDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
   src === undefined ? undefined : compileSrc(src);
 
@@ -294,6 +306,15 @@ const expandHand = (f: HandFixture, s: Scaffold): Hand<Expression> => ({
 });
 
 export function expandBundle(f: BundleFixture): Bundle {
+  fixtureDialect = storyletsDialectWith((f.scopeRegistry?.scopes ?? []).map((s) => s.token));
+  try {
+    return expandBundleIn(f);
+  } finally {
+    fixtureDialect = storyletsDialect;
+  }
+}
+
+function expandBundleIn(f: BundleFixture): Bundle {
   const strip = f.metadata === "stripped";
   const decks: DeckFixture[] = f.decks ?? [{ id: "k_main", cards: f.cards ?? [] }];
   // A case may declare extra groups beside the scaffold's `d_zone` (the
@@ -351,8 +372,17 @@ export function expandBundle(f: BundleFixture): Bundle {
   // bundle cannot carry a map, so it is the same shape and not a
   // compatibility path. It also keeps every earlier case byte-identical.
   const mapShaped = project !== undefined || f.uses === true || f.otherBox?.uses === true;
+  // @2 is the schema of a bundle with host scopes (corpus 23), which has no
+  // `world` block: a fixture's `world` joins its registry as the scope `world`.
+  // Every other bundle keeps the legacy `world` block at @0 or @1, so every
+  // earlier case stays byte-identical and the corpus pins that a runtime still
+  // reads an older bundle's @world.
+  const hosts = f.scopeRegistry === undefined ? undefined
+    : f.world !== undefined && !f.scopeRegistry.scopes.some((s) => s.token === "world")
+      ? { ...f.scopeRegistry, scopes: [{ token: "world", declarations: f.world }, ...f.scopeRegistry.scopes] }
+      : f.scopeRegistry;
   const bundle: Bundle = {
-    schema: mapShaped ? BUNDLE_SCHEMA : BUNDLE_SCHEMA_V0,
+    schema: hosts !== undefined ? BUNDLE_SCHEMA : mapShaped ? BUNDLE_SCHEMA_V1 : BUNDLE_SCHEMA_V0,
     content: {
       project: f.content?.project ?? "conf",
       version: f.content?.version ?? "0.0.0",
@@ -360,7 +390,7 @@ export function expandBundle(f: BundleFixture): Bundle {
     },
     metadata: strip ? "stripped" : "full",
     settings: { playAdvancesTurns: f.settings?.playAdvancesTurns ?? 1 },
-    world: { properties: f.world ?? [] },
+    ...(hosts !== undefined ? { scopeRegistry: hosts } : { world: { properties: f.world ?? [] } }),
     story: { properties: f.story ?? [] },
     boxes: byId(boxes),
     ...(project !== undefined ? { map: { group: project } } : {}),
@@ -436,6 +466,8 @@ export function buildCorpus(fixtures: Fixtures): Corpus {
       bundle: expandBundle(f),
       ...(f.bundleB !== undefined ? { bundleB: expandBundle(f.bundleB) } : {}),
       ...(f.seed !== undefined ? { seed: f.seed } : {}),
+      ...(f.hostScopes !== undefined ? { hostScopes: f.hostScopes } : {}),
+      ...(f.expectSetupErrors !== undefined ? { expectSetupErrors: f.expectSetupErrors } : {}),
       script: f.script,
     })),
     load: fixtures.load.map((f): LoadCase => {

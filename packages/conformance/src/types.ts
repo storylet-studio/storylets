@@ -18,7 +18,7 @@
 // are kept only for readability + corpus regeneration.
 // ---------------------------------------------------------------------------
 
-import type { BundleExtension, NodeExtensions } from "@storylet-studio/model";
+import type { BundleExtension, HostScopeRegistry, NodeExtensions } from "@storylet-studio/model";
 import type { AstNode, ScalarValue } from "@wildwinter/expr";
 import type { Bundle, FieldDecl, LoadReport, PropertyDecl, RedrawPolicy } from "@storylet-studio/model";
 
@@ -47,6 +47,9 @@ export type ScopeBag = Record<string, ScalarValue>;
 export interface StateSelector {
   story?: ScopeBag;
   world?: ScopeBag;
+  /** Corpus 23: any other host scope's values, by token (`{ player: { hp: 3 } }`),
+   *  each written as `<token>.<name>`. */
+  host?: Record<string, ScopeBag>;
   box?: Record<string, ScopeBag>;
   deck?: Record<string, ScopeBag>;
   hand?: Record<string, ScopeBag>;
@@ -236,16 +239,15 @@ export type ScriptOp =
   | { op: "assertOutcomeExtensions"; flow?: string; card: string; from: string; expect: Record<string, Record<string, unknown>> }
   /** The extension values on each box `listBoxes()` returns, by box gameId. */
   | { op: "assertBoxExtensions"; expect: Record<string, Record<string, unknown>> }
-  /** A careless host: deface everything the engine handed it, in place.
-   *  Every card on `board()[from]`, every outcome `outcomes(card, from)` hands
-   *  back for it, and every box `listBoxes()` returns: in each `fields` and in
-   *  each extension's values, every nested map gains the key "scribbled" and
-   *  every nested list gains the item "scribbled" (deepest first), then every
-   *  top-level value becomes "scribbled" and the map gains the key "scribbled"
-   *  too; `extensions` gains the extension "scribbled". Nothing is asserted:
-   *  the asserts that follow must read the bundle's values unchanged, since
-   *  what a host is handed is a copy (the hands-on review, 2026-10,
-   *  foundation 6). */
+  /** A careless host: deface the FIELDS the engine handed it, in place.
+   *  Every card on `board()[from]` and every outcome `outcomes(card, from)`
+   *  hands back for it: in each `fields`, every nested list gains the item
+   *  "scribbled" (deepest first), then every value becomes "scribbled" and the
+   *  map gains the key "scribbled". Nothing is asserted: the asserts that
+   *  follow must read the bundle's values unchanged, since a host's fields are
+   *  a copy (the hands-on review, 2026-10, foundation 6). From corpus 22
+   *  extension values are not touched: they are handed out uncopied and
+   *  read-only by contract (a family ruling, 2026-10-28). */
   | { op: "scribble"; flow?: string; from: string }
   /** Corpus 21: `flow.discard(card, from)`: the card leaves the hand unplayed,
    *  starting its Redraw. `expectError` requires it refused. */
@@ -368,6 +370,24 @@ export interface ScriptedCase {
   bundleB?: Bundle;
   /** Session seed; defaults to 0. */
   seed?: number;
+  /** Corpus 23: host scopes the runner binds through the engine's `hostScopes`
+   *  option, by token, each to a plain resolver (`get` and `set` by name, no
+   *  rule of its own) over a store the runner keeps for the whole case, seeded
+   *  with these values and shared by every engine the case makes (`saveLoad`,
+   *  `hotSwap`, `newRun`). The token is passed exactly as written, so a case
+   *  can bind a spelling the bundle doesn't declare. Omit to bind none, as
+   *  every case before corpus 23 did. */
+  hostScopes?: Record<string, ScopeBag>;
+  /** Corpus 23: the `setup` reports the FIRST engine makes as it is built
+   *  (`PlayError` with kind "setup", flow ""), in any order (a binding map's
+   *  order is not every language's to keep): each one's `node` exactly, and a
+   *  `message` its message must contain. The fragment never includes an option
+   *  name, since each runtime spells the option its own way (`hostScopes`,
+   *  `HostScopes`, `"host_scopes"`), so it starts after it. A runner opens every
+   *  engine with an onError that records them apart from a deal's condition
+   *  errors. Absent means none: a case that binds a declared token, or none,
+   *  must be built with nothing to report. */
+  expectSetupErrors?: { node: string; message: string }[];
   script: ScriptOp[];
 }
 
@@ -567,8 +587,16 @@ export interface BundleFixture {
   content?: { project?: string; version?: string; hash?: string };
   /** @story declarations. */
   story?: PropertyDecl[];
-  /** @world declarations (engine-owned in fixtures). */
+  /** @world declarations (engine-owned in fixtures). Without `scopeRegistry`
+   *  they are written as the legacy `world` block of a bundle @0 (or @1, with
+   *  a map), which every runtime still reads as the host scope `world`: every
+   *  case before corpus 23 is unchanged, byte for byte. */
   world?: PropertyDecl[];
+  /** Corpus 23: the bundle's host scopes, as the compiler writes them. A bundle
+   *  with them is written at schema `storylets/bundle@2`, with no `world`
+   *  block: a fixture's `world` declarations join them as the scope `world`
+   *  (first) unless the registry declares `world` itself. */
+  scopeRegistry?: HostScopeRegistry;
   /** The @box scope's declarations. */
   boxProperties?: PropertyDecl[];
   /** The box's card template; the scaffold declares none. */
@@ -639,6 +667,10 @@ export interface ScriptedFixture extends BundleFixture {
   /** The EDITED content compiled into `bundleB` for `saveLoad into: "B"`. */
   bundleB?: BundleFixture;
   seed?: number;
+  /** See `ScriptedCase.hostScopes`. */
+  hostScopes?: Record<string, ScopeBag>;
+  /** See `ScriptedCase.expectSetupErrors`. */
+  expectSetupErrors?: { node: string; message: string }[];
   script: ScriptOp[];
 }
 

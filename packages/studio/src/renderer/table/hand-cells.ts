@@ -12,7 +12,7 @@ import { playChoices } from "./play-choices.js";
 import type { MarksSource } from "./run-marks.js";
 import type { Board } from "./board-state.js";
 import type { DealtView, Table } from "./model.js";
-import { playOpen, playPending, revealCard } from "./session.js";
+import { playOpen, playPending, putBack, revealCard } from "./session.js";
 import { shownHands } from "./box-nav.js";
 
 /** A tag, as a pill with its colour dot. */
@@ -165,14 +165,18 @@ function playPanel(b: Board): HTMLElement | null {
     el("div", { className: "pp-head" },
       el("h3", { text: held.title ?? held.gameId }),
       el("span", { className: "pp-hand", text: `in ${open.hand}` }),
-      el("button", { className: "btn ghost icon pp-close", tip: "Put it back", onClick: () => { s.open = undefined; s.pending = undefined; b.render(); } }, iconNode("close"))),
+      el("button", { className: "btn ghost icon pp-close", tip: "Put it back", onClick: () => { void putBack(b); } }, iconNode("close"))),
     held.purpose ? el("p", { className: "beat", text: held.purpose }) : null,
   );
   // A card from a box Patter performs plays its scene instead of offering its outcomes: the
   // scene decides. When it can't (no scene, or it ends without saying), the outcomes come back.
   const box = table.boxOf(held.id);
   if (table.performer && box !== undefined && table.performer.performs(box)) {
-    if (s.performing?.card !== held.id) s.performing = table.performer.start({ id: held.id, gameId: held.gameId }, box, outcomes);
+    if (s.performing?.card !== held.id) {
+      const performer = table.performer;
+      s.performing = table.perform(held.gameId, () => performer.start({ id: held.id, gameId: held.gameId }, box, outcomes));
+      s.performingWrote = table.lastPerformWrites;
+    }
     const performing = s.performing!;
     panel.append(scenePane(b, performing, outcomes));
     if (!performing.problem) return panel;
@@ -211,7 +215,12 @@ function scenePane(b: Board, p: Performance, outcomes: ReturnType<Table["outcome
       const button = el("button", {
         className: "btn pp-option", text: o.text,
         tip: o.enabled ? (o.outcome ? `Reaches ${o.outcome}` : "") : "Not open: Patter's condition, or the outcome it leads to, is shut",
-        onClick: () => { s.performing = s.table!.performer!.choose(p, o.id, outcomes); b.render(); },
+        onClick: () => {
+          const t = s.table!;
+          s.performing = t.perform(p.card, () => t.performer!.choose(p, o.id, outcomes));
+          s.performingWrote += t.lastPerformWrites;
+          b.render();
+        },
       }) as HTMLButtonElement;
       // Shown greyed, not hidden: a player who can see the door they can't open is told something.
       button.disabled = !o.enabled;

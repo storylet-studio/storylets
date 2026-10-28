@@ -133,7 +133,7 @@ void UStoryletBoardDemoWidget::CreateBoardSession()
 
 	// Seed 7 and the retained log on, so the examiner's log panel fills as the
 	// board is played.
-	Engine = UStoryletEngine::Create(Bundle, BoardSeed, /*bRetainLog=*/true);
+	Engine = UStoryletEngine::CreateWithOptions(Bundle, FStoryletEngineOptions{ BoardSeed, true }, {});
 	if (!Engine) return;
 	// All play happens on a flow; a single-player demo opens one and never
 	// thinks about it again (design/flows.md).

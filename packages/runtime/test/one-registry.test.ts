@@ -276,7 +276,7 @@ describe("one registry per game: the Storylet Engine", () => {
     expect(() => new Engine(bundle, { registry })).toThrow("scope '@story' is already registered by Storylet Engine");
 
     const withWorld = new ScopeRegistry().defineOwned("world", [], { owner: "Game" });
-    expect(() => new Engine(bundle, { registry: withWorld, world: { get: () => 0 } }))
+    expect(() => new Engine(bundle, { registry: withWorld, hostScopes: { world: { get: () => 0 } } }))
       .toThrow("scope '@world' is already registered by Game");
     expect(withWorld.has("story")).toBe(false);
   });
@@ -360,7 +360,7 @@ describe("hotSwap on the game's registry", () => {
     const g = playing();
     const before = g.registry.save();
     // The replacement is asked to bind @world, which the game already registered: it clashes mid-build.
-    expect(() => g.engine.hotSwap(edited, { world: { get: () => 0 } })).toThrow("scope '@world' is already registered by Game");
+    expect(() => g.engine.hotSwap(edited, { hostScopes: { world: { get: () => 0 } } })).toThrow("scope '@world' is already registered by Game");
     // Every key and value as before (the order of keys may differ: registering again appends).
     expect(g.registry.save()).toEqual(before);
     heist(g.engine.getFlow("f")!);

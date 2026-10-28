@@ -16,8 +16,8 @@ const world = new Map([["time_of_day", "day"], ["knows_road", false]]);
 const resolver = { get: (n) => world.get(n), set: (n, v) => { world.set(n, v); } };
 const sb = JSON.parse(readFileSync(join(pkg, "dist/hamlet.storyletsc"), "utf8"));
 const pb = JSON.parse(readFileSync(join(pkg, "dist/hamlet.patterc"), "utf8"));
-const storylets = new StoryletEngine(sb, { seed: 7, world: resolver });
-const patter = new PatterEngine(pb, { seed: 7, world: resolver });
+const storylets = new StoryletEngine(sb, { seed: 7, hostScopes: { world: resolver } });
+const patter = new PatterEngine(pb, { seed: 7, hostScopes: { world: resolver } });
 const story = storylets.openFlow("main"); story.dealMany();
 // The demo opens with one card: arrive at the gate, which moves the act and deals the village.
 const gate = story.deal("the-inn").find((c) => c.gameId === "arrive-at-the-gate");

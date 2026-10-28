@@ -2,13 +2,12 @@
 // Project Settings: the storylet-specific sections over the shared settings
 // dialog (@wildwinter/app-shell). The framework (dialog, tabs, save gate) and
 // the list-editing core (expandableRow / dupGuard / tagChips) come from the
-// shell; here we supply the sections - General, Story/World state properties
-// (World carrying the coverage drivers that feed them), Export - reading and
+// shell; here we supply the sections - General, Game scopes (carrying the
+// coverage drivers that feed them), Export - reading and
 // mutating a ProjectSettingsDto that saves whole.
 // ---------------------------------------------------------------------------
 
-import { mountPropertyList } from "./prop-list.js";
-import { mountDriverList } from "./driver-list.js";
+import { mountHostScopes } from "./host-scopes.js";
 import { el, mountSettingsDialog, labelled, labelledToggle, lockControls } from "@wildwinter/app-shell";
 import { shapeNotice } from "./vc-view.js";
 import { ok } from "./results.js";
@@ -142,7 +141,7 @@ export function createProjectSettings(
       return entry;
     },
   };
-  /** World stages renamed since the dialog opened, carried at Save. */
+  /** Host-scope stages and properties renamed since the dialog opened, carried at Save. */
   const worldRenames: { target: StageTargetDto; from: string; to: string; property?: true }[] = [];
   let dialog: SettingsDialog | undefined;
   /** The shell hands back open/destroy and keeps its modal to itself, so the
@@ -200,39 +199,18 @@ export function createProjectSettings(
         // Story properties are NOT here: they are the designers' daily working
         // vocabulary, so they live as a first-class document behind the
         // navigator's Story row. This dialog keeps the game-facing contract.
-        // World is the host seam, so the coverage drivers live with it: the
-        // declarations say what the game owns, the drivers say what the test
-        // harness should feed them (Patterpad's World Properties tab).
-        { id: "world", label: "World", group: "State", mount: (h) => {
-          // Neither sharing axis on @world: both are compile errors there,
-          // @world being the game's own state (flows.md; engine-server.md 4.2).
-          // Where the game shares its scopes, these are the game's, not this project's: said
-          // first, so an author editing them knows the other tools will see the change.
-          if (data!.worldFile !== undefined) {
-            h.append(el("p", { className: "set-note", text: `Shared with the game's other tools: saving writes these to ${data!.worldFile} first, then copies them into this project, so it still compiles on its own.` }));
-          }
-          // A stage renamed here waits for Save with the rest of the dialog, and
-          // is carried first, so the save that follows finds it done.
-          const props = mountPropertyList(h, data!.world, { readOnlySwitch: true, sharingSwitches: false, stages: {
-            target: (decl) => (decl.name.trim() === "" ? undefined : { kind: "property", scope: "world", name: decl.name }),
-            rename: (target, from, to) => { worldRenames.push({ target, from, to }); },
-            // A renamed @world property, carried through every reference on Save, in order with the stages.
-            renameProperty: (target, from, to) => { worldRenames.push({ target, from, to, property: true }); },
-            gates: (target) => studio.stageGates(target),
-          } });
-          h.append(el("h3", { className: "set-cap", text: "Coverage drivers" }));
-          h.append(el("p", { className: "set-note", text: "Values the coverage test feeds these properties, so cards gated on them get dealt." }));
-          // Tolerate a DTO without the field rather than blanking the panel:
-          // a section that throws mid-mount leaves the tab half-built.
-          data!.drivers ??= [];
-          const drivers = mountDriverList(h, data!.drivers, {
-            onPropose: () => studio.proposeDrivers(),
-            // The declarations sit in the same panel, and prop-list mutates that array in place, so
-            // reading it fresh is enough: declare a property and the driver naming it stops complaining.
-            knownWorldProperties: () => data!.world.map((p) => p.name).filter(Boolean),
-          });
-          return { firstInvalid: () => props.firstInvalid?.() ?? drivers.firstInvalid?.() ?? null };
-        } },
+        // The host scopes are the host seam, so the coverage drivers live with them: the
+        // declarations say what the game owns, the drivers say what the test harness should
+        // feed them (Patterpad's World Properties tab). The id stays "world", which every
+        // surface that lands an author here already names.
+        { id: "world", label: "Game scopes", group: "State", mount: (h) => mountHostScopes(h, data!, {
+          // A stage or property renamed here waits for Save with the rest of the dialog, and is
+          // carried first, in order, so the save that follows finds it done.
+          renameStage: (target, from, to) => { worldRenames.push({ target, from, to }); },
+          renameProperty: (target, from, to) => { worldRenames.push({ target, from, to, property: true }); },
+          stageGates: (target) => studio.stageGates(target),
+          proposeDrivers: () => studio.proposeDrivers(),
+        }) },
         { id: "export", label: "Publish", group: "Project", mount: (h) => {
           const d = data!;
           const meta = el("select");

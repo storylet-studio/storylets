@@ -5,8 +5,8 @@
 
 /**
  * @world is the surface the two engines share, and each project DECLARES it
- * separately: ours under `world.properties`, Patter's under
- * `scopeRegistry.scopes[token = "world"].declarations`. Two declarations of one
+ * separately, both under `scopeRegistry.scopes[token = "world"].declarations`
+ * (ours under `world.properties` in a bundle before host scopes). Two declarations of one
  * thing drift, and a drift here is invisible at runtime in this host (both
  * engines are handed the same resolver, so they agree by construction) and
  * visible everywhere else: Storyletter's Board and Patterpad's Play window each
@@ -16,7 +16,8 @@
  */
 export function checkWorld(storyletBundle, patterBundle) {
   const problems = [];
-  const ours = new Map((storyletBundle.world?.properties ?? []).map((p) => [p.name, p]));
+  const ourScope = (storyletBundle.scopeRegistry?.scopes ?? []).find((s) => s.token === "world");
+  const ours = new Map((ourScope?.declarations ?? storyletBundle.world?.properties ?? []).map((p) => [p.name, p]));
   const scope = (patterBundle.scopeRegistry?.scopes ?? []).find((s) => s.token === "world");
   const theirs = new Map((scope?.declarations ?? []).map((p) => [p.name, p]));
   const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -37,7 +38,7 @@ export function checkWorld(storyletBundle, patterBundle) {
   // only this can see is a card writing a value the PATTER project holds
   // read-only, or vice versa, because each compiler sees one project.
   const scopeWritable = scope?.writable !== false;
-  const writableOurs = (p) => p.writable !== false;
+  const writableOurs = (p) => (p.writable ?? ourScope?.writable) !== false;
   const writableTheirs = (q) => q.writable ?? scopeWritable;
   for (const [name, p] of ours) {
     const q = theirs.get(name);

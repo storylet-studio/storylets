@@ -8,7 +8,7 @@
 //
 // The flow model, in one place:
 //   - an Engine owns the bundle, every lookup built from it, the SHARED
-//     property partitions and the @world resolver; a Flow owns its own
+//     property partitions and the host scopes (@world, ...); a Flow owns its own
 //     PRNG, per-box clocks, cooldowns, board, claims, play history and the
 //     per-flow property partitions. Flows meet only through shared state.
 //   - sharing is a per-property `shared` flag on the declaration (never a
@@ -22,14 +22,16 @@
 //     under a key starting `storylets/`, which no expression can name.
 //     saveGame() carries what is NOT a property, plus the registry's values
 //     only when the engine made the registry itself.
-//   - @world is the game's: a resolver it binds (EngineOptions.world, never
-//     saved), a scope it registers in its registry, or, for a standalone
-//     engine, a self-backed bag the registry stores and saves.
+//   - the HOST SCOPES (@world, @player, ...: every scope the bundle's
+//     scopeRegistry declares) are the game's: each one a resolver it binds
+//     (EngineOptions.hostScopes, never saved), a scope it registers in its
+//     registry, or, for a standalone engine, a self-backed bag the registry
+//     stores and saves.
 //   - there is no default flow and no ambient current flow: openFlow(id) is
 //     the only way in, an existing id is REPLACED (the old flow closes),
 //     and a closed flow's handle is INERT - every verb throws (Patter's
 //     stale-handle rule).
-//   - engine.getProperty serves world.* and shared refs only; a ref that
+//   - engine.getProperty serves host scopes (world.*) and shared refs only; a ref that
 //     resolves per-flow throws, naming the fix (Patter's teaching rule).
 //   - the PROJECT MAP (design/project-map-contract.md 3) is one zone group
 //     above the boxes, in `bundle.map.group` and in no box's `tagGroups`. A
@@ -102,11 +104,11 @@ const tagKey = (boxId: string, groupId: string, tagId: string): string =>
 
 import type { StoryletsHost } from "@storylet-studio/dialect";
 import {
-  BUNDLE_SCHEMAS, PLACE_GROUP, allTagGroups, ambiguousValueAddressMessage, effectiveGameId, groupsOfBox,
+  BUNDLE_SCHEMA, BUNDLE_SCHEMAS, PLACE_GROUP, bundleHostScopes, allTagGroups, ambiguousValueAddressMessage, effectiveGameId, groupsOfBox,
   isHoleRef, parseHoleRef, valueAddresses, zoneQualifiedValueAddressMessage,
 } from "@storylet-studio/model";
 import type {
-  Box, Bundle, BundleContent, Card, Deck, Expression, FlowSave, Hand, HandTemplate,
+  Box, Bundle, BundleContent, Card, Deck, Expression, FlowSave, Hand, HandTemplate, HostScopeDecl, HostScopeSpec,
   LoadEviction, LoadProperty, LoadReport, NodeExtensions, PlayRecord, PropertyBag, PropertyDecl, PropsPartition,
   SaveEnvelope, SaveEnvelopeV1, Tag, TagGroup,
 } from "@storylet-studio/model";
@@ -142,24 +144,29 @@ export interface EngineOptions {
    *  zero-retention stream. */
   log?: boolean | { cap?: number };
   /**
-   * The host's resolver for @world - the values the game owns and the
-   * story reads (and, where `set` is offered, writes). Engine-level, shared
-   * by all flows, never saved: the game keeps these values. Omit it and a
-   * standalone engine self-backs @world from the declared defaults, as a
-   * property its registry stores and saves. A game running several engines
-   * registers @world in its registry itself instead.
+   * The host scopes the game binds, by token: for each, a resolver over
+   * values the game owns and the story reads (and, where `set` is offered,
+   * writes), such as `{ world: { get, set } }` for `@world.*`. A declared
+   * scope left unbound is self-backed from its defaults, as a property the
+   * registry stores and saves. Engine-level, shared by all flows, never
+   * saved: the game keeps these values. A game running several engines
+   * registers its scopes in its registry itself instead, and binds none
+   * here. Tokens are case-sensitive: a token the bundle doesn't declare is
+   * reported (`setup`), naming the declared spelling when only the case
+   * differs. Patterplay's option, name for name, on every runtime.
    */
-  world?: ScopeResolver;
+  hostScopes?: Record<string, HostScope>;
   /**
    * The game's registry: ONE per game, holding every engine's properties
    * except those the game keeps itself, saved once. Given one, the engine
    * registers its own scopes in it (@story under `story`, every other bag
-   * under a key starting `storylets/`, and @world if `world` is passed),
+   * under a key starting `storylets/`, and each scope `hostScopes` binds),
    * reads every other scope from it, and `saveGame()` leaves the property
-   * values to the game. @world is then the game's to register: owned if the
-   * registry should store it, foreign if the game keeps it. Omit it and the
-   * engine makes its own registry and acts as its own game: it self-backs
-   * @world, and `saveGame()` carries the registry's values too.
+   * values to the game. The host scopes the bundle declares are then the
+   * game's to register: owned if the registry should store them, foreign if
+   * the game keeps them. Omit it and the engine makes its own registry and
+   * acts as its own game: it self-backs every host scope the bundle
+   * declares, and `saveGame()` carries the registry's values too.
    */
   registry?: ScopeRegistry;
   /**
@@ -173,10 +180,24 @@ export interface EngineOptions {
    */
   onReplacedFlow?: (id: string, dealt: number) => void;
   /** Told of every condition the engine could not evaluate and counted as
-   *  false (see {@link PlayError}), whether or not anything is tracing. Default:
-   *  a console warning. Patterplay's `onError`, the same shape. */
+   *  false (see {@link PlayError}), whether or not anything is tracing, and of
+   *  each set-up problem (reported as the constructor ends). Default: a console
+   *  warning. Patterplay's `onError`, the same shape. */
   onError?: (error: PlayError) => void;
 }
+
+/**
+ * A host scope's resolver: a `{ get, set? }` the game provides so the story can
+ * read (and, if you allow it, write) values the game owns, `@world.*` among
+ * them, at run time. Property metadata (types, read-only) comes from the
+ * compiled bundle's declarations; the values themselves live in the game and
+ * are never stored or saved by this engine. Patterplay's `HostScope`.
+ */
+export type HostScope = ScopeResolver;
+
+/** Every key `EngineOptions` takes: another is reported (`setup`), since a
+ *  plain-JS caller has no type check. */
+const ENGINE_OPTIONS = new Set(["seed", "log", "hostScopes", "registry", "onReplacedFlow", "onError"]);
 
 /**
  * A content error the engine played through. Content can fail at run time in
@@ -186,15 +207,19 @@ export interface EngineOptions {
  * reported here and as a `diagnostic` trace event. The same rule and the same
  * shape as Patterplay's, on all four runtimes (the hands-on review, 2026-10,
  * foundation 5: an error used to reach only a trace, so with tracing off a
- * resolver typo looked like a card that never came up).
+ * resolver typo looked like a card that never came up). The engine also
+ * reports how it was set up (`setup`: a host scope the bundle doesn't
+ * declare, an option it doesn't take), as the constructor ends.
  */
 export interface PlayError {
-  /** The flow it happened in. */
+  /** The flow it happened in; "" for a `setup` report, which belongs to no flow. */
   flow: string;
-  /** What failed. A Storylets deal evaluates only conditions. */
-  kind: "condition";
+  /** What failed: a condition (a Storylets deal evaluates only conditions), or
+   *  how the engine was set up (`setup`). */
+  kind: "condition" | "setup";
   /** Whose condition: `card <gameId>`, `deck <gameId>`, `hand <gameId>` or
-   *  `outcome <card gameId>/<outcome gameId>`. */
+   *  `outcome <card gameId>/<outcome gameId>`. For `setup`, the host-scope
+   *  token or option key at fault. */
   node: string;
   /** The expression's source text, when the bundle carries it. */
   source?: string;
@@ -278,7 +303,9 @@ export interface DealtCard {
   /** The card's Storylet extension values, by extension id, exactly as the
    *  bundle carries them: raw and sparse, any JSON, never read by the engine.
    *  Absent when it has none. `effectiveFields(extensionDecls(...), ...)`
-   *  fills in defaults. */
+   *  fills in defaults. READ-ONLY: these are the bundle's own values, handed
+   *  out uncopied (unlike `fields`), so changing them changes them for every
+   *  later deal. */
   extensions?: NodeExtensions;
 }
 
@@ -290,8 +317,8 @@ export interface OutcomeView {
   /** The outcome's fields, exactly as the bundle carries them: game data
    *  declared by the box's `outcomeFields`, never read by the engine. */
   fields?: Record<string, ScalarValue>;
-  /** The outcome's Storylet extension values, by extension id, raw, as a
-   *  card's are. Absent when it has none. */
+  /** The outcome's Storylet extension values, by extension id, raw and
+   *  read-only, as a card's are. Absent when it has none. */
   extensions?: NodeExtensions;
   /** Evaluated against CURRENT state at the moment of the ask. */
   available: boolean;
@@ -470,7 +497,7 @@ type HandSource = { kind: "value"; id: string } | { kind: "hand"; id: string } |
 /** One outcome change, resolved and checked but not yet landed. `path` is
  *  the store location the trace reports, in the address grammar. */
 type WritePlan =
-  | { kind: "world"; name: string; path: string }
+  | { kind: "host"; host: HostScopeState; name: string; path: string }
   | { kind: "bag"; bag: StateBag; name: string; path: string }
   | { kind: "scope"; scope: string; name: string; path: string };
 
@@ -616,7 +643,7 @@ export interface BoxView {
   gameId: string;
   title?: string;
   turn: number;
-  /** The box's Storylet extension values, by extension id, raw. Absent when it has none. */
+  /** The box's Storylet extension values, by extension id, raw and read-only, as a card's are. Absent when it has none. */
   extensions?: NodeExtensions;
 }
 
@@ -859,7 +886,8 @@ interface Internals {
   requiredGroups: Set<string>;
   nodeCache: WeakMap<Expression, ExprNode>;
   ladders: {
-    world: Map<string, readonly string[]>;
+    /** Each host scope's ladders, by token, then name. */
+    host: Map<string, Map<string, readonly string[]>>;
     story: Map<string, readonly string[]>;
     box: Map<string, Map<string, readonly string[]>>;
     deck: Map<string, Map<string, readonly string[]>>;
@@ -891,30 +919,16 @@ interface Internals {
   registry: ScopeRegistry;
   /** True when the engine made the registry: `saveGame()` then carries its values. */
   ownsRegistry: boolean;
-  /** True when the engine self-backed @world (standalone, no resolver bound). */
-  selfWorld: boolean;
   /** Every OTHER scope in the registry, as an eval context sees it (instance
    *  keys left out), rebuilt only when the registry's set of scopes moves. */
   registryView: () => { scopes: EvalContext["scopes"]; qualities: EvalContext["qualities"] };
-  /** @world, read through the registry by name (the scope's own normalisation),
-   *  so a @world the game registered folded to lower case still answers the
-   *  names as authored. */
-  worldResolver: ScopeResolver;
-  /** The @world WRITE seam. `host` says the caller is the GAME's own surface -
-   *  setProperty, the coverage harness, the CLI's --set - which the shared
-   *  kernel lets past a `writable: false` (scoperegistry 0.6.0): that flag is
-   *  the story's promise, not the game's. The story's refusal is the
-   *  worldReadOnly table below, consulted before this seam is reached. A BOUND
-   *  resolver is opaque - it takes a name and a value and keeps whatever rule
-   *  the game has - so the flag only ever reaches the self-backed bag.
-   *  Undefined when @world cannot be written at all (a resolver bound with no
-   *  `set`). */
-  worldSet?: (name: string, value: ScalarValue, host?: boolean) => void;
+  /** Every host scope the bundle declares (`@world`, `@player`, ...), by
+   *  token, in bundle order. */
+  hostScopes: Map<string, HostScopeState>;
+  /** The host scopes as an eval context's scopes, by token. */
+  hostResolvers: Record<string, ScopeResolver>;
   /** The game's `onError` (EngineOptions), or the console warning. */
   onError: (error: PlayError) => void;
-  /** @world names declared `writable: false`: the story's promise, kept at
-   *  runtime as the compiler keeps it at publish (Reboot.md 10). */
-  worldReadOnly: Set<string>;
   /** `turn` is the box clock the event happened on, where the caller knows it
    *  - the same stamp the flow's own log carries. Unity and Unreal passed it
    *  from the start; JS and Godot dropped it, so their examiners printed "[-]"
@@ -923,6 +937,50 @@ interface Internals {
   emitEngine: (flow: string, event: TraceEvent, turn?: number) => void;
   engineTracing: () => boolean;
 }
+
+/** One host scope the bundle declares, as the engine serves it. */
+interface HostScopeState {
+  spec: HostScopeSpec;
+  /** Read through the registry by name (the scope's own normalisation), so a
+   *  scope the game registered folded to lower case still answers the names
+   *  as authored. */
+  resolver: ScopeResolver;
+  /** The WRITE seam. `host` says the caller is the GAME's own surface -
+   *  setProperty, the coverage harness, the CLI's --set - which the shared
+   *  kernel lets past a `writable: false` (scoperegistry 0.6.0): that flag is
+   *  the story's promise, not the game's. The story's refusal is `readOnly`
+   *  below, consulted before this seam is reached. A BOUND resolver is opaque -
+   *  it takes a name and a value and keeps whatever rule the game has - so the
+   *  flag only ever reaches a self-backed bag. Undefined when the scope cannot
+   *  be written at all (a resolver bound with no `set`). */
+  set?: (name: string, value: ScalarValue, host?: boolean) => void;
+  /** True when this engine self-backed it (standalone, no resolver bound). */
+  selfBacked: boolean;
+}
+
+/** Is a host scope's property read-only TO THE STORY? Its own `writable:
+ *  false`, or its scope's: the story's promise, kept at run time as the
+ *  compiler keeps it at publish (Reboot.md 10). */
+const hostReadOnly = (spec: HostScopeSpec, name: string): boolean =>
+  (spec.declarations?.find((d) => d.name === name)?.writable ?? spec.writable) === false;
+
+/** A host scope declaration as the registry takes it, for a foreign scope. */
+const toForeignDecl = (d: HostScopeDecl): ScopeDeclaration => ({
+  name: d.name, type: d.type,
+  ...(d.values !== undefined ? { values: d.values } : {}),
+  ...(d.stages !== undefined ? { stages: d.stages } : {}),
+  ...(d.default !== undefined ? { default: d.default } : {}),
+  ...(d.writable !== undefined ? { writable: d.writable } : {}),
+});
+
+/** A self-backed host scope's declarations: the scope's own `writable`
+ *  folded into each, since an owned bag reads writability per declaration. */
+const selfBackedDecls = (spec: HostScopeSpec): ScopeDeclaration[] =>
+  (spec.declarations ?? []).map((d) => {
+    const decl = toForeignDecl(d);
+    const writable = d.writable ?? spec.writable;
+    return writable === undefined ? decl : { ...decl, writable };
+  });
 
 /** A template instance inherits the template's property declarations; a
  *  standalone hand declares its own (schema 2.6). `templatesById` is complete
@@ -1160,10 +1218,15 @@ const bundleShapeProblems = (bundle: Record<string, unknown>): string[] => {
   const problems: string[] = [];
   if (!isRecord(bundle["content"])) problems.push("no content");
   if (!isRecord(bundle["settings"])) problems.push("no settings");
-  for (const scope of ["story", "world"] as const) {
+  // A bundle @1 or @0 has a `world` block; from @2 the game's scopes are
+  // `scopeRegistry`, absent when the project declares none.
+  const scopes = bundle["schema"] === BUNDLE_SCHEMA ? ["story"] as const : ["story", "world"] as const;
+  for (const scope of scopes) {
     const part = bundle[scope];
     if (!isRecord(part) || !Array.isArray(part["properties"])) problems.push(`no ${scope} properties`);
   }
+  const registry = bundle["scopeRegistry"];
+  if (registry !== undefined && (!isRecord(registry) || !Array.isArray(registry["scopes"]))) problems.push("no host scopes in its scopeRegistry");
   if (!Array.isArray(bundle["boxes"])) problems.push("no boxes");
   return problems;
 };
@@ -1180,7 +1243,7 @@ const refuseUnreadableSave = (envelope: unknown): void => {
 };
 
 /** What a declared property takes, in words, for a refused host write. */
-const takes = (decl: PropertyDecl): string => {
+const takes = (decl: PropertyDecl | HostScopeDecl): string => {
   const quoted = (xs: readonly string[] | undefined): string => (xs ?? []).map((x) => JSON.stringify(x)).join(", ");
   switch (decl.type) {
     case "number": return "a number";
@@ -1217,20 +1280,23 @@ const cardKey = (internals: Internals, id: string): string => {
 /**
  * Refuse a host write that does not fit what the content declared (the
  * hands-on review, 2026-10, foundation 5): a string for a number, a value an
- * enum or a quality does not list, a flag a flags property does not, or a
- * @world name the content never declared. The rule is the kernel's
- * `valueFits`, the one a load walks saved values with, so a value the game may
- * set is exactly one a save may carry. Another engine's scope (`patter.x`) is
- * that engine's to check.
+ * enum or a quality does not list, a flag a flags property does not, or a name
+ * the content never declared in a host scope it declares. The rule is the
+ * kernel's `valueFits`, the one a load walks saved values with, so a value the
+ * game may set is exactly one a save may carry. An opaque host scope declares
+ * no names, so any name and value in it is the game's. Another engine's scope
+ * (`patter.x`) is that engine's to check.
  */
 const checkHostWrite = (internals: Internals, path: string, value: ScalarValue): void => {
   const parts = path.split(".");
-  let decl: PropertyDecl | undefined;
-  if (parts.length === 2 && parts[0] === "world") {
+  let decl: PropertyDecl | HostScopeDecl | undefined;
+  const host = parts.length === 2 ? internals.hostScopes.get(parts[0]!) : undefined;
+  if (host !== undefined) {
+    const decls = host.spec.declarations;
+    if (decls === undefined) return;
     const name = parts[1]!;
-    const decls = internals.bundle.world.properties;
     decl = decls.find((d) => d.name === name) ?? decls.find((d) => d.name.toLowerCase() === name.toLowerCase());
-    if (decl === undefined) throw new StoryletError(`no property at "${path}": the content declares no @world.${name}`);
+    if (decl === undefined) throw new StoryletError(`no property at "${path}": the content declares no @${host.spec.token}.${name}`);
   } else if (parts.length === 2 && parts[0] === "story") {
     const name = parts[1]!;
     decl = internals.sharedDecls.story.find((d) => d.name === name) ?? internals.flowDecls.story.find((d) => d.name === name);
@@ -1246,6 +1312,32 @@ const checkHostWrite = (internals: Internals, path: string, value: ScalarValue):
   if (decl !== undefined && !valueFits(decl, value, { noneChosen: decl.type === "enum" && decl.default === "" })) {
     throw new StoryletError(`"${path}" takes ${takes(decl)}; ${JSON.stringify(value)} doesn't fit`);
   }
+};
+
+/** Every declared host scope's properties as examiner rows, read through its
+ *  resolver, in bundle order (an opaque scope declares none, so lists none). */
+const hostRows = (internals: Internals): PropertyRow[] => {
+  const out: PropertyRow[] = [];
+  for (const host of internals.hostScopes.values()) {
+    for (const d of host.spec.declarations ?? []) {
+      const value = host.resolver.get(d.name);
+      out.push({
+        path: `${host.spec.token}.${d.name}`, name: d.name, type: d.type,
+        value: value ?? defaultFor(d), default: defaultFor(d),
+        ...(d.values !== undefined ? { values: d.values } : {}),
+        ...(d.stages !== undefined ? { stages: d.stages } : {}),
+        // A host scope is FOREIGN - a host resolver backs it - so writability is whether
+        // that resolver can be written at all AND what the declaration says, which is
+        // the shared registry's own rule for a foreign scope (its foreignWritable).
+        //
+        // A row is where `writable: false` is meant to SHOW (Reboot.md 10): it tells a
+        // state panel this is the game's value, not the story's. It does not stop the
+        // panel editing it - the host's setProperty passes `{ host: true }`.
+        writable: host.set !== undefined && !hostReadOnly(host.spec, d.name),
+      });
+    }
+  }
+  return out;
 };
 
 // --- the Engine ---------------------------------------------------------------
@@ -1272,7 +1364,7 @@ const refuseUnreadableBundle = (bundle: Bundle): void => {
   // runtime does not know may not have any of the shape the rest reads.
   const schema = (bundle as { schema?: unknown }).schema;
   if (typeof schema !== "string" || !BUNDLE_SCHEMAS.includes(schema)) {
-    throw new StoryletError(`unsupported bundle schema: ${String(schema)} (this runtime reads ${BUNDLE_SCHEMAS.join(" and ")})`);
+    throw new StoryletError(`unsupported bundle schema: ${String(schema)} (this runtime reads ${BUNDLE_SCHEMAS.slice(0, -1).join(", ")} and ${BUNDLE_SCHEMAS[BUNDLE_SCHEMAS.length - 1]})`);
   }
   // The parts every bundle of a known schema has, by name: a bundle missing
   // one is cut short or hand-built, and would fail later as a raw TypeError.
@@ -1351,11 +1443,6 @@ export class Engine {
   private readonly onReplacedFlow: EngineOptions["onReplacedFlow"];
   private readonly flowsById = new Map<string, Flow>();
   private readonly engineTraceHandlers = new Set<EngineTraceHandler>();
-  /** The host's @world binding, if the engine was built with one: it
-   *  outlives reset/loadGame (the host's container is the host's). The
-   *  self-backed resolver is rebuilt instead. */
-  private readonly hostWorld?: ScopeResolver;
-
   /** The options this engine was built with: hotSwap builds its replacement from them. */
   private readonly creationOptions: EngineOptions;
   /** How to register each shared scope again, in registration order: a failed
@@ -1370,7 +1457,16 @@ export class Engine {
     this.creationOptions = opts;
     this.seed = opts.seed ?? 0;
     this.onReplacedFlow = opts.onReplacedFlow;
-    if (opts.world !== undefined) this.hostWorld = opts.world;
+    // Set-up problems found while building, reported as the constructor ends,
+    // when the engine can report. A plain-JS caller gets no type check on its
+    // options, so a mistyped or retired key would be ignored in silence.
+    const setup: Array<{ node: string; message: string }> = [];
+    for (const key of Object.keys(opts)) {
+      if (ENGINE_OPTIONS.has(key)) continue;
+      setup.push({ node: key, message: key === "world"
+        ? `the engine option "world" has gone: bind the scope as hostScopes: { world }`
+        : `"${key}" isn't an engine option, so it's ignored` });
+    }
     const internals: Internals = {
       bundle,
       ...(opts.log ? { logCap: typeof opts.log === "object" ? (opts.log.cap ?? 1000) : 1000 } : {}),
@@ -1381,7 +1477,7 @@ export class Engine {
       templatesById: new Map(), groupsById: new Map(),
       requiredGroups: new Set(),
       nodeCache: new WeakMap(),
-      ladders: { world: new Map(), story: new Map(), box: new Map(), deck: new Map(), value: new Map(), hand: new Map() },
+      ladders: { host: new Map(), story: new Map(), box: new Map(), deck: new Map(), value: new Map(), hand: new Map() },
       hasQualities: false,
       hasShared: false,
       flowDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
@@ -1389,12 +1485,12 @@ export class Engine {
       durable: { shared: [], flow: [], sharedCards: [], flowCards: [] },
       shared: undefined as unknown as Partition,
       registry: opts.registry ?? new ScopeRegistry(),
-      onError: opts.onError ?? ((e) => console.warn(`Storylet Engine: the condition on ${e.node} in flow '${e.flow}' failed, counted as false: ${e.message}`)),
+      onError: opts.onError ?? ((e) => console.warn(e.kind === "setup" ? `Storylet Engine: ${e.message}`
+        : `Storylet Engine: the condition on ${e.node} in flow '${e.flow}' failed, counted as false: ${e.message}`)),
       ownsRegistry: opts.registry === undefined,
-      selfWorld: false,
       registryView: () => view(),
-      worldResolver: undefined as unknown as ScopeResolver,
-      worldReadOnly: new Set<string>(),
+      hostScopes: new Map(),
+      hostResolvers: {},
       emitEngine: (flow, event, turn) => {
         if (this.internals.logCap !== undefined) {
           this.engineLog.push({ ...event, flow, seq: this.engineSeq++, ...(turn !== undefined ? { turn } : {}) });
@@ -1487,18 +1583,29 @@ export class Engine {
     internals.durable.shared = durableProps(internals, internals.sharedDecls);
     internals.durable.flow = durableProps(internals, internals.flowDecls);
 
-    this.initShared(this.hostWorld);
+    this.initShared(opts.hostScopes ?? {}, setup);
+    // Last, so the game's handler and the decision log hear about an engine
+    // that is ready to be asked.
+    for (const s of setup) this.reportSetup(s.node, s.message);
   }
 
-  /** Build the shared stores, register them and @world, and set up the @world
-   *  seam. Once, for the engine's life: reset and loads reseed the bags in
-   *  place, so the registry never sees them come and go. */
-  private initShared(hostWorld?: ScopeResolver): void {
+  /** Report a set-up problem (a `setup` PlayError, which belongs to no flow):
+   *  to the game's onError, and to the decision log. */
+  private reportSetup(node: string, message: string): void {
+    this.internals.onError({ flow: "", kind: "setup", node, message });
+    if (this.internals.logCap !== undefined || this.internals.engineTracing()) {
+      this.internals.emitEngine("", { type: "diagnostic", where: "setup", message });
+    }
+  }
+
+  /** Build the shared stores, register them and the host scopes, and set up
+   *  each host scope's seam. Once, for the engine's life: reset and loads
+   *  reseed the bags in place, so the registry never sees them come and go. */
+  private initShared(bound: Record<string, HostScope>, setup: Array<{ node: string; message: string }>): void {
     const internals = this.internals;
     const reg = internals.registry;
-    const worldDecls = internals.bundle.world.properties as unknown as ScopeDeclaration[];
+    const declared = bundleHostScopes(internals.bundle);
     internals.shared = buildPartition(internals, internals.sharedDecls);
-    internals.worldReadOnly = new Set(internals.bundle.world.properties.filter((d) => d.writable === false).map((d) => d.name));
     const registered: string[] = [];
     // Register now, and remember how, so a failed hotSwap can register again.
     const mount = (key: string, register: () => void): void => {
@@ -1517,66 +1624,95 @@ export class Engine {
           mount(sharedKey(kind, id), () => { reg.mountOwned(sharedKey(kind, id), bag, { owner: OWNER }); });
         }
       }
-      if (hostWorld !== undefined) {
-        // The game keeps these values: an external scope, never saved.
-        mount("world", () => { reg.defineForeign("world", hostWorld, worldDecls, { normalise: identity, owner: OWNER }); });
-      } else if (internals.ownsRegistry && !reg.has("world")) {
-        // Standalone: self-backed from the declared defaults, DECLARATIONS AND
-        // ALL, as a property the registry stores and SAVES (only a resolver the
-        // game binds is external). The bag keeps `writable: false` so an
-        // examiner still reads it there, and the kernel lets a `{ host: true }`
-        // write past it, which is what the game's own surface passes.
-        reg.defineOwned("world", worldDecls, { normalise: identity, pathPrefix: "world.", owner: OWNER });
-        const worldBag = reg.ownedBag("world");
-        registered.push("world");
-        this.sharedMounts.push({ key: "world", mount: () => { reg.mountOwned("world", worldBag, { owner: OWNER }); } });
-        internals.selfWorld = true;
+      // Each scope the game binds is EXTERNAL: the game keeps the values, the
+      // registry never saves them. Its declarations (types, read-only) come
+      // from the bundle.
+      for (const [token, resolver] of Object.entries(bound)) {
+        if (resolver === undefined) continue;
+        const spec = declared.find((s) => s.token === token);
+        // Tokens are case-sensitive everywhere, so a near miss is reported,
+        // never folded: folding would make a second spelling of the scope.
+        // Another engine's scope the content names is that engine's to declare.
+        if (spec === undefined && !(internals.bundle.externalScopes ?? []).includes(token)) {
+          const near = declared.find((s) => s.token.toLowerCase() === token.toLowerCase());
+          setup.push({ node: token, message: near
+            ? `hostScopes binds "${token}", which this bundle doesn't declare: it declares "${near.token}", and a scope's token is case-sensitive`
+            : `hostScopes binds "${token}", which this bundle doesn't declare` });
+        }
+        const decls = spec?.declarations?.map(toForeignDecl);
+        mount(token, () => { reg.defineForeign(token, resolver, decls, { normalise: identity, writable: spec?.writable ?? true, owner: OWNER }); });
       }
-      // Given the game's registry and no resolver, @world is the game's to
-      // register: this engine registers nothing for it.
+      // A declared host scope nobody bound. A standalone engine is its own
+      // game, so it self-backs the scope from its declared defaults,
+      // DECLARATIONS AND ALL, as a property the registry stores and SAVES (only
+      // a resolver the game binds is external). The bag keeps `writable: false`
+      // so an examiner still reads it there, and the kernel lets a
+      // `{ host: true }` write past it, which is what the game's own surface
+      // passes. Given the GAME's registry, the engine registers nothing here:
+      // those scopes are the game's to register.
+      for (const spec of internals.ownsRegistry ? declared : []) {
+        const token = spec.token;
+        if (bound[token] !== undefined || reg.has(token)) continue;
+        reg.defineOwned(token, selfBackedDecls(spec), { normalise: identity, pathPrefix: `${token}.`, owner: OWNER });
+        const bag = reg.ownedBag(token);
+        registered.push(token);
+        this.sharedMounts.push({ key: token, mount: () => { reg.mountOwned(token, bag, { owner: OWNER }); } });
+      }
     } catch (e) {
       for (const k of registered) reg.remove(k, { keep: true }); // a clash leaves the game's registry as it was
       throw e;
     }
-    internals.worldResolver = {
-      get: (n) => reg.get("world", n),
-      set: (n, v) => { reg.set("world", n, v); },
-    };
-    if (hostWorld !== undefined) {
-      // A bound resolver is opaque: it keeps whatever rule the game has, so the
-      // story's `writable: false` is kept by worldReadOnly before this seam.
-      internals.worldSet = hostWorld.set !== undefined ? (n, v): void => { reg.set("world", n, v, { host: true }); } : undefined;
-    } else {
-      internals.worldSet = (n, v, host): void => { reg.set("world", n, v, host === true ? { host: true } : undefined); };
+    internals.hostScopes = new Map();
+    internals.hostResolvers = {};
+    for (const spec of declared) {
+      const token = spec.token;
+      const resolver = bound[token];
+      const isBound = resolver !== undefined;
+      const state: HostScopeState = {
+        spec,
+        resolver: {
+          get: (n) => reg.get(token, n),
+          set: (n, v) => { reg.set(token, n, v); },
+        },
+        // A bound resolver is opaque: it keeps whatever rule the game has, so
+        // the story's `writable: false` is kept by `hostReadOnly` before this seam.
+        ...(isBound
+          ? resolver!.set !== undefined ? { set: (n: string, v: ScalarValue): void => { reg.set(token, n, v, { host: true }); } } : {}
+          : { set: (n: string, v: ScalarValue, host?: boolean): void => { reg.set(token, n, v, host === true ? { host: true } : undefined); } }),
+        selfBacked: !isBound && this.sharedMounts.some((m) => m.key === token),
+      };
+      internals.hostScopes.set(token, state);
+      internals.hostResolvers[token] = state.resolver;
     }
   }
 
   /** Every shared bag back to its declared defaults, in place (the registry
-   *  keeps them registered), the self-backed @world included. */
+   *  keeps them registered), the self-backed host scopes included. */
   private reseedShared(): void {
     const { shared, sharedDecls, registry } = this.internals;
     shared.story.reseed(sharedDecls.story as unknown as ScopeDeclaration[]);
     for (const kind of OWNED_SCOPES) {
       for (const [id, bag] of shared[kind]) bag.reseed((sharedDecls[kind].get(id) ?? []) as unknown as ScopeDeclaration[]);
     }
-    if (this.internals.selfWorld) {
-      registry.reseedOwned("world", this.internals.bundle.world.properties as unknown as ScopeDeclaration[]);
+    for (const host of this.internals.hostScopes.values()) {
+      if (host.selfBacked) registry.reseedOwned(host.spec.token, selfBackedDecls(host.spec));
     }
   }
 
   /** Quality ladders by scope for the eval channel (design/quality.md):
-   *  world/story keyed by name; box/deck/value keyed by owner id then name.
+   *  host scopes by token then name; story by name; box/deck/value keyed by
+   *  owner id then name.
    *  Built once - a bundle's declarations never change. Ladders are
    *  declaration-level, so the sharing flag does not touch them. */
   private initLadders(): void {
     const internals = this.internals;
-    const grab = (decls: PropertyDecl[] | undefined): Map<string, readonly string[]> => {
+    const grab = (decls: readonly (PropertyDecl | HostScopeDecl)[] | undefined): Map<string, readonly string[]> => {
       const m = new Map<string, readonly string[]>();
       for (const d of decls ?? []) if (d.type === "quality" && d.stages !== undefined) m.set(d.name, d.stages);
       return m;
     };
     const b = internals.bundle;
-    internals.ladders.world = grab(b.world.properties);
+    for (const spec of bundleHostScopes(b)) internals.ladders.host.set(spec.token, grab(spec.declarations));
     internals.ladders.story = grab(b.story.properties);
     for (const box of b.boxes) {
       internals.ladders.box.set(box.id, grab(box.properties));
@@ -1590,7 +1726,7 @@ export class Engine {
     for (const tag of b.map?.group.tags ?? []) internals.ladders.value.set(tag.id, grab(tag.properties));
     const any = (m: Map<string, Map<string, readonly string[]>>): boolean =>
       [...m.values()].some((x) => x.size > 0);
-    internals.hasQualities = internals.ladders.world.size > 0 || internals.ladders.story.size > 0
+    internals.hasQualities = [...internals.ladders.host.values()].some((x) => x.size > 0) || internals.ladders.story.size > 0
       || any(internals.ladders.box) || any(internals.ladders.deck)
       || any(internals.ladders.value) || any(internals.ladders.hand);
   }
@@ -1696,7 +1832,7 @@ export class Engine {
   }
 
   /** Close every flow and reseed the shared state to its defaults (the
-   *  self-backed @world included; a host-bound @world is the host's and is
+   *  self-backed host scopes included; a host-bound one is the host's and is
    *  not touched). */
   reset(): void {
     this.dropRun(false);
@@ -1791,7 +1927,7 @@ export class Engine {
    */
   getProperty(path: string): ScalarValue {
     const found = this.resolveShared(path);
-    const value = found.kind === "world" ? this.internals.worldResolver.get(found.name)
+    const value = found.kind === "host" ? found.host.resolver.get(found.name)
       : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
       : found.bag.get(found.name);
     if (value === undefined) throw new StoryletError(`no property at "${path}"`);
@@ -1801,11 +1937,11 @@ export class Engine {
   setProperty(path: string, value: ScalarValue): void {
     const found = this.resolveShared(path);
     checkHostWrite(this.internals, path, value);
-    if (found.kind === "world") {
-      if (!this.internals.worldSet) {
-        throw new StoryletError(`@world is read-only here: the host bound no write`);
+    if (found.kind === "host") {
+      if (!found.host.set) {
+        throw new StoryletError(`@${found.host.spec.token} is read-only here: the host bound no write`);
       }
-      this.internals.worldSet(found.name, value, true);
+      found.host.set(found.name, value, true);
       return;
     }
     if (found.kind === "scope") {
@@ -1820,14 +1956,15 @@ export class Engine {
   }
 
   private resolveShared(path: string):
-    | { kind: "world"; name: string }
+    | { kind: "host"; host: HostScopeState; name: string }
     | { kind: "scope"; token: string; name: string }
     | { kind: "bag"; bag: StateBag; name: string } {
     const parts = path.split(".");
     const perFlow = (): never => {
       throw new StoryletError(`"${path}" is per-flow state - read it on a Flow, not the Engine`);
     };
-    if (parts.length === 2 && parts[0] === "world") return { kind: "world", name: parts[1]! };
+    const host = parts.length === 2 ? this.internals.hostScopes.get(parts[0]!) : undefined;
+    if (host !== undefined) return { kind: "host", host, name: parts[1]! };
     // Another engine's game-wide scope (`patter.gold`): every engine reads every scope.
     if (parts.length === 2 && parts[0] !== "story" && this.internals.registry.has(parts[0]!)) {
       return { kind: "scope", token: parts[0]!, name: parts[1]! };
@@ -1875,27 +2012,10 @@ export class Engine {
     }
   }
 
-  /** The shared surface as examiner rows: @world (read through the
-   *  resolver) then the shared partitions. Per-flow rows live on each Flow. */
+  /** The shared surface as examiner rows: the host scopes (read through
+   *  their resolvers) then the shared partitions. Per-flow rows live on each Flow. */
   listProperties(): PropertyRow[] {
-    const out: PropertyRow[] = [];
-    for (const d of this.internals.bundle.world.properties) {
-      const value = this.internals.worldResolver.get(d.name);
-      out.push({
-        path: `world.${d.name}`, name: d.name, type: d.type,
-        value: value ?? defaultFor(d), default: defaultFor(d),
-        ...(d.values !== undefined ? { values: d.values } : {}),
-        ...(d.stages !== undefined ? { stages: d.stages } : {}),
-        // @world is FOREIGN - a host resolver backs it - so writability is whether that
-        // resolver can be written at all AND what the declaration says, which is the
-        // shared registry's own rule for a foreign scope (its foreignWritable).
-        //
-        // A row is where `writable: false` is meant to SHOW (Reboot.md 10): it tells a
-        // state panel this is the game's value, not the story's. It does not stop the
-        // panel editing it - the host's setProperty passes `{ host: true }`.
-        writable: this.internals.worldSet !== undefined && !this.internals.worldReadOnly.has(d.name),
-      });
-    }
+    const out: PropertyRow[] = hostRows(this.internals);
     // The bag composes its rows' addresses from its own pathPrefix, so the prefix here is
     // only the caller's label for the mount; the row arrives already addressed.
     const add = (_prefix: string, bag: StateBag): void => {
@@ -2004,7 +2124,7 @@ export class Engine {
    *  once, then every live flow (board, clocks, cooldowns, PRNG, play log)
    *  keyed by its id. The property values are the registry's: a standalone
    *  engine (one that made its own registry) carries them here under
-   *  `registry`, self-backed @world included; a game that passed a registry
+   *  `registry`, self-backed host scopes included; a game that passed a registry
    *  saves it once itself, beside each engine's envelope. */
   saveGame(): SaveEnvelope {
     return structuredClone({
@@ -2121,9 +2241,9 @@ export class Engine {
     // The held cards are checked against the values the envelope carries,
     // which only a load puts in place: so the load runs on a scratch engine of
     // its own, with its own registry, and this one is left as it was.
-    const { seed, world } = this.creationOptions;
+    const { seed, hostScopes } = this.creationOptions;
     const scratch = new Engine(this.internals.bundle, {
-      ...(seed !== undefined ? { seed } : {}), ...(world !== undefined ? { world } : {}), onError: () => {},
+      ...(seed !== undefined ? { seed } : {}), ...(hostScopes !== undefined ? { hostScopes } : {}), onError: () => {},
     });
     try {
       return scratch.loadGame(envelope);
@@ -2659,7 +2779,7 @@ export class Flow {
    *  card under evaluation; in hand-condition contexts @deck is an empty bag,
    *  so any reference is an eval error (missing-policy throw). Every scope
    *  is the flow's MERGED view - its own copies over the shared values,
-   *  names disjoint - and @world reads through the engine's resolver. */
+   *  names disjoint - and each host scope reads through the engine's resolver. */
   private evalCtx(box: Box<Expression>, deck: Deck<Expression> | undefined, handEnv: HandEnv): EvalContext {
     const others = this.internals.registryView();
     return {
@@ -2667,7 +2787,7 @@ export class Flow {
         // Every other engine's game-wide scope first (every engine reads every
         // scope); this engine's own tokens are its merged views, over the top.
         ...others.scopes,
-        world: this.internals.worldResolver,
+        ...this.internals.hostResolvers,
         story: this.storyReader,
         box: this.boxReaders.get(box.id) ?? EMPTY_SCOPE,
         deck: deck ? this.deckReaders.get(deck.id) ?? EMPTY_SCOPE : EMPTY_SCOPE,
@@ -2679,15 +2799,14 @@ export class Flow {
       // identically to before the feature.
       ...(this.internals.hasQualities || others.qualities !== undefined ? {
         qualities: (scope: string, name: string): readonly string[] | undefined =>
-          scope === "world" ? this.internals.ladders.world.get(name) ?? others.qualities?.(scope, name)
-          : scope === "story" ? this.internals.ladders.story.get(name)
+          scope === "story" ? this.internals.ladders.story.get(name)
           : scope === "box" ? this.internals.ladders.box.get(box.id)?.get(name)
           : scope === "deck" && deck ? this.internals.ladders.deck.get(deck.id)?.get(name)
           // @hand is composed, so the ladder belongs to whatever supplied the
           // value THIS ask: the bound tag, or the asking hand. `sources` is
           // already the map that answers that, because write-back needs it.
           : scope === "hand" ? this.handLadder(handEnv, name)
-          : others.qualities?.(scope, name),
+          : this.internals.ladders.host.get(scope)?.get(name) ?? others.qualities?.(scope, name),
       } : {}),
     };
   }
@@ -3167,11 +3286,14 @@ export class Flow {
       gameId: effectiveGameId(card),
       ...(card.title !== undefined ? { title: card.title } : {}),
       ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
-      // Copies: the game may change what it is handed, and the bundle's own
-      // maps are every later deal's, in every engine on it (the hands-on
-      // review, 2026-10, foundation 6).
+      // Fields are copied: the game may change what it is handed, and the
+      // bundle's own maps are every later deal's, in every engine on it (the
+      // hands-on review, 2026-10, foundation 6). Extension values are NOT: they
+      // are the extension runtime's data, read-only by contract, and can be
+      // large, so a copy per deal would charge every game for a mistake good
+      // readers don't make (a family ruling, 2026-10-28, as Patter's).
       ...(card.fields !== undefined ? { fields: structuredClone(card.fields) } : {}),
-      ...(card.extensions !== undefined ? { extensions: structuredClone(card.extensions) } : {}),
+      ...(card.extensions !== undefined ? { extensions: card.extensions } : {}),
     };
   }
 
@@ -3449,9 +3571,9 @@ export class Flow {
       gameId: effectiveGameId(o),
       ...(o.title !== undefined ? { title: o.title } : {}),
       ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
-      // Copies, as a dealt card's (`view`).
+      // Fields copied, as a dealt card's (`view`).
       ...(o.fields !== undefined ? { fields: structuredClone(o.fields) } : {}),
-      ...(o.extensions !== undefined ? { extensions: structuredClone(o.extensions) } : {}),
+      ...(o.extensions !== undefined ? { extensions: o.extensions } : {}),   // read-only, as a dealt card's
       available: this.passes(o.condition, ctx, () => `outcome ${effectiveGameId(entry.card)}/${effectiveGameId(o)}`),
     }));
   }
@@ -3600,21 +3722,22 @@ export class Flow {
    *  write can meet that the engine can know in advance is met HERE, so a
    *  play checks all its targets before any write lands (ruling B). */
   private planWrite(target: string, entry: CardEntry, handEnv: HandEnv): WritePlan {
-    const match = /^@([a-z]+)\.([A-Za-z_][A-Za-z0-9_-]*)$/.exec(target);
+    const match = /^@([a-z][a-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_-]*)$/.exec(target);
     if (!match) throw new StoryletError(`bad change target "${target}"`);
     const [, scope, name] = match as unknown as [string, string, string];
+    const host = this.internals.hostScopes.get(scope);
+    if (host !== undefined) {
+      if (!host.set) throw new StoryletError(`@${scope}.${name} cannot be written: the host bound @${scope} read-only`);
+      // The story's own promise, kept HERE and only here, because here is where
+      // the story does the writing: it is consulted before the seam, so an
+      // outcome never reaches the bag (which would let a host write past it)
+      // nor a bound resolver (which cannot tell the two apart). The host's
+      // setProperty is its own path and never asks. Patter's runtime refuses the
+      // same write through the shared kernel, so both read one way.
+      if (hostReadOnly(host.spec, name)) throw new StoryletError(`'@${scope}.${name}' is read-only (writable: false)`);
+      return { kind: "host", host, name, path: `${scope}.${name}` };
+    }
     switch (scope) {
-      case "world": {
-        if (!this.internals.worldSet) throw new StoryletError(`@world.${name} cannot be written: the host bound @world read-only`);
-        // The story's own promise, kept HERE and only here, because here is where
-        // the story does the writing: the table is consulted before the seam, so
-        // an outcome never reaches the bag (which would let a host write past it)
-        // nor a bound resolver (which cannot tell the two apart). The host's
-        // setProperty is its own path and never asks. Patter's runtime refuses the
-        // same write through the shared kernel, so both read one way.
-        if (this.internals.worldReadOnly.has(name)) throw new StoryletError(`'@world.${name}' is read-only (writable: false)`);
-        return { kind: "world", name, path: `world.${name}` };
-      }
       case "story": return this.planBag("story", undefined, name, `story.${name}`);
       case "box": return this.planBag("box", entry.box.id, name, `${this.address("box", entry.box.id)}.${name}`);
       case "deck": return this.planBag("deck", entry.deck.id, name, `${this.address("deck", entry.deck.id)}.${name}`);
@@ -3645,9 +3768,9 @@ export class Flow {
    *  firing rule). */
   private landWrite(plan: WritePlan, value: ScalarValue): ScalarValue | undefined {
     switch (plan.kind) {
-      case "world": {
-        const prev = this.internals.worldResolver.get(plan.name);
-        this.internals.worldSet!(plan.name, value);
+      case "host": {
+        const prev = plan.host.resolver.get(plan.name);
+        plan.host.set!(plan.name, value);
         return prev;
       }
       case "bag": return plan.bag.set(plan.name, value).prev;
@@ -3666,7 +3789,7 @@ export class Flow {
   private undoWrite(plan: WritePlan, prev: ScalarValue | undefined): void {
     if (prev === undefined) return;
     switch (plan.kind) {
-      case "world": this.internals.worldSet!(plan.name, prev, true); return;
+      case "host": plan.host.set!(plan.name, prev, true); return;
       case "bag": plan.bag.set(plan.name, prev, { silent: true, reason: "play refused", host: true }); return;
       case "scope": this.internals.registry.set(plan.scope, plan.name, prev, { host: true }); return;
     }
@@ -3693,8 +3816,8 @@ export class Flow {
       gameId: effectiveGameId(b),
       ...(b.title !== undefined ? { title: b.title } : {}),
       turn: this.turnCounts.get(b.id) ?? 0,
-      // A copy, as a dealt card's (`view`).
-      ...(b.extensions !== undefined ? { extensions: structuredClone(b.extensions) } : {}),
+      // Read-only and uncopied, as a dealt card's extension values (`view`).
+      ...(b.extensions !== undefined ? { extensions: b.extensions } : {}),
     }));
   }
 
@@ -3712,30 +3835,14 @@ export class Flow {
   }
 
   /** The flow's FULL merged view as examiner rows (the property examiner /
-   *  editor surface, parity across all runtimes): @world read through the
-   *  resolver, then per scope the shared values and this flow's own.
-   *  Bundle order: world, story, then per-box / per-deck / per-hand /
-   *  per-tag stores. */
+   *  editor surface, parity across all runtimes): the host scopes read
+   *  through their resolvers, then per scope the shared values and this
+   *  flow's own. Bundle order: host scopes (@world first when the bundle
+   *  lists it first), story, then per-box / per-deck / per-hand / per-tag
+   *  stores. */
   listProperties(): PropertyRow[] {
     this.assertOpen();
-    const out: PropertyRow[] = [];
-    for (const d of this.internals.bundle.world.properties) {
-      const value = this.internals.worldResolver.get(d.name);
-      out.push({
-        path: `world.${d.name}`, name: d.name, type: d.type,
-        value: value ?? defaultFor(d), default: defaultFor(d),
-        ...(d.values !== undefined ? { values: d.values } : {}),
-        ...(d.stages !== undefined ? { stages: d.stages } : {}),
-        // @world is FOREIGN - a host resolver backs it - so writability is whether that
-        // resolver can be written at all AND what the declaration says, which is the
-        // shared registry's own rule for a foreign scope (its foreignWritable).
-        //
-        // A row is where `writable: false` is meant to SHOW (Reboot.md 10): it tells a
-        // state panel this is the game's value, not the story's. It does not stop the
-        // panel editing it - the host's setProperty passes `{ host: true }`.
-        writable: this.internals.worldSet !== undefined && !this.internals.worldReadOnly.has(d.name),
-      });
-    }
+    const out: PropertyRow[] = hostRows(this.internals);
     const add = (_prefix: string, shared: StateBag | undefined, own: StateBag | undefined): void => {
       for (const bag of [shared, own]) {
         if (bag === undefined) continue;
@@ -3763,7 +3870,7 @@ export class Flow {
   getProperty(path: string): ScalarValue {
     this.assertOpen();
     const found = this.resolvePath(path);
-    const value = found.kind === "world" ? this.internals.worldResolver.get(found.name)
+    const value = found.kind === "host" ? found.host.resolver.get(found.name)
       : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
       : ownValue(found.own, found.name) ?? ownValue(found.shared, found.name);
     if (value === undefined) throw new StoryletError(`no property at "${path}"`);
@@ -3774,9 +3881,9 @@ export class Flow {
     this.assertOpen();
     const found = this.resolvePath(path);
     checkHostWrite(this.internals, path, value);
-    if (found.kind === "world") {
-      if (!this.internals.worldSet) throw new StoryletError(`@world is read-only here: the host bound no write`);
-      this.internals.worldSet(found.name, value, true);
+    if (found.kind === "host") {
+      if (!found.host.set) throw new StoryletError(`@${found.host.spec.token} is read-only here: the host bound no write`);
+      found.host.set(found.name, value, true);
       return;
     }
     if (found.kind === "scope") {
@@ -3794,11 +3901,12 @@ export class Flow {
   }
 
   private resolvePath(path: string):
-    | { kind: "world"; name: string }
+    | { kind: "host"; host: HostScopeState; name: string }
     | { kind: "scope"; token: string; name: string }
     | { kind: "bag"; own?: StateBag; shared?: StateBag; name: string } {
     const parts = path.split(".");
-    if (parts.length === 2 && parts[0] === "world") return { kind: "world", name: parts[1]! };
+    const host = parts.length === 2 ? this.internals.hostScopes.get(parts[0]!) : undefined;
+    if (host !== undefined) return { kind: "host", host, name: parts[1]! };
     if (parts.length === 2 && parts[0] !== "story" && this.internals.registry.has(parts[0]!)) {
       return { kind: "scope", token: parts[0]!, name: parts[1]! };
     }

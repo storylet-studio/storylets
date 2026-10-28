@@ -5,7 +5,7 @@
       {
         default: "",
         name: "music",
-        purpose: "A host cue: which music stem this beat wants. Fields are for the HOST to read, and this one is deliberately NOT the dialogue handoff - a card's gameId already names its Patter scene (Reboot.md 10).",
+        purpose: "A host cue: which music stem this beat wants. Fields are for the game to read, and this one isn't how the dialogue is found: a card's Game ID already names its Patter scene.",
         type: "string",
       },
     ],

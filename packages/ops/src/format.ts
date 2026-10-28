@@ -16,6 +16,9 @@
 //     step (extensions.ts)
 //   - a card's `copies` becomes `acrossHands` (the hands-on review, 2026-10):
 //     1 is "one", more is "any"
+//   - the project's `world` block becomes its host scopes' `world`
+//     (`scopeRegistry`, host scopes like Patter's, 2026-10-28); an empty one
+//     just goes
 //
 // An extension's manifest is never formatted: it is the extension's own JSON.
 //
@@ -28,7 +31,7 @@ import { join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 import type { LoadedProject } from "./load.js";
-import { MANIFEST_EXTENSION } from "@storylet-studio/model";
+import { MANIFEST_EXTENSION, migrateLegacyWorld } from "@storylet-studio/model";
 import { planExtensionUpgrades } from "./extensions.js";
 import { planMapMigration } from "./map.js";
 import { planProjectMapMigration } from "./project-map-migration.js";
@@ -112,6 +115,15 @@ export function runFormat(loaded: LoadedProject): FormatResult {
       const parsed = parseSource(file.text);
       const replaced = file.path.endsWith(".storyletdeck") ? replaceCopies(parsed) : 0;
       if (replaced > 0) copiesReport.push(`${file.path}: ${replaced === 1 ? "1 card's copies is" : `${replaced} cards' copies are`} now acrossHands`);
+      if (file.path.endsWith(".storyletproj") && parsed !== null && typeof parsed === "object") {
+        const shard = parsed as Parameters<typeof migrateLegacyWorld>[0];
+        const declared = (shard.world?.properties ?? []).length;
+        if (migrateLegacyWorld(shard)) {
+          copiesReport.push(declared > 0
+            ? `${file.path}: @world's declarations are now the host scope "world" in scopeRegistry`
+            : `${file.path}: the empty world block is gone`);
+        }
+      }
       canonical = canonicalStringify(parsed);
     } catch (e) {
       issues.push({

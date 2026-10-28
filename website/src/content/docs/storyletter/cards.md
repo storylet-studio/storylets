@@ -41,7 +41,7 @@ It's on a deck's Cards tab and on a box's Contents tab, which shows every card i
 - **Deck** is the default. On a deck that's the deck as you arranged it, and on a box's
   Contents it's a heading per deck.
 - **Hand** gives a heading per hand, with the zone the hand is in beside it, holding the
-  cards that name that hand. After those come **Anywhere in** a zone for cards filed to a
+  cards that name that hand. After those come **Any hand in** a zone for cards filed to a
   zone, a **By** heading for cards placed only by another group a hand binds (**By npc**,
   which switches to grouping by that group when clicked), and **Anywhere** last. It's offered when the box has hands and something places cards
   at them: a card that names a hand, or the project map.

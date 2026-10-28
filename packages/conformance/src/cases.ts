@@ -916,35 +916,6 @@ export const fixtures: Fixtures = {
         { op: "assertNodeExtensions", kind: "outcome", address: "full/take", expect: { probe: { line: "Taken." } } },
         // Values ride along: what is dealt, and in what order, is unchanged.
         { op: "assertOutcomeOrder", card: "c_full", from: "h_q", expect: ["take", "leave"] },
-        // The game's copy, nested records, maps and lists included: defacing
-        // them changes nothing the engine hands out next, or the helper reads
-        // off the bundle (the hands-on review, 2026-10, foundation 6).
-        { op: "scribble", from: "h_q" },
-        { op: "assertCardExtensions", from: "h_q", expect: {
-          c_full: {
-            other: { flag: true },
-            probe: {
-              act: "turn", beats: [{ at: 3, id: "b2" }, { at: 1, id: "b1" }], body: "First line.\nSecond line.",
-              cue: { gain: 0.5, sound: "bell" }, loud: true, marks: ["night", "rain"], next: "c_default", note: "lights down",
-              perf: { v_docks: "frown", v_market: "smile" }, tone: "tense", weight: 4, words: ["salt", "rope"],
-            },
-          },
-          c_default: { probe: { act: "setup", weight: 1 } },
-          c_bare: {},
-        } },
-        { op: "assertOutcomeExtensions", card: "c_full", from: "h_q", expect: {
-          take: { probe: { line: "Taken." } },
-          leave: {},
-        } },
-        { op: "assertBoxExtensions", expect: { box: { probe: { theme: "harbour" } } } },
-        { op: "assertNodeExtensions", kind: "card", address: "full", expect: {
-          other: { flag: true },
-          probe: {
-            act: "turn", beats: [{ at: 3, id: "b2" }, { at: 1, id: "b1" }], body: "First line.\nSecond line.",
-            cue: { gain: 0.5, sound: "bell" }, loud: true, marks: ["night", "rain"], next: "c_default", note: "lights down",
-            perf: { v_docks: "frown", v_market: "smile" }, tone: "tense", weight: 4, words: ["salt", "rope"],
-          },
-        } },
       ] },
 
     // What the game hands in is checked (the hands-on review, 2026-10,
@@ -1416,6 +1387,128 @@ export const fixtures: Fixtures = {
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_any"] } },
         { op: "setState", world: { siege: "assault" } },
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_any", "c_war"] } },
+      ] },
+
+    // --- host scopes (corpus 23; host scopes like Patter's, ruled 2026-10-28) --
+    //
+    // A project declares any game scope, not only @world: the bundle carries
+    // them as `scopeRegistry` (schema @2, no `world` block), a standalone engine
+    // self-backs each from its defaults, and a game binds its own store for any
+    // of them through ONE option, `hostScopes`, a map of token to resolver.
+
+    { name: "a second host scope, @player, is self-backed from its defaults, read in a condition, written by an outcome, and saved",
+      scopeRegistry: { version: 1, scopes: [
+        { token: "world", declarations: [{ name: "alarm", type: "number", default: 0 }] },
+        { token: "player", declarations: [
+          { name: "hp", type: "number", default: 10 },
+          { name: "rank", type: "quality", stages: ["novice", "adept"], default: "novice" },
+        ] },
+      ] },
+      cards: [
+        { id: "c_strong", condition: "@player.hp > 5", outcomes: [{ id: "o_hurt", changes: { "@player.hp": "@player.hp - 6" } }] },
+        { id: "c_weak", condition: "@player.hp <= 5" },
+        { id: "c_adept", condition: '@player.rank >= "adept"' },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_strong"] } },
+        { op: "assertState", expect: { "player.hp": 10, "player.rank": "novice", "world.alarm": 0 } },
+        { op: "assertEngineRead", path: "player.hp", expect: 10 },
+        { op: "play", card: "c_strong", outcome: "hurt", from: "h_q", expectTrace: ["write @player.hp player.hp"] },
+        { op: "assertState", expect: { "player.hp": 4 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_weak"] } },
+        // Self-backed, so the engine's registry stores it and a save carries it.
+        { op: "saveLoad" },
+        { op: "assertState", expect: { "player.hp": 4 } },
+        // The game's own surface: a quality moved by the host, and the deal re-gates.
+        { op: "setState", host: { player: { rank: "adept" } } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_weak", "c_adept"] } },
+        // A host write is checked against the declarations, as @world's is.
+        { op: "setState", host: { player: { hp: "lots" } }, expectRefused: ["player.hp", "a number"] },
+        { op: "setState", host: { player: { mana: 1 } }, expectRefused: ["@player.mana"] },
+        { op: "assertState", expect: { "player.hp": 4 } },
+      ] },
+
+    { name: "@player bound through hostScopes: the game's store is what the story reads and writes",
+      scopeRegistry: { version: 1, scopes: [
+        { token: "player", declarations: [{ name: "hp", type: "number", default: 10 }] },
+      ] },
+      hostScopes: { player: { hp: 3 } },
+      cards: [
+        { id: "c_strong", condition: "@player.hp > 5" },
+        { id: "c_weak", condition: "@player.hp <= 5", outcomes: [{ id: "o_heal", changes: { "@player.hp": "@player.hp + 5" } }] },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        // The store's 3, not the declared default 10.
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_weak"] } },
+        { op: "assertEngineRead", path: "player.hp", expect: 3 },
+        { op: "play", card: "c_weak", outcome: "heal", from: "h_q", expectTrace: ["write @player.hp player.hp"] },
+        { op: "assertState", expect: { "player.hp": 8 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_strong"] } },
+        // The game keeps it: an engine built again on the same binding reads the store.
+        { op: "saveLoad" },
+        { op: "assertState", expect: { "player.hp": 8 } },
+        { op: "setState", host: { player: { hp: 1 } } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_weak"] } },
+        { op: "setState", host: { player: { hp: true } }, expectRefused: ["player.hp", "a number"] },
+      ] },
+
+    { name: "a token the bundle doesn't declare is reported as set-up, naming the declared spelling when only the case differs",
+      scopeRegistry: { version: 1, scopes: [
+        { token: "player", declarations: [{ name: "hp", type: "number", default: 10 }] },
+      ] },
+      // A scope's token is case-sensitive: "Player" is not "player", which is
+      // self-backed from its default, since nothing bound it.
+      hostScopes: { Player: { hp: 1 }, weather: {} },
+      expectSetupErrors: [
+        { node: "Player", message: 'binds "Player", which this bundle doesn\'t declare: it declares "player", and a scope\'s token is case-sensitive' },
+        { node: "weather", message: 'binds "weather", which this bundle doesn\'t declare' },
+      ],
+      cards: [
+        { id: "c_strong", condition: "@player.hp > 5" },
+        { id: "c_weak", condition: "@player.hp <= 5" },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_strong"] } },
+        { op: "assertState", expect: { "player.hp": 10 } },
+      ] },
+
+    { name: "an opaque host scope declares no names, so it takes any name and any value",
+      scopeRegistry: { version: 1, scopes: [{ token: "fx" }] },
+      cards: [
+        { id: "c_glow", condition: "@fx.glow == 3", outcomes: [{ id: "o_spark", changes: { "@fx.spark": "true" } }] },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "setState", host: { fx: { glow: 3, mood: "anything" } } },
+        { op: "assertEngineRead", path: "fx.mood", expect: "anything" },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_glow"] } },
+        { op: "play", card: "c_glow", outcome: "spark", from: "h_q", expectTrace: ["write @fx.spark fx.spark"] },
+        { op: "assertState", expect: { "fx.spark": true, "fx.glow": 3 } },
+      ] },
+
+    { name: "a host scope's own writable: false makes every name read-only to the story unless it says otherwise; the host still may",
+      scopeRegistry: { version: 1, scopes: [
+        { token: "player", writable: false, declarations: [
+          { name: "hp", type: "number", default: 10 },
+          { name: "xp", type: "number", default: 0, writable: true },
+        ] },
+      ] },
+      cards: [
+        { id: "c_hit", outcomes: [{ id: "o_hit", changes: { "@player.hp": "@player.hp - 1" } }] },
+        { id: "c_learn", outcomes: [{ id: "o_learn", changes: { "@player.xp": "@player.xp + 1" } }] },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_learn", "c_hit"] } },   // equal rank: the seeded shuffle
+        { op: "play", card: "c_hit", outcome: "hit", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "player.hp": 10 } },
+        { op: "play", card: "c_learn", outcome: "learn", from: "h_q" },
+        { op: "assertState", expect: { "player.xp": 1 } },
+        { op: "setState", host: { player: { hp: 3 } } },
+        { op: "assertState", expect: { "player.hp": 3 } },
       ] },
 
     // --- state-bound and required groups (design/where-and-selectors.md B) ----

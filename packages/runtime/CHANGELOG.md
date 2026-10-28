@@ -10,6 +10,17 @@ section for it.
 
 ### Added
 
+- **Any game scope, not only `@world`.** A project can declare its own scopes beside `@world` (`@player`, say),
+  in Patter's shape: a token, a scope-level `writable`, and declarations, or none for an opaque scope that takes any
+  name. The bundle carries them as `scopeRegistry`, and an engine on its own backs each one from its defaults,
+  stores it, saves it and reseeds it on a reset, as it did `@world`. Every `@world` path works for any of them:
+  `getProperty` and `setProperty` on `player.hp`, `listProperties` rows, the host-write check, a story write
+  refused on a read-only name, and coverage drivers on `@player.hp`. `describeBundle` lists each (`scope: "host"`,
+  the token as `owner`). The conformance corpus (version 23) checks it in every runtime.
+- **`PlayError.kind` "setup".** `onError` hears how the engine was set up as the constructor ends: a host scope the
+  bundle doesn't declare (naming the declared spelling when only the case differs, since a token is case-sensitive)
+  and an option it doesn't take. Patterplay's report, word for word.
+
 - **`discard(card, hand)`.** Takes a card out of a hand without playing it, when the player turns it down or the
   game wants the room: no outcome, no move of the clock, nothing in the play log. Its Redraw starts as a play's
   would, so the next deal doesn't hand it straight back. A `discard` trace event says so.
@@ -30,6 +41,15 @@ section for it.
   load hands back without depending on the model package.
 
 ### Changed
+
+- **The `world` option has gone: bind your game's scopes through `hostScopes`.** One map of token to resolver,
+  `new Engine(bundle, { hostScopes: { world: { get, set } } })`, binds `@world` and any other scope the bundle
+  declares, named and shaped as Patterplay's option (`HostScope` is the resolver's type). A scope you leave out is
+  backed by the engine as before. Passing `world` is reported (`the engine option "world" has gone: bind the scope
+  as hostScopes: { world }`) and binds nothing.
+- **Bundles are `storylets/bundle@2`.** The game's scopes are `scopeRegistry`, and the `world` block is gone. `@1`
+  and `@0` bundles still load, their `world.properties` read as the scope `world`; an older runtime refuses an `@2`
+  bundle by its schema rather than misreading it.
 
 - **A deal makes the hand right.** A deal ranks everything eligible, including what the hand holds, and the hand
   becomes the top of that ranking, full or not. A better card that has become eligible takes the place of a worse
@@ -55,10 +75,11 @@ section for it.
 - **A broken bundle or save is refused by what's wrong with it.** `new Engine(null)`, a bundle missing its boxes, or
   a save with the wrong schema used to fail as a raw TypeError; each now says what it got and what's missing.
 
-- **What a game is handed is its own.** A dealt card's fields and extension values, an outcome's, a box's, a field's
-  structured default and `extensionsOf`'s values are copies: a game that changed one used to change it in the bundle
-  for every later deal, in every engine on that bundle. The conformance corpus (version 17) checks it in every
-  runtime.
+- **What a game is handed is its own.** A dealt card's fields, an outcome's, and a field's structured default are
+  copies: a game that changed one used to change it in the bundle for every later deal, in every engine on that
+  bundle. Extension values are the exception, as in Patter: they're the extension's own data, handed out uncopied and
+  read-only by contract, because they can be large and a copy per deal would cost every game. The conformance
+  corpus checks it in every runtime.
 
 ## [0.14.0] - 2026-10-21
 

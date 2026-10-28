@@ -50,7 +50,7 @@ export type LiveBundleResult =
  * the game's registry the old engine hands its keys to the replacement, which a
  * plain save and load into a second engine cannot do (the two would clash).
  *
- * The engine remembers the options it was built with (seed, log, world,
+ * The engine remembers the options it was built with (seed, log, hostScopes,
  * registry), so `opts` is only for overriding one of them for the replacement.
  */
 export function applyLiveBundle(engine: Engine, bundleJson: string, opts: EngineOptions = {}): LiveBundleResult {

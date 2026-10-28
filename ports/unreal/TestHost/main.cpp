@@ -137,6 +137,18 @@ static void applyState(Flow& session, const JsonValue& selector)
             session.setProperty(std::string(scope) + "." + prop.first, bundleloader::ToValue(prop.second));
         }
     }
+    // Corpus 23: any other host scope's values, by token, each written as
+    // `<token>.<name>`.
+    if (const JsonValue* host = selector.find("host"); host && host->isObject())
+    {
+        for (const auto& scope : host->obj)
+        {
+            for (const auto& prop : scope.second.obj)
+            {
+                session.setProperty(scope.first + "." + prop.first, bundleloader::ToValue(prop.second));
+            }
+        }
+    }
     for (const char* kind : {"box", "deck", "hand", "value"})
     {
         const JsonValue* byId = selector.find(kind);
@@ -681,48 +693,16 @@ static bool needsFlow(const std::string& kind)
         || kind == "scribble" || kind == "discard";
 }
 
-// The `scribble` op (corpus version 17): a careless host defacing, in place,
-// everything the engine handed it. The asserts after it must still read the
-// bundle's values, since a view is a copy (the hands-on review, 2026-10,
-// foundation 6). Mirrors scribbleView / scribbleMap / scribbleDeep in the JS
+// The `scribble` op (corpus version 17; fields only from version 22): a
+// careless host defacing, in place, the fields the engine handed it. The
+// asserts after it must still read the bundle's values, since a host's fields
+// are a copy (the hands-on review, 2026-10, foundation 6). Extension values
+// are not touched: they are read-only by contract and handed out uncopied (a
+// family ruling, 2026-10-28). Mirrors scribbleView / scribbleMap in the JS
 // reference runner.
 
-/** Set `key` on a JSON object, replacing an existing key in place. */
-static void scribbleSet(JsonValue& map, const std::string& key, JsonValue value)
-{
-    for (auto& kv : map.obj)
-    {
-        if (kv.first == key) { kv.second = std::move(value); return; }
-    }
-    map.obj.emplace_back(key, std::move(value));
-}
-
-/** Nested maps gain the key, nested lists the item, deepest first. */
-static void scribbleDeep(JsonValue& value)
-{
-    if (value.isArray())
-    {
-        for (auto& item : value.arr) scribbleDeep(item);
-        value.arr.push_back(JsonValue::MakeStr("scribbled"));
-    }
-    else if (value.isObject())
-    {
-        for (auto& kv : value.obj) scribbleDeep(kv.second);
-        scribbleSet(value, "scribbled", JsonValue::MakeStr("scribbled"));
-    }
-}
-
-/** One extension's values: nested first, then every top-level value replaced
- *  and the map gains the key. */
-static void scribbleMap(OrderedMap<std::string, JsonValue>& map)
-{
-    const std::vector<std::string> keys = map.keys();
-    for (const auto& key : keys) scribbleDeep(*map.get(key));
-    for (const auto& key : keys) map.set(key, JsonValue::MakeStr("scribbled"));
-    map.set("scribbled", JsonValue::MakeStr("scribbled"));
-}
-
-/** A field map: a flags value is the one nested list a field can hold. */
+/** A field map: a flags value is the one nested list a field can hold. Nested
+ *  first, then every value replaced and the map gains the key. */
 static void scribbleMap(OrderedMap<std::string, StoryletValue>& map)
 {
     const std::vector<std::string> keys = map.keys();
@@ -733,12 +713,6 @@ static void scribbleMap(OrderedMap<std::string, StoryletValue>& map)
     }
     for (const auto& key : keys) map.set(key, StoryletValue::Str("scribbled"));
     map.set("scribbled", StoryletValue::Str("scribbled"));
-}
-
-static void scribbleExtensions(NodeExtensions& extensions)
-{
-    for (const auto& id : extensions.keys()) scribbleMap(*extensions.get(id));
-    extensions.set("scribbled", OrderedMap<std::string, JsonValue>());
 }
 
 /** Execute the ops in order; every expect must match exactly, expectError ops
@@ -753,10 +727,68 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
     // What the engine reported to its onError (corpus 18), as `node`s. Every
     // engine this runner makes reports here, as the JS runner's do.
     std::vector<std::string> playErrors;
+    // Set-up reports (corpus 23), apart from a deal's condition errors.
+    std::vector<std::pair<std::string, std::string>> setupErrors;
     EngineOptions opts;
     opts.seed = seed;
-    opts.onError = [&playErrors](const PlayError& e) { playErrors.push_back(e.node); };
+    opts.onError = [&playErrors, &setupErrors](const PlayError& e)
+    {
+        if (e.kind == "setup") setupErrors.emplace_back(e.node, e.message);
+        else playErrors.push_back(e.node);
+    };
+    // The case's host scopes (corpus 23): a plain resolver per token over a
+    // store kept for the whole case, shared by every engine it makes.
+    auto hostStores = std::make_shared<std::map<std::string, std::map<std::string, StoryletValue>>>();
+    if (const JsonValue* hosts = c.find("hostScopes"); hosts && hosts->isObject())
+    {
+        for (const auto& scope : hosts->obj)
+        {
+            std::map<std::string, StoryletValue>& store = (*hostStores)[scope.first];
+            for (const auto& prop : scope.second.obj) store[prop.first] = bundleloader::ToValue(prop.second);
+            const std::string token = scope.first;
+            HostScope resolver;
+            resolver.get = [hostStores, token](const std::string& name) -> std::optional<StoryletValue>
+            {
+                const auto& st = (*hostStores)[token];
+                auto it = st.find(name);
+                return it == st.end() ? std::nullopt : std::optional<StoryletValue>(it->second);
+            };
+            resolver.set = [hostStores, token](const std::string& name, const StoryletValue& value)
+            {
+                (*hostStores)[token][name] = value;
+            };
+            opts.hostScopes[token] = resolver;
+        }
+    }
     auto engine = std::make_unique<Engine>(bundle, opts);
+    {
+        // The FIRST engine's set-up reports, in any order (a binding map's
+        // order is not every language's to keep): each node exactly, and a
+        // message containing the expected one.
+        std::vector<std::pair<std::string, std::string>> want;
+        if (const JsonValue* expected = c.find("expectSetupErrors"); expected && expected->isArray())
+        {
+            for (const auto& e : expected->arr) want.emplace_back(e.strOr("node"), e.strOr("message"));
+        }
+        std::vector<std::pair<std::string, std::string>> got = setupErrors;
+        std::sort(want.begin(), want.end());
+        std::sort(got.begin(), got.end());
+        bool same = want.size() == got.size();
+        for (size_t i = 0; same && i < want.size(); ++i)
+        {
+            same = want[i].first == got[i].first && got[i].second.find(want[i].second) != std::string::npos;
+        }
+        if (!same)
+        {
+            auto render = [](const std::vector<std::pair<std::string, std::string>>& list)
+            {
+                std::vector<std::string> out;
+                for (const auto& p : list) out.push_back(p.first + ": " + p.second);
+                return out;
+            };
+            failures.push_back("setup: onError expected " + show(render(want)) + ", got " + show(render(got)));
+        }
+    }
     // The bundle the engine runs now: a kept durable half must carry its content.
     BundlePtr running = bundle;
     // Flow handles as the SCRIPT knows them: kept across closeFlow so a
@@ -1307,8 +1339,9 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         }
         else if (kind == "scribble")
         {
-            // Deface every view the engine hands back, in place; nothing is
-            // asserted here, the asserts that follow must read the bundle.
+            // Deface the fields of every view the engine hands back, in place;
+            // nothing is asserted here, the asserts that follow must read the
+            // bundle. Extension values and boxes are left alone (corpus 22).
             const std::string from = op.strOr("from");
             auto board = session->board();
             if (std::vector<DealtCard>* cards = board.get(mapped(names, from)))
@@ -1316,17 +1349,10 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 for (DealtCard& card : *cards)
                 {
                     scribbleMap(card.fields);
-                    scribbleExtensions(card.extensions);
                     std::vector<OutcomeView> outcomes = session->outcomes(card.id, from);
-                    for (OutcomeView& outcome : outcomes)
-                    {
-                        scribbleMap(outcome.fields);
-                        scribbleExtensions(outcome.extensions);
-                    }
+                    for (OutcomeView& outcome : outcomes) scribbleMap(outcome.fields);
                 }
             }
-            std::vector<BoxView> boxes = session->listBoxes();
-            for (BoxView& box : boxes) scribbleExtensions(box.extensions);
         }
         else if (kind == "assertNodeExtensions")
         {
@@ -1701,11 +1727,11 @@ static std::vector<std::string> runReadOnlyWorldProbe(const JsonValue& c)
     std::vector<std::string> failures;
     std::map<std::string, StoryletValue> vals{{"clock", StoryletValue::Num(0)}, {"mood", StoryletValue::Num(0)}};
     std::vector<std::string> sets;
-    WorldResolver world;
+    HostScope world;
     world.get = [&](const std::string& n) -> std::optional<StoryletValue> {
         auto it = vals.find(n); if (it == vals.end()) return std::nullopt; return it->second; };
     world.set = [&](const std::string& n, const StoryletValue& v) { sets.push_back(n); vals[n] = v; };
-    EngineOptions opts; opts.world = world;
+    EngineOptions opts; opts.hostScopes["world"] = world;
     BundlePtr bundle = ParseBundle(c.at("bundle"));
     Engine engine(bundle, opts);
     Flow& flow = *engine.openFlow("main");
@@ -2301,15 +2327,15 @@ static std::vector<std::pair<std::string, std::function<std::vector<std::string>
     // "not declared" diagnostic and deals on; it must not escape the deal.
     auto throwingWorld = []
     {
-        WorldResolver world;
+        HostScope world;
         world.get = [](const std::string&) -> std::optional<StoryletValue> { throw std::runtime_error("host down"); };
         return world;
     };
-    auto dealsWithDiagnostic = [](const std::string& json, const WorldResolver& world, const std::string& want)
+    auto dealsWithDiagnostic = [](const std::string& json, const HostScope& world, const std::string& want)
     {
         std::vector<std::string> out;
         EngineOptions opts;
-        opts.world = world;
+        opts.hostScopes["world"] = world;
         Engine engine(ParseBundle(JsonParser(json).parse()), opts);
         FlowPtr flow = engine.openFlow("f");
         std::vector<std::string> messages;

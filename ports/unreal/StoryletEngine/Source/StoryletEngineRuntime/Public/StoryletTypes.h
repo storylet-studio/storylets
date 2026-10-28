@@ -33,6 +33,29 @@ enum class EStoryletPropertyType : uint8
 	Quality
 };
 
+/** How an engine plays, set when it is made (UStoryletEngine::CreateWithOptions):
+ *  the seed and the retained log, the choices the JS runtime's EngineOptions,
+ *  Unity's and Godot's offer. The error and replaced-flow callbacks are the
+ *  engine's OnError and OnReplacedFlow events instead, the Blueprint way, and
+ *  the host scopes are Create's own parameter. Patterplay's
+ *  FPatterEngineOptions, for the Storylet Engine's choices. */
+USTRUCT(BlueprintType)
+struct FStoryletEngineOptions
+{
+	GENERATED_BODY()
+
+	/** The default seed for each flow's PRNG (schema 3.3; 0 is the
+	 *  cross-runtime default). OpenFlowSeeded overrides it for one flow. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Storylet Engine")
+	int32 Seed = 0;
+
+	/** Keep each flow's event log, read back through a flow's Log() (schema 5):
+	 *  every trace event, sequence-stamped, capped at 1000 entries. Off by
+	 *  default: a shipped game pays nothing for a debugging aid it never reads. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Storylet Engine")
+	bool bLog = false;
+};
+
 /** One storylets value, flattened for Blueprint: a kind discriminator plus
  *  one payload per kind (only the payload the kind names is meaningful), and
  *  the stringified display form (JS-stable numbers; flags comma-joined) so a
@@ -169,7 +192,10 @@ struct FStoryletDealtCard
 	TArray<FStoryletFieldEntry> Fields;
 
 	/** The card's Storylet extension values, raw; empty when it has none.
-	 *  UStoryletBundle::GetEffectiveExtensionValues fills in the defaults. */
+	 *  UStoryletBundle::GetEffectiveExtensionValues fills in the defaults.
+	 *  Read-only by contract: they're the extension's own data, which the
+	 *  other runtimes hand out uncopied. Here they cross as JSON text, which
+	 *  is necessarily a copy. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletExtensionValues> Extensions;
 };
@@ -201,7 +227,8 @@ struct FStoryletOutcomeView
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletFieldEntry> Fields;
 
-	/** The outcome's Storylet extension values, raw; empty when it has none. */
+	/** The outcome's Storylet extension values, raw and read-only, as a
+	 *  card's are; empty when it has none. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletExtensionValues> Extensions;
 };
@@ -240,7 +267,8 @@ struct FStoryletBoxView
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	double Turn = 0;
 
-	/** The box's Storylet extension values, raw; empty when it has none. */
+	/** The box's Storylet extension values, raw and read-only, as a card's
+	 *  are; empty when it has none. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletExtensionValues> Extensions;
 };
@@ -651,7 +679,8 @@ struct FStoryletPropertySummary
 };
 
 /** The scopes a declaration block can belong to. Tag declarations compose into
- *  @hand for any ask that binds the tag (schema 3.6). */
+ *  @hand for any ask that binds the tag (schema 3.6). Host is a host scope other
+ *  than @world (@player, say), its token the Owner. */
 UENUM(BlueprintType)
 enum class EStoryletScopeKind : uint8
 {
@@ -660,11 +689,12 @@ enum class EStoryletScopeKind : uint8
 	Box,
 	Deck,
 	Hand,
-	Tag
+	Tag,
+	Host
 };
 
 /** One scope's declared properties. Owner is the owning entity's gameId (empty
- *  for World / Story); Box names its box; Group names a tag's group. A zone of
+ *  for World / Story), or a Host scope's token; Box names its box; Group names a tag's group. A zone of
  *  the project map is a Tag scope with a Group and an empty Box: it belongs to
  *  none. */
 USTRUCT(BlueprintType)
@@ -677,6 +707,10 @@ struct FStoryletPropertyScope
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Owner;
+
+	/** A host scope (World or Host) that declares no names, so takes any. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	bool bOpaque = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Box;
@@ -782,23 +816,26 @@ struct FStoryletBundleDescription
  *  reports it. Content can fail at run time in ways the compiler cannot see: a
  *  host value of the wrong type, a resolver that throws, a division by zero. A
  *  deal never stops for one: the condition counts as false, so the card, deck
- *  or hand is not available. The same rule and shape as Patterplay's
- *  FPatterPlayError, on every Storylet Engine runtime. */
+ *  or hand is not available. The engine also reports how it was set up (Kind
+ *  "setup": a host scope the bundle doesn't declare). The same rule and shape
+ *  as Patterplay's FPatterPlayError, on every Storylet Engine runtime. */
 USTRUCT(BlueprintType)
 struct FStoryletPlayError
 {
 	GENERATED_BODY()
 
-	/** The flow it happened in. */
+	/** The flow it happened in; empty for a "setup" report, which belongs to no flow. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Flow;
 
-	/** What failed: always "condition", the one thing a Storylets deal evaluates. */
+	/** What failed: "condition" (the one thing a Storylets deal evaluates), or
+	 *  "setup" (how the engine was set up). */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Kind;
 
 	/** Whose condition: "card <gameId>", "deck <gameId>", "hand <gameId>" or
-	 *  "outcome <card gameId>/<outcome gameId>". */
+	 *  "outcome <card gameId>/<outcome gameId>". For "setup", the host-scope
+	 *  token at fault. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Node;
 

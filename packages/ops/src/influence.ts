@@ -26,13 +26,15 @@
 
 import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
-import { effectiveGameId } from "@storylet-studio/model";
+import { bundleHostScopes, effectiveGameId } from "@storylet-studio/model";
 import type { AstNode, Box, Bundle, Card, Deck, Expression } from "@storylet-studio/model";
 import { writesOf } from "./analysis-common.js";
 
-/** The scopes an influence edge can travel through. `hand` is recognised so it
- *  can be reported as unanalysed rather than silently dropped. */
-export type InfluenceScopeName = "world" | "story" | "box" | "deck" | "hand";
+/** The scopes an influence edge can travel through: the Storylet Engine's own,
+ *  and every host scope the project declares (`world`, `player`, ...), which
+ *  is any other token. `hand` is recognised so it can be reported as
+ *  unanalysed rather than silently dropped. */
+export type InfluenceScopeName = "world" | "story" | "box" | "deck" | "hand" | (string & {});
 
 export type EdgeClass = "enable" | "disable" | "influence" | "reference";
 
@@ -41,7 +43,9 @@ export type EdgeClass = "enable" | "disable" | "influence" | "reference";
 export interface EdgeContribution {
   /** Canonical `@scope.name`. */
   property: string;
-  scope: InfluenceScopeName;
+  /** `played` for a link through `count_played("card")`: playing the card is
+   *  the write, and `name` is the card's gameId. */
+  scope: InfluenceScopeName | "played";
   name: string;
   /** The flag, when the match was flag-level inside a flags property. */
   flag?: string;
@@ -130,8 +134,15 @@ type ReadWant =
 
 /** One property a condition reads, and what it wants of it. */
 interface ReadHit { scope: InfluenceScopeName; name: string; want: ReadWant }
-/** Where `readsOf` and `computedReads` put what they find. */
-interface ReadSink { push: (hit: ReadHit) => void }
+/** Where `readsOf` and `computedReads` put what they find. `played` takes a
+ *  `count_played("card")`: the card named, and what the reader wants of its
+ *  play count (the hands-on review, 2026-10: the graph drew no link for it). */
+interface ReadSink {
+  push: (hit: ReadHit) => void; played?: (card: string, want: ReadWant) => void;
+  /** The host scopes the project declares besides `@world` (`player`, ...): a
+   *  reference to one is a property like any other. */
+  hosts?: ReadonlySet<string>;
+}
 
 type WriteDoes =
   | { kind: "set-bool"; value: boolean }
@@ -155,7 +166,13 @@ interface ReadRecord extends Ref { card: string; want: ReadWant }
 interface WriteRecord extends Ref { card: string; does: WriteDoes; outcome: string }
 
 const SCOPES = new Set<string>(["world", "story", "box", "deck", "hand"]);
-const isScope = (s: string): s is InfluenceScopeName => SCOPES.has(s);
+/** Is `s` a scope the analysis follows: the engine's own, or one of `hosts`
+ *  (the project's host scopes, `bundleHostScopes`)? Another engine's token
+ *  (`@patter`) is not. */
+const isScope = (s: string, hosts?: ReadonlySet<string>): s is InfluenceScopeName => SCOPES.has(s) || hosts?.has(s) === true;
+
+/** The host-scope tokens a bundle declares, for `isScope`. */
+export const hostTokens = (bundle: Bundle): ReadonlySet<string> => new Set(bundleHostScopes(bundle).map((h) => h.token));
 
 const lit = (n: AstNode): string | number | boolean | undefined => {
   const tag = n[0];
@@ -164,6 +181,9 @@ const lit = (n: AstNode): string | number | boolean | undefined => {
   return undefined;
 };
 const isSv = (n: AstNode): boolean => Array.isArray(n) && n[0] === "sv";
+/** The card a `count_played("card")` names, when `n` is one with a literal argument. */
+const playedCard = (n: AstNode): string | undefined =>
+  Array.isArray(n) && n[0] === "call" && n[1] === "count_played" && Array.isArray(n[2]) && n[2][0] === "s" ? String(n[2][1]) : undefined;
 
 // --- reading a condition ------------------------------------------------------
 
@@ -192,7 +212,7 @@ function readsOf(ast: AstNode, polarity: boolean, out: ReadSink, warn: (kind: An
     // pair this fold would merge (`heat` and `Heat`) cannot exist in a project
     // that compiles. See `legalPropertyName` in compile.ts, and the tests in
     // influence.test.ts under "case in property names".
-    if (isScope(scope)) out.push({ scope, name: String(ast[2]).toLowerCase(), want: { kind: "wants-bool", value: polarity } });
+    if (isScope(scope, out.hosts)) out.push({ scope, name: String(ast[2]).toLowerCase(), want: { kind: "wants-bool", value: polarity } });
     return;
   }
 
@@ -207,7 +227,7 @@ function readsOf(ast: AstNode, polarity: boolean, out: ReadSink, warn: (kind: An
     if (fn === "check_flags" && isSv(ast[2] as AstNode)) {
       const sv = ast[2] as AstNode;
       const scope = String(sv[1]);
-      if (isScope(scope)) {
+      if (isScope(scope, out.hosts)) {
         const name = String(sv[2]).toLowerCase();
         for (let i = 3; i < ast.length; i++) {
           const fd = ast[i] as AstNode;
@@ -243,9 +263,14 @@ function readsOf(ast: AstNode, polarity: boolean, out: ReadSink, warn: (kind: An
       const effective = polarity ? op : op === "==" ? "!=" : "==";
       for (const [a, b] of [[lhs, rhs], [rhs, lhs]] as [AstNode, AstNode][]) {
         const value = lit(b);
+        const played = playedCard(a);
+        if (played !== undefined && value !== undefined && out.played) {
+          out.played(played, effective === "==" ? { kind: "wants-eq", value } : { kind: "wants-neq", value });
+          return;
+        }
         if (isSv(a) && value !== undefined) {
           const scope = String(a[1]);
-          if (isScope(scope)) {
+          if (isScope(scope, out.hosts)) {
             out.push({
               scope, name: String(a[2]).toLowerCase(),
               want: effective === "==" ? { kind: "wants-eq", value } : { kind: "wants-neq", value },
@@ -269,14 +294,18 @@ function readsOf(ast: AstNode, polarity: boolean, out: ReadSink, warn: (kind: An
       const want = (wantsHigh: boolean, threshold: number): ReadWant =>
         wantsHigh ? { kind: "wants-gt", threshold, inclusive } : { kind: "wants-lt", threshold, inclusive };
       // `@x > 5` wants x high; `5 > @x` wants x LOW, so the side matters.
+      const playedL = playedCard(lhs);
+      if (playedL !== undefined && typeof lit(rhs) === "number" && out.played) { out.played(playedL, want(gt === polarity, lit(rhs) as number)); return; }
+      const playedR = playedCard(rhs);
+      if (playedR !== undefined && typeof lit(lhs) === "number" && out.played) { out.played(playedR, want(gt !== polarity, lit(lhs) as number)); return; }
       if (isSv(lhs) && typeof lit(rhs) === "number") {
         const scope = String(lhs[1]);
-        if (isScope(scope)) out.push({ scope, name: String(lhs[2]).toLowerCase(), want: want(gt === polarity, lit(rhs) as number) });
+        if (isScope(scope, out.hosts)) out.push({ scope, name: String(lhs[2]).toLowerCase(), want: want(gt === polarity, lit(rhs) as number) });
         return;
       }
       if (isSv(rhs) && typeof lit(lhs) === "number") {
         const scope = String(rhs[1]);
-        if (isScope(scope)) out.push({ scope, name: String(rhs[2]).toLowerCase(), want: want(gt !== polarity, lit(lhs) as number) });
+        if (isScope(scope, out.hosts)) out.push({ scope, name: String(rhs[2]).toLowerCase(), want: want(gt !== polarity, lit(lhs) as number) });
         return;
       }
       computedReads(lhs, out);
@@ -295,7 +324,7 @@ function readsOf(ast: AstNode, polarity: boolean, out: ReadSink, warn: (kind: An
  *  it WANTS of them is the influence question; this is the plain usage one
  *  ("where is @x read?"), and the Property tab and the CLI ask it here so the
  *  two scans cannot drift on what counts as a reference. */
-export function propertyRefs(ast: AstNode): { scope: InfluenceScopeName; name: string }[] {
+export function propertyRefs(ast: AstNode, hosts?: ReadonlySet<string>): { scope: InfluenceScopeName; name: string }[] {
   const seen = new Set<string>();
   const out: { scope: InfluenceScopeName; name: string }[] = [];
   computedReads(ast, { push: (w) => {
@@ -303,7 +332,7 @@ export function propertyRefs(ast: AstNode): { scope: InfluenceScopeName; name: s
     if (seen.has(key)) return;
     seen.add(key);
     out.push({ scope: w.scope, name: w.name });
-  } });
+  }, ...(hosts !== undefined ? { hosts } : {}) });
   return out;
 }
 
@@ -312,7 +341,7 @@ function computedReads(ast: AstNode, out: ReadSink): void {
   if (!Array.isArray(ast)) return;
   if (ast[0] === "sv") {
     const scope = String(ast[1]);
-    if (isScope(scope)) out.push({ scope, name: String(ast[2]).toLowerCase(), want: { kind: "computed" } });
+    if (isScope(scope, out.hosts)) out.push({ scope, name: String(ast[2]).toLowerCase(), want: { kind: "computed" } });
     return;
   }
   for (let i = 1; i < ast.length; i++) computedReads(ast[i] as AstNode, out);
@@ -357,12 +386,12 @@ function writeOf(scope: InfluenceScopeName, name: string, expr: Expression, warn
  *  it. set_flags fans out to one write per delta. What a change target IS comes
  *  from `writesOf` (analysis-common.ts), which the usage scan and the other
  *  analyses read too, so none of them disagree about it. */
-function writesOfCard(card: Card<Expression>, warn: (kind: AnalysisWarningKind, message: string) => void): { scope: InfluenceScopeName; name: string; does: WriteDoes; outcome: string }[] {
+function writesOfCard(card: Card<Expression>, hosts: ReadonlySet<string>, warn: (kind: AnalysisWarningKind, message: string) => void): { scope: InfluenceScopeName; name: string; does: WriteDoes; outcome: string }[] {
   const out: { scope: InfluenceScopeName; name: string; does: WriteDoes; outcome: string }[] = [];
   for (const outcome of card.outcomes) {
     const from = effectiveGameId(outcome);
     for (const w of writesOf(outcome)) {
-      if (!isScope(w.scope)) continue;
+      if (!isScope(w.scope, hosts)) continue;
       const name = w.name.toLowerCase();
       if (w.flags !== undefined) {
         for (const d of w.flags.deltas) {
@@ -391,7 +420,8 @@ function writesOfCard(card: Card<Expression>, warn: (kind: AnalysisWarningKind, 
  *  read) pair. Stating the rule as a key rather than a comparison is what lets
  *  the analysis bucket reads and skip the pairs that could never match. */
 function propKey(ref: Ref): string | undefined {
-  if (ref.scope === "world" || ref.scope === "story") return `${ref.scope}.${ref.name}`;
+  // Every scope but the three containers is a singleton: `@story` and each host scope.
+  if (ref.scope !== "box" && ref.scope !== "deck" && ref.scope !== "hand") return `${ref.scope}.${ref.name}`;
   return ref.container === undefined ? undefined : `${ref.scope}.${ref.name}.${ref.container}`;
 }
 
@@ -473,6 +503,10 @@ export function analyseInfluence(source: SourceProject, opts: InfluenceOptions =
 
   const reads: ReadRecord[] = [];
   const writes: WriteRecord[] = [];
+  /** The project's host scopes (`@world`, `@player`, ...): each a singleton, like `@world`. */
+  const hosts = hostTokens(bundle);
+  /** `count_played("card")` reads: the reader, the card it counts, what it wants. */
+  const playedReads: { card: string; counts: string; want: ReadWant; note?: string }[] = [];
   let handScopeSeen = false;
   // Said once per card and message: one computed write in four outcomes, or an
   // unmodelled call read twice, is one thing to tell the reader, not four.
@@ -491,7 +525,10 @@ export function analyseInfluence(source: SourceProject, opts: InfluenceOptions =
     const collect = (expr: Expression | undefined, note?: string): void => {
       if (!expr) return;
       const found: ReadHit[] = [];
-      readsOf(expr.ast, true, { push: (w) => found.push(w) }, warn);
+      readsOf(expr.ast, true, {
+        push: (w) => found.push(w), hosts,
+        played: (counts, want) => playedReads.push({ card: card.id, counts, want, ...(note ? { note } : {}) }),
+      }, warn);
       for (const f of found) {
         if (f.scope === "hand") { handScopeSeen = true; continue; }
         reads.push({ card: card.id, scope: f.scope, name: f.name, want: f.want, container: container(f.scope), ...(note ? { note } : {}) });
@@ -505,7 +542,7 @@ export function analyseInfluence(source: SourceProject, opts: InfluenceOptions =
     // reaches all of them.
     collect(deck.condition, "through the deck gate");
 
-    for (const w of writesOfCard(card, warn)) {
+    for (const w of writesOfCard(card, hosts, warn)) {
       if (w.scope === "hand") { handScopeSeen = true; continue; }
       writes.push({ card: card.id, scope: w.scope, name: w.name, does: w.does, outcome: w.outcome, container: container(w.scope) });
     }
@@ -571,6 +608,22 @@ export function analyseInfluence(source: SourceProject, opts: InfluenceOptions =
         ...(w.does.kind === "set-flag" ? { flag: w.does.flag } : {}),
         outcome: w.outcome,
         ...(r.note ? { note: r.note } : {}),
+      });
+    }
+  }
+
+  // A play is the write `count_played` reads: every play of the card counts it
+  // up, whichever outcome, so it meets the read as a nudge upwards would.
+  if (playedReads.length > 0) {
+    const byGameId = new Map(located.map(({ card }) => [effectiveGameId(card), card.id]));
+    for (const r of playedReads) {
+      const writer = byGameId.get(r.counts);
+      if (writer === undefined || writer === r.card) continue;
+      const cls = classify({ kind: "delta-up" }, r.want);
+      if (cls === null) continue;
+      add(writer, r.card, cls, {
+        property: `count_played("${r.counts}")`, scope: "played", name: r.counts,
+        ...(r.note !== undefined ? { note: r.note } : {}),
       });
     }
   }

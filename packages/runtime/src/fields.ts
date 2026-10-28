@@ -89,9 +89,9 @@ export function extensionDecls(bundle: Pick<Bundle, "extensions">, extension: st
  * `tagGroup` and `tag` as "box/name", or the bare name for the project map's.
  */
 export function extensionsOf(bundle: Pick<Bundle, "boxes" | "map" | "extensions">, kind: string, address = ""): NodeExtensions {
-  // A copy, as the engine's views are: the game holds the bundle, but what it
-  // is handed here is its own to change.
-  const values = (node: { extensions?: NodeExtensions } | undefined): NodeExtensions => structuredClone(node?.extensions ?? {});
+  // The node's values themselves, read-only by contract, as the engine's views
+  // hand them out (a family ruling, 2026-10-28): the record round them is new.
+  const values = (node: { extensions?: NodeExtensions } | undefined): NodeExtensions => ({ ...(node?.extensions ?? {}) });
   const [first, second] = address.includes("/") ? [address.slice(0, address.indexOf("/")), address.slice(address.indexOf("/") + 1)] : [address, undefined];
   const named = <T extends { id: string; gameId?: string }>(items: readonly T[], name: string): T | undefined =>
     items.find((x) => (x.gameId ?? x.id) === name);
@@ -99,7 +99,7 @@ export function extensionsOf(bundle: Pick<Bundle, "boxes" | "map" | "extensions"
   switch (kind) {
     case "project": {
       const out: NodeExtensions = {};
-      for (const [id, ext] of Object.entries(bundle.extensions ?? {})) if (ext.project !== undefined) out[id] = structuredClone(ext.project);
+      for (const [id, ext] of Object.entries(bundle.extensions ?? {})) if (ext.project !== undefined) out[id] = ext.project;
       return out;
     }
     case "box": return values(named(bundle.boxes, address));

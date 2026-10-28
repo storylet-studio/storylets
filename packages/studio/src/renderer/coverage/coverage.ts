@@ -44,6 +44,14 @@ let name = "";
 let driverCount = 0;
 /** The project's @world declarations; undefined until main has said. */
 let worldCount: number | undefined;
+/** The project's host scopes, @world first, when it has more than @world. */
+let hostScopes: string[] | undefined;
+/** "@world", or "@world and @player", or "@world, @player, and @party" (the house's Oxford comma). */
+const hostScopesText = (): string => {
+  const names = (hostScopes ?? ["world"]).map((t) => `@${t}`);
+  if (names.length <= 2) return names.join(" and ");
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+};
 let hasProject = false;
 /** The card table's order, remembered in the app's state (main keeps it). */
 let order: CoverageOrder = "least";
@@ -169,7 +177,7 @@ const progress = mountJobProgress(el("div"), { units: "runs", onCancel: () => { 
 const noteText = el("span", { className: "hint" });
 const note = el("div", { className: "cnote" },
   noteText,
-  el("button", { className: "btn", text: "Coverage drivers…", onClick: () => void studio.openProjectSettings("world") }));
+  el("button", { className: "btn", text: "Game values for coverage…", onClick: () => void studio.openProjectSettings("world") }));
 
 /** While a sweep runs, the results underneath belong to the PREVIOUS run. */
 const body = el("main", { className: "cbody" });
@@ -197,8 +205,8 @@ function render(): void {
   noteText.textContent = !hasProject
     ? "Open a project to run coverage."
     : driverCount > 0
-      ? `${plural(driverCount, "coverage driver")} feeding @world.`
-      : "No coverage drivers. Content gated on @world will read as never dealt.";
+      ? `${plural(driverCount, "game value")} for coverage, feeding ${hostScopesText()}.`
+      : `No game values for coverage. Content gated on ${hostScopesText()} will read as never dealt.`;
 
   const keep = scrollTo ?? body.scrollTop;
   scrollTo = undefined;
@@ -297,7 +305,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
       ? el("div", { className: "fixrow" },
           el("span", { className: "hint", text: "Some content is gated on host state nothing sets." }),
           (() => {
-            const b = el("button", { className: "btn cfix", text: busy ? "Working…" : "Add coverage drivers", onClick: () => void addDrivers() }) as HTMLButtonElement;
+            const b = el("button", { className: "btn cfix", text: busy ? "Working…" : "Add game values for coverage", onClick: () => void addDrivers() }) as HTMLButtonElement;
             b.type = "button";
             b.disabled = busy;
             return b;
@@ -361,6 +369,7 @@ function takeProject(info: CoverageInfo): void {
   name = info.name;
   driverCount = info.driverCount;
   worldCount = info.worldCount;
+  hostScopes = info.hostScopes;
 }
 
 /** Has the project moved on since the report ran? */

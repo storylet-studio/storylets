@@ -14,6 +14,8 @@ const problem = (message: string, over: Partial<Problem> = {}): Problem =>
 const SAMPLES: Record<string, string> = {
   "unparseable": "unparseable JSON5: JSON5: invalid character '}' at 3:1",
   "not-an-object": "shard must be a JSON5 object",
+  "unresolved-merge": 'unresolved merge at cards[c_bell].title: the shard holds our side of a clash; resolve it, then remove the entry from "unresolved"',
+  "merge-sidecar": "unresolved merge sidecar: resolve the conflicts, then delete this file",
   "wrong-schema": 'schema tag "storylet-deck@1" is not "storylet-box@1"',
   "project-count": "a project has exactly one *.storyletproj at its root; found 2",
   "box-without-shard": "box folder has no box.storyletbox",
@@ -200,10 +202,17 @@ describe("problemText", () => {
 
   it("says what the expression validator said, on the field the editor names", () => {
     expect(problemText(problem("deck gate: unknown function 'advanc'"), { title: "Docks" }))
-      .toBe("“Docks”’s gate doesn’t hold up: unknown function 'advanc'. Open it in the expression editor.");
+      .toBe("“Docks”’s gate doesn’t hold up: unknown function 'advanc'. Go to issue opens it where it’s written.");
     expect(problemText(problem("hand condition: unresolved world property reference '@world.zone'"), { title: "The Inn" }))
       .toBe("“The Inn”’s rule uses @world.zone, which isn’t set up yet. Declare it in the project settings, or fix the name.");
   });
+});
+
+it("says where a merge clashed, and how to clear it", () => {
+  const message = 'unresolved merge at cards[c_ambush].condition: the shard holds our side of a clash; resolve it, then remove the entry from "unresolved"';
+  expect(problemCode(message)).toBe("unresolved-merge");
+  expect(problemText({ ...problem(message), path: "harbour/decks/docks.storyletdeck" }, { title: "Ambush" }))
+    .toBe("A merge clashed over “Ambush”’s condition, and kept your side. Check it, then remove its entry from “unresolved” in docks.storyletdeck.");
 });
 
 describe("boxForPath", () => {

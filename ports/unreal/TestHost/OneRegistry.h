@@ -510,9 +510,9 @@ namespace oneregistry
             withWorld->defineOwned("world", std::vector<ScopeDeclaration>{}, game);
             EngineOptions bound;
             bound.registry = withWorld;
-            WorldResolver resolver;
+            HostScope resolver;
             resolver.get = [](const std::string&) -> std::optional<StoryletValue> { return StoryletValue::Num(0); };
-            bound.world = resolver;
+            bound.hostScopes["world"] = resolver;
             c.throws("an engine binding @world the game registered", [&]() { Engine clash(MakeBundle(), bound); },
                 "scope '@world' is already registered by Game");
             c.yes("story is not left registered", !withWorld->has("story"));
@@ -646,10 +646,10 @@ namespace oneregistry
             const std::string before = Show(g.registry->save());
             // The replacement is asked to bind @world, which the game already
             // registered: it clashes mid-build.
-            WorldResolver resolver;
+            HostScope resolver;
             resolver.get = [](const std::string&) -> std::optional<StoryletValue> { return StoryletValue::Num(0); };
             std::string type, message;
-            try { g.engine->hotSwap(MakeBundle(EditedJson()), [&resolver](EngineOptions& o) { o.world = resolver; }); }
+            try { g.engine->hotSwap(MakeBundle(EditedJson()), [&resolver](EngineOptions& o) { o.hostScopes["world"] = resolver; }); }
             catch (const StoryletError& e) { type = "StoryletError"; message = e.what(); }
             catch (const std::exception& e) { type = "another type"; message = e.what(); }
             c.eq("the refusal", type + ": " + message, "StoryletError: scope '@world' is already registered by Game (wanted by Storylet Engine)");
@@ -685,7 +685,7 @@ namespace oneregistry
         {
             // Built with a seed and a @world the game keeps; the swap turns the log on and nothing else.
             auto alarm = std::make_shared<double>(3);
-            WorldResolver resolver;
+            HostScope resolver;
             resolver.get = [alarm](const std::string& name) -> std::optional<StoryletValue>
             {
                 if (name == "alarm") return StoryletValue::Num(*alarm);
@@ -697,7 +697,7 @@ namespace oneregistry
             };
             EngineOptions opts;
             opts.seed = 7;
-            opts.world = resolver;
+            opts.hostScopes["world"] = resolver;
             Engine engine(MakeBundle(), opts);
             Engine::HotSwapResult swap = engine.hotSwap(MakeBundle(EditedJson()), [](EngineOptions& o) { o.log = true; });
             Engine& next = *swap.engine;

@@ -389,6 +389,9 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .ctable tbody tr:hover { background: var(--card); }
 /* The selection is instant: the arrow keys move it. */
 .ctable tbody tr.sel { background: var(--accent-soft); transition: none; }
+/* A row is one stop of the table's roving tabindex (row-keys.ts): the family's
+   ring, drawn inside the row so the table's edge does not clip it. */
+.ctable tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ctable .ct-title { font-family: var(--font-read); }
 .ctable .ct-mono { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--muted); }
 .ctable .ct-when { font-size: var(--text-sm); }
@@ -947,6 +950,9 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
    button rule paints a background, and a full-width block turned one quiet line
    of path into a bar across the page. */
 .pdir:hover { color: var(--accent); background: none; }
+/* a card that plays a Patter scene says so, above its tabs, on every tab */
+.card-scene { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--text-sm); color: var(--muted); }
+.card-scene .btn { margin-left: auto; }
 /* a document's tab bar, under its identity heading, the tabs named for their
    contents (tab-grammar 3) */
 .doc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line-soft); }
@@ -1010,6 +1016,17 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .set-ref input.set-name { min-width: 64px; }
 .set-rowline input.set-values { flex: 1 1 192px; min-width: 96px; }
 .set-actions { display: flex; gap: 8px; }
+/* A driver's scope once there are host scopes besides @world: the same chrome,
+   as a choice. */
+select.set-scope { border: 1px solid var(--line); border-radius: var(--radius-sm); background: none; padding: 2px 4px; margin-right: 2px; }
+/* Project Settings > Game scopes: one block per scope, @world first. The
+   scope's name sits in its heading, typed after a fixed "@", with Remove at
+   the heading's end. */
+.host-scope + .host-scope { margin-top: 14px; padding-top: 4px; border-top: 1px solid var(--line); }
+.host-scope-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.host-scope-cap { display: inline-flex; align-items: baseline; gap: 1px; }
+.host-scope-cap input.host-scope-token { font: inherit; width: 16ch; padding: 1px 4px; }
+.host-scopes + .set-actions { margin-top: 10px; }
 
 /* --- toast: the shell's now (@wildwinter/app-shell/toast.css) ---------------- */
 

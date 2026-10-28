@@ -1,4 +1,5 @@
 #include "StoryletSave.h"
+#include "StoryletLog.h"
 
 #include "StoryletEngine.h"
 #include "StoryletWorld.h"
@@ -14,10 +15,26 @@ FString UStoryletSave::SaveStateToJson(UStoryletEngine* Engine)
 	storylets::Engine* Core = Engine ? Engine->GetCoreEngine() : nullptr;
 	if (!Core)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: SaveStateToJson on a null/invalid engine"));
+		// No engine to keep the message on: a null engine is only logged.
+		if (Engine) Engine->NoteRefusal(TEXT("SaveStateToJson"), TEXT("the engine is invalid (Create failed)"));
+		else UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: SaveStateToJson on a null engine"));
 		return FString();
 	}
-	return StoryletSaveStateToJson(*Core);
+	Engine->ClearLastError();
+	// A bound @world's resolver may throw anything; Blueprint must never see it.
+	try
+	{
+		return StoryletSaveStateToJson(*Core);
+	}
+	catch (const std::exception& Ex)
+	{
+		Engine->NoteRefusal(TEXT("SaveStateToJson"), UTF8_TO_TCHAR(Ex.what()));
+	}
+	catch (...)
+	{
+		Engine->NoteRefusal(TEXT("SaveStateToJson"), TEXT("an unknown exception"));
+	}
+	return FString();
 }
 
 bool UStoryletSave::LoadStateFromJson(UStoryletEngine* Engine, const FString& Json)
@@ -32,14 +49,16 @@ bool UStoryletSave::LoadStateFromJsonWithReport(UStoryletEngine* Engine, const F
 	storylets::Engine* Core = Engine ? Engine->GetCoreEngine() : nullptr;
 	if (!Core)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: LoadStateFromJson on a null/invalid engine"));
+		if (Engine) Engine->NoteRefusal(TEXT("LoadStateFromJson"), TEXT("the engine is invalid (Create failed)"));
+		else UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: LoadStateFromJson on a null engine"));
 		return false;
 	}
+	Engine->ClearLastError();
 	FString Error;
 	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
 	if (!StoryletLoadStateWorld(*Core, Json, World, Error, &OutReportJson))
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: LoadStateFromJson - %s"), *Error);
+		Engine->NoteRefusal(TEXT("LoadStateFromJson"), Error);
 		return false;
 	}
 	// The file's @world values are the HOST's to restore. A bound container
@@ -49,7 +68,7 @@ bool UStoryletSave::LoadStateFromJsonWithReport(UStoryletEngine* Engine, const F
 	// envelope never carried them, so this is where they come back). A name
 	// nothing answers for, such as a @world the game's registry does not hold,
 	// is dropped.
-	if (UStoryletWorld* Bound = Engine->GetBoundWorld())
+	if (UStoryletWorld* Bound = Engine->GetHostScope(TEXT("world")))
 	{
 		for (const auto& Pair : World) Bound->HostSet(Pair.first, Pair.second);
 	}
@@ -72,16 +91,18 @@ FString UStoryletSave::PreviewLoadFromJson(UStoryletEngine* Engine, const FStrin
 	storylets::Engine* Core = Engine ? Engine->GetCoreEngine() : nullptr;
 	if (!Core)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson on a null/invalid engine"));
+		if (Engine) Engine->NoteRefusal(TEXT("PreviewLoadFromJson"), TEXT("the engine is invalid (Create failed)"));
+		else UE_LOG(LogStoryletEngine, Error, TEXT("Storylet Engine: PreviewLoadFromJson on a null engine"));
 		return FString();
 	}
+	Engine->ClearLastError();
 	// Parsed the same way the load parses it, and refused on the same grounds:
 	// a preview that accepts a blob the load would refuse is worse than none.
 	storylets::JsonValue Tree;
 	FString Error;
 	if (!StoryletJsonToTree(Json, Tree, Error))
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson - %s"), *Error);
+		Engine->NoteRefusal(TEXT("PreviewLoadFromJson"), Error);
 		return FString();
 	}
 	const storylets::JsonValue* EngineTree = Tree.find("engine");
@@ -90,7 +111,7 @@ FString UStoryletSave::PreviewLoadFromJson(UStoryletEngine* Engine, const FStrin
 		|| !EngineTree || !EngineTree->isObject()
 		|| !storylets::IsReadableSaveSchema(EnvelopeSchema))
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson - not a storylets save"));
+		Engine->NoteRefusal(TEXT("PreviewLoadFromJson"), TEXT("not a storylets save"));
 		return FString();
 	}
 	try
@@ -101,12 +122,12 @@ FString UStoryletSave::PreviewLoadFromJson(UStoryletEngine* Engine, const FStrin
 	}
 	catch (const std::exception& Ex)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson - %s"), UTF8_TO_TCHAR(Ex.what()));
+		Engine->NoteRefusal(TEXT("PreviewLoadFromJson"), UTF8_TO_TCHAR(Ex.what()));
 		return FString();
 	}
 	catch (...)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson - an unknown exception"));
+		Engine->NoteRefusal(TEXT("PreviewLoadFromJson"), TEXT("an unknown exception"));
 		return FString();
 	}
 }

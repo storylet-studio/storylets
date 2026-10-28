@@ -412,11 +412,11 @@ func _clash_refused() -> void:
 
 	var with_world := StoryletScopeRegistry.new()
 	with_world.define_owned("world", [], {"owner": "Game"})
-	var bound := StoryletEngine.new(_bundle, {"registry": with_world, "world": {"get": func(_n): return 0}})
+	var bound := StoryletEngine.new(_bundle, {"registry": with_world, "host_scopes": {"world": {"get": func(_n): return 0}}})
 	_check("the @world clash did not name the holder: " + bound._init_error,
 		bound._init_error.contains("scope '@world' is already registered by Game"))
 	_check("a refused engine left @story registered", not with_world.has("story"))
-	_check("a refused engine created", StoryletEngine.create(_bundle, {"registry": with_world, "world": {"get": func(_n): return 0}}) == null)
+	_check("a refused engine created", StoryletEngine.create(_bundle, {"registry": with_world, "host_scopes": {"world": {"get": func(_n): return 0}}}) == null)
 	_finished = true
 
 
@@ -640,7 +640,7 @@ func _hot_swap_rolls_back() -> void:
 	var before: Dictionary = g["registry"].save()
 	# The replacement is asked to bind @world, which the game already registered:
 	# it clashes mid-build.
-	var r: Dictionary = (g["engine"] as StoryletEngine).hot_swap(_edited(), {"world": {"get": func(_n): return 0}})
+	var r: Dictionary = (g["engine"] as StoryletEngine).hot_swap(_edited(), {"host_scopes": {"world": {"get": func(_n): return 0}}})
 	_check("the clash was not the refusal: " + str(r),
 		not r.get("ok", true) and str(r.get("error", "")).contains("scope '@world' is already registered by Game"))
 	# Every key and value as before (the order of keys may differ: registering

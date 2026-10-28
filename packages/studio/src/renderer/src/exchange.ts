@@ -64,7 +64,7 @@ export function createExchange(ctx: ExchangeContext) {
     if (!ok(result)) { void ctx.refreshProject(); return; }
     // "Published", the menu's own verb, after the thing published (house style rule 31, and
     // Patterpad's "Bundle published"), with the file on its own line.
-    const pinned = result.pinned > 0 ? `\nPinned ${plural(result.pinned, "Game ID")} that followed a title` : "";
+    const pinned = result.pinned > 0 ? `\nKept ${plural(result.pinned, "Game ID")} after renames, so your game still finds those cards` : "";
     flash(`Bundle published\n${baseName(result.path)}${pinned}`, "ok");
     void ctx.refreshProject();
   }

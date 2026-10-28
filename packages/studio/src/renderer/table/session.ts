@@ -5,7 +5,7 @@
 // cells, the session strip, the head) call these; none of them draws anything.
 // ---------------------------------------------------------------------------
 
-import { confirmDialog, toast } from "@wildwinter/app-shell";
+import { confirmDialog, plural, toast } from "@wildwinter/app-shell";
 import { Table, boardRefusal, diffBoards, loadReportNote } from "./model.js";
 import type { BoardSaveFile } from "./model.js";
 import type { LoadReport } from "@storylet-studio/model";
@@ -217,6 +217,38 @@ async function discardSession(s: BoardState, title: string, confirmLabel: string
   } finally {
     s.asking = false;
   }
+}
+
+/**
+ * Put the open card back, unplayed. A card's Patter scene writes as it runs,
+ * before Continue plays the card, so a card put back mid-scene leaves its
+ * changes behind with the card unplayed, which no game does. Ruled
+ * 2026-10-28: ask first when the scene has changed anything, and keep the
+ * changes (the Journal has them as the scene's) rather than undo them, since
+ * a restore would throw the Journal away with them.
+ */
+export async function putBack(b: Board): Promise<void> {
+  const s = b.state;
+  const open = s.open;
+  if (!open) return;
+  const wrote = s.performing?.card === open.card ? s.performingWrote : 0;
+  if (wrote > 0) {
+    s.asking = true;
+    try {
+      const yes = await confirmDialog({
+        title: "Put the card back?",
+        body: `Its Patter scene has already changed ${plural(wrote, "value")}. Those changes stay, and the card isn't played.`,
+        confirmLabel: "Put it back",
+      });
+      if (!yes) return;
+    } finally {
+      s.asking = false;
+    }
+  }
+  if (s.open !== open) return;
+  s.open = undefined;
+  s.pending = undefined;
+  b.render();
 }
 
 export function restart(b: Board): void {

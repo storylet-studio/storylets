@@ -87,7 +87,7 @@ public:
 	TArray<FString> Log;
 
 	/** Both bundles as JSON text, each through its plugin's wrapper: UStoryletBundle then
-	 *  UStoryletEngine::Create(Bundle, Seed, false, World.Store); UPatterBundle then
+	 *  UStoryletEngine::CreateWithOptions(Bundle, { Seed }, { { "world", World.Store } }); UPatterBundle then
 	 *  UPatterEngine::Create(Bundle, World.Mirror). Two Create calls, one world: the whole story. */
 	bool Setup(const FString& StoryletJson, const FString& PatterJson, FString& OutError);
 

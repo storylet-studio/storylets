@@ -7,6 +7,12 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Both engines bind the shared world through `hostScopes`** (`{ world: world.resolver }`), the one option each
+  runtime now takes for a game's own scopes, in place of the retired `world` option. The bundles are re-exported
+  as `storylets/bundle@2`.
+
 ### Fixed
 
 - **A save holds the hand on screen.** Every host dealt the place's hand each time it drew the screen, after the

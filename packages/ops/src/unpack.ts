@@ -40,7 +40,7 @@ import JSZip from "jszip";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
-import { SHARD_EXTENSIONS, SOURCE_EXTENSIONS } from "@storylet-studio/model";
+import { SHARD_EXTENSIONS, SOURCE_EXTENSIONS, bundleHostScopes, hostScopeDecls } from "@storylet-studio/model";
 import { planShardMerge } from "./merge.js";
 import { projectManifests } from "./extensions.js";
 import type { MergeResult } from "./merge.js";
@@ -50,7 +50,7 @@ import type { PlannedBinaryWrite, PlannedWrite } from "./write.js";
 import { escapesTarget, isUnsafeEntry } from "@wildwinter/toolkit/archive";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, SCOPES_FILE_SUFFIX } from "@wildwinter/scoperegistry/scopes";
 import type { ProjectShard, PropertyDecl } from "@storylet-studio/model";
-import { planGameWorld, readGameScopes } from "./game-scopes.js";
+import { planGameScopes, readGameScopes } from "./game-scopes.js";
 
 /** A pack entry whose path escapes the target directory, or that names a
  *  dot-file or dot-folder (always rejected). */
@@ -394,14 +394,16 @@ export async function runUnpackMerge(
   };
 }
 
-/** A project shard's World declarations, canonical, or undefined when they
- *  cannot be read (a "cannot say", which writes nothing). */
-function worldText(shards: Map<string, string>, rel: string): string | undefined {
+/** A project shard's host scopes' declarations (World settings), canonical by token, or
+ *  undefined when they cannot be read (a "cannot say", which writes nothing). A shard not
+ *  yet formatted reads its `world` block as the scope `world`. */
+function worldText(shards: Map<string, string>, rel: string): Map<string, string> | undefined {
   const text = shards.get(rel);
   if (text === undefined) return undefined;
   try {
-    const properties = (parseSource(text) as Partial<ProjectShard>).world?.properties;
-    return Array.isArray(properties) ? canonicalStringify(properties) : undefined;
+    const shard = parseSource(text) as Partial<ProjectShard>;
+    if (shard === null || typeof shard !== "object") return undefined;
+    return new Map(bundleHostScopes(shard).map((s) => [s.token, canonicalStringify(s.declarations ?? [])]));
   } catch { return undefined; }
 }
 
@@ -424,16 +426,18 @@ function planReturnedWorld(
 ): PlannedWrite | { path: string; error: string } | undefined {
   const returned = worldText(theirs, merged.rel);
   const sent = worldText(base, merged.rel);
-  if (returned === undefined || sent === undefined || returned === sent) return undefined;
+  if (returned === undefined || sent === undefined) return undefined;
+  const edited = [...returned].filter(([token, text]) => sent.get(token) !== text).map(([token]) => token);
+  if (edited.length === 0) return undefined;
   const shard = merged.shard as Partial<ProjectShard>;
-  const world = shard.world?.properties;
-  if (!Array.isArray(world)) return undefined;
+  if (shard === null || typeof shard !== "object") return undefined;
+  const byToken = Object.fromEntries(edited.map((token) => [token, hostScopeDecls(shard, token) as PropertyDecl[]]));
   // The folder as the loader finds it for the project being merged into, its
   // own `gameScopes` override included: ours as it stands on disk, since where
   // this game keeps its folder is not the recipient's to say.
   const found = readGameScopes(projectDir, merged.rel, localOverride(projectDir, merged.rel)).gameScopes;
   if (found === undefined) return undefined;
-  const planned = planGameWorld(found.dir, world as PropertyDecl[]);
+  const planned = planGameScopes(found.dir, byToken);
   if ("error" in planned) return { path: join(found.dir, GAME_SCOPES_FILE), error: planned.error };
   return planned.write;
 }

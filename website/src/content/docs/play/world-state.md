@@ -1,37 +1,56 @@
 ---
 title: Your game's state
-description: Feed your game's own state into the story by declaring @world, writing it before you deal, and using the property paths every runtime shares.
+description: Feed your game's own state into the story by declaring host scopes such as @world, writing them before you deal, and using the property paths every runtime shares.
 sidebar:
   label: Your game's state
 ---
 
 The story asks questions about your game. Is it night, does the player have the key, how
-much gold? `@world` is where those answers live. It's the set of properties your game
-owns and the story's conditions read, and it's usually the first thing you wire up after
-loading a bundle.
+much gold? The answers live in **host scopes**: sets of properties your game owns and the
+story's conditions read. `@world` is the common one, and it's usually the first thing you wire
+up after loading a bundle. A game can declare others beside it, such as `@player` for the
+player's own state, and everything on this page holds for each of them.
 
 Everything on this page is the same in all four runtimes. Only the spelling changes.
 
 ## Declaring it
 
-`@world` properties are declared on the **project**, in Project Settings, with a name, a type,
-and a default. Declaring is the designer's half. It tells the editor which names exist, so a
+Host scopes are declared on the **project**, in Project Settings: each one a token (`world`,
+`player`) and its properties, each with a name, a type, and a default. Declaring is the
+designer's half. It tells the editor which names exist, so a
 condition can be checked as it's written and a typo is caught when the bundle is published,
 not in your game.
 
 Your game doesn't declare anything. It fills in what's already declared.
 
-A game with more than one editing tool (Storyletter and Patterpad, say) keeps `@world` in one
-place instead: `game.scopes.json` in its
+A game with more than one editing tool (Storyletter and Patterpad, say) keeps its scopes in
+one place instead: `game.scopes.json` in its
 [shared scopes folder](/play/with-patter/#sharing-scopes-between-the-editors). Storyletter's
-World settings then edit that file, and each project keeps a synced copy so it still compiles
+Host scopes settings then edit that file, and each project keeps a synced copy so it still compiles
 on its own.
 
 ```
 @world.is_night   boolean  default false
 @world.gold       number   default 0
 @world.chapter    string   default "one"   read-only
+@player.hp        number   default 10
 ```
+
+In the project shard they sit under `scopeRegistry`, in the same shape Patter uses:
+
+```json5
+scopeRegistry: {
+  version: 1,
+  scopes: [
+    { token: "world", declarations: [{ name: "is_night", type: "boolean", default: false }] },
+    { token: "player", declarations: [{ name: "hp", type: "number", default: 10 }] },
+    { token: "fx" },
+  ],
+}
+```
+
+A scope with no `declarations` is **opaque**: it takes any name and any value, and nothing
+about it is checked. Use one for state you'd rather not list, and declare the rest.
 
 ### Read-only
 
@@ -39,13 +58,14 @@ Four things, and they are the same four in Patter, in the same order, so a game 
 engines sees one rule:
 
 1. **Read-only is the story's promise, declared on the property** (`writable: false` in the
-   shard, the Read-only switch in Storyletter). A condition can still read
+   shard, the Read-only switch in Storyletter), or on the whole scope (`writable: false` beside
+   its token, which a property can still override with `writable: true`). A condition can still read
    `@world.chapter`; an outcome that sets it is a **compile error**, so a card cannot move
    the game's clock by mistake.
 2. **The runtime keeps the promise too.** If a bundle somehow carries such a write, `play()`
    refuses it with `'@world.chapter' is read-only` and nothing changes. Your resolver's `set`
    is never called for a read-only property.
-3. **A resolver with no `set` makes the whole of `@world` read-only to the story**, whatever
+3. **A resolver with no `set` makes the whole of that scope read-only to the story**, whatever
    the declarations say. That is the game's policy rather than the story's promise, and both
    apply.
 4. **Your game is never bound by it, resolver or none.** The promise is the story's, not the
@@ -58,17 +78,35 @@ There's no write-only, because a declared property can always be read by the sto
 game holds a value the story shouldn't see, don't declare it.
 
 A name that isn't declared can't be referenced. The compiler refuses `@world.isNight` if
-nothing declares `isNight`. Property names are lower case (see [the format](/format/shards/)).
+nothing declares `isNight`. Property names are lower case (see [the format](/format/shards/)),
+and so are tokens.
 
 ## Binding it
 
-`@world` lives on the **engine**, and every flow sees the same values. It's the game's own
-state, and the game is one thing however many playthroughs run over it. You can hand the
-engine a resolver when you build it (`new Engine(bundle, { world: { get, set } })`), so
-conditions read your live game state directly. Or hand it nothing, and the engine backs
-`@world` itself from the declared defaults, as a property it saves, which is fine for most games.
-A game running more than one engine registers `@world` once in its registry instead, and hands
-the registry to each engine ([Running it with Patter](/play/with-patter/#one-registry)).
+Host scopes live on the **engine**, and every flow sees the same values. They're the game's
+own state, and the game is one thing however many playthroughs run over it. You bind them in
+one map of token to resolver when you build the engine, so conditions read your live game
+state directly:
+
+```js
+const engine = new Engine(bundle, {
+  hostScopes: {
+    world: { get: (name) => game.world[name], set: (name, value) => { game.world[name] = value; } },
+    player: { get: (name) => game.player[name] },
+  },
+});
+```
+
+Bind any of them, or none. A declared scope you leave out, the engine backs itself from the
+declared defaults, as a property it saves, which is fine for most games. A game running more
+than one engine registers its scopes once in its registry instead, and hands the registry to
+each engine ([Running it with Patter](/play/with-patter/#one-registry)).
+
+A token is case-sensitive. Binding one the bundle doesn't declare is reported through
+`onError` as a set-up problem, `hostScopes binds "Player", which this bundle doesn't declare:
+it declares "player", and a scope's token is case-sensitive`, and the declared scope is
+backed by the engine as if you'd bound nothing. The `world` option earlier runtimes took has
+gone: passing it is reported the same way, and binds nothing.
 
 ## Writing it from your game
 
@@ -77,6 +115,7 @@ Before you deal, tell the flow what's true:
 ```js
 flow.setProperty("world.is_night", true);
 flow.setProperty("world.gold", 120);
+flow.setProperty("player.hp", 7);
 
 const dealt = flow.deal("tavern-encounters");
 ```
@@ -87,6 +126,7 @@ expression language a designer writes in; the API takes a plain path. The paths 
 | Path | Reaches |
 |---|---|
 | `world.<name>` | your game's state |
+| `<token>.<name>` | any other host scope, such as `player.hp` |
 | `story.<name>` | the story's own global state |
 | `box.<box>.<name>` | a box's properties |
 | `deck.<deck>.<name>` | a deck's properties |
@@ -151,7 +191,7 @@ or **Each guest has their own.** The defaults follow the scopes:
 
 | Scope | Default |
 |---|---|
-| `@world` | always shared (the game owns it, not the player) |
+| `@world` and every host scope | always shared (the game owns it, not the player) |
 | `@story` | shared |
 | box, deck, hand, tag, and zone properties | a copy per flow |
 
@@ -176,8 +216,8 @@ on the same declarations, and the two are independent:
 | **shared** | world truth for this run: the act, the well opened | the installation's memory: trolls defeated since it opened |
 | **per flow** | this visit: my danger in the docks | the player's pocket: visits, allegiance, what they earned |
 
-`durable` is a compile error on `@world`, for the reason `shared` is. `@world` is the game's
-own state, and how long the game keeps it is the game's business.
+`durable` is a compile error on `@world`, and on any host scope, for the reason `shared` is.
+A host scope is the game's own state, and how long the game keeps it is the game's business.
 
 **A card can be durable too**, on the deck or on the card, and it means one thing. Its
 `redraw: never` spend survives the run. Only `never` can (a finite cooldown is an absolute
@@ -253,11 +293,11 @@ did. `loadGame` returns a report of everything it dropped, defaulted, or reset, 
 `openFlow(id, { restore })` do the same for one flow, for a playthrough that steps away and
 comes back.
 
-**A `@world` your game binds is deliberately not in the envelope.** It's your game's state (the
-engine only borrows it), so your game saves it, next to the envelope. A self-backed `@world` is
+**A host scope your game binds is deliberately not in the envelope.** It's your game's state
+(the engine only borrows it), so your game saves it, next to the envelope. A self-backed one is
 different: nobody else holds those values, so the engine's own registry stores them and they ride
 in the save. A game running Patter and the Storylet Engine side by side keeps every property,
-`@world` included, in one registry and saves it once, so nothing is written twice. The
+its host scopes included, in one registry and saves it once, so nothing is written twice. The
 `.storyletsave` file format carries a bound world's values beside the envelope, and `play-helpers`
 ships a ready-made container for games with no world state of their own (see
 [JavaScript, Save and load](/play/javascript/#save-and-load)).

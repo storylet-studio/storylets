@@ -61,16 +61,47 @@ for outcome in flow.outcomes(card_id, hand_id):           # current truth
 With the import plugin enabled you can also `load("res://story.storyletsc")`
 and read a `StoryletBundleResource`'s `json_text` / `get_bundle()`.
 
-Errors: GDScript has no exceptions, so `play()`, `load()` and
-`set_property()` return an error String (`""` on success); bad references and
-bad option Dictionaries `push_error` (unknown option keys are an error, never
-silently ignored). Eval errors inside deals and peeks behave exactly like the
+Errors: GDScript has no exceptions, so a refusal is `push_error`'d and handed
+to the game too. A setter, a call with nothing else to return (`play`,
+`discard`, `advance_turns`, `set_property`), returns the refusal: the
+message, `""` on success. A call that already returns something (`deal`,
+`deal_many`, `peek`, `outcomes`, `board`, `open_flow`, `load_game`,
+`preview_load`, ...) returns its empty shape and keeps the message for
+`last_error()`, on the engine for engine calls and on the flow for flow calls;
+`StoryletSave`'s load calls report on the engine they load into. Every such
+call sets `last_error()` when it refuses and clears it to `""` when it
+succeeds:
+
+```gdscript
+var hand := flow.deal("market")
+if flow.last_error() != "":
+    print("not dealt: ", flow.last_error())
+```
+
+An option `create` doesn't take is reported to your `"on_error"` (`kind` `"setup"`) and ignored; an unknown option
+key anywhere else is an error. Neither is silently ignored. Eval errors inside deals and peeks behave exactly like the
 reference runtime: the card or deck is unavailable and the trace carries a
 diagnostic; never a silent pass, never a crash.
 
 ## Beyond the basics
 
-- **Flows**: the engine owns the bundle, the shared state and `@world`; each
+- **Your game's scopes**: a project can declare its own scopes beside `@world` (`@player`, say), each with
+  declarations or none (an opaque scope takes any name). Bind any of them to your game's own state with
+  `"host_scopes"`, a resolver per token, as Patterplay takes it:
+
+  ```gdscript
+  var world := {"time_of_day": "day"}
+  var engine := StoryletEngine.create(bundle, {"host_scopes": {"world": {
+      "get": func(n: String): return world.get(n),
+      "set": func(n: String, v) -> void: world[n] = v,
+  }}})
+  ```
+
+  A scope you bind is your game's state and never saved; leave out `"set"` and the story can't write it. A scope you
+  don't bind is backed by the engine from its declared defaults, saved with the run and reset by `reset()`. Tokens
+  are case-sensitive: binding one the bundle doesn't declare is reported to `"on_error"` as `"setup"`, naming the
+  declared spelling when only the case differs.
+- **Flows**: the engine owns the bundle, the shared state and the host scopes; each
   flow is one playthrough across it. `open_flow` / `get_flow` / `flows` /
   `close_flow` manage them, re-opening a name replaces that flow, and what a
   flow keeps to itself is settled per property when the story is authored.
@@ -94,13 +125,14 @@ diagnostic; never a silent pass, never a crash.
   `StoryletScopeRegistry`. Pass the game's own as
   `StoryletEngine.create(bundle, {"registry": registry})` to share it with
   any other engine (Patterplay, say): the engine registers `@story` under
-  `story` and every other bag under a key starting `storylets/`, `@world` is
-  the game's to register, and `save_game()` leaves the values to the game,
-  which saves `registry.save()` once and loads it with `registry.load()`,
-  before or after `load_game`. Without one the engine makes its own registry,
-  self-backs `@world` from its declared defaults, and `save_game()` carries
-  every value, that `@world` included, so one call is still the whole run. A
-  `"world"` resolver you bind is your game's state and never saved. A token
+  `story` and every other bag under a key starting `storylets/`, the host
+  scopes (`@world` and the rest) are the game's to register, and `save_game()`
+  leaves the values to the game, which saves `registry.save()` once and loads
+  it with `registry.load()`, before or after `load_game`. Without one the
+  engine makes its own registry, self-backs every host scope from its declared
+  defaults, and `save_game()` carries every value, those included, so one call
+  is still the whole run. A resolver you bind through `"host_scopes"` is your
+  game's state and never saved. A token
   another engine already holds refuses the engine: `create` returns null and
   the error names the holder. See
   [Running it with Patter](https://storylets.dev/play/with-patter/#one-registry).
@@ -132,7 +164,7 @@ diagnostic; never a silent pass, never a crash.
   See [Live Link](https://storylets.dev/play/live-link/).
 - **State kernel**: `StoryletPropertyBag` and `StoryletScopeRegistry` are the
   shared properties implementer (the owned / foreign scope split for a host
-  `@world`). Both are thin shims over sources shared with Patterplay
+  scope such as `@world`). Both are thin shims over sources shared with Patterplay
   (`runtime/expr/`), so a game running both engines can hand them one
   registry: either addon's registry class will do. A refused registry call
   returns its error String ("" on success).

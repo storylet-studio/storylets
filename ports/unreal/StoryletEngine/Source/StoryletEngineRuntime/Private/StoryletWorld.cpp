@@ -140,12 +140,12 @@ void UStoryletWorld::StorySet(const std::string& Name, const storylets::Storylet
 	OnChanged.Broadcast(Ue(Name), StoryletValueToUe(Value), true);
 }
 
-storylets::WorldResolver UStoryletWorld::MakeResolver()
+storylets::HostScope UStoryletWorld::MakeHostScope()
 {
 	// Weak: the core outlives nothing here, but a game that drops its world
 	// while an engine still holds the resolver must read unset, not crash.
 	TWeakObjectPtr<UStoryletWorld> Weak(this);
-	storylets::WorldResolver R;
+	storylets::HostScope R;
 	R.get = [Weak](const std::string& Name) -> std::optional<storylets::StoryletValue>
 	{
 		UStoryletWorld* W = Weak.Get();
@@ -158,4 +158,9 @@ storylets::WorldResolver UStoryletWorld::MakeResolver()
 		if (UStoryletWorld* W = Weak.Get()) W->StorySet(Name, Value);
 	};
 	return R;
+}
+
+storylets::HostScope UStoryletWorld::MakeResolver()
+{
+	return MakeHostScope();
 }

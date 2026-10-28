@@ -4,6 +4,7 @@
 // edits, through the same validator.)
 
 import { describe, expect, it } from "vitest";
+import { hostScopeDecls } from "@storylet-studio/model";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -420,20 +421,20 @@ describe("card mutations", () => {
     const before = projectSettings(session);
     const next = {
       ...before,
-      world: [
+      hostScopes: [{ token: "world", declarations: [
         { name: "clock", type: "number", default: "0", writable: false },
         { name: "gold", type: "number", default: "0" },
-      ],
+      ] }],
     };
     expect("error" in await saveProjectSettings(session, next)).toBe(false);
 
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
-    const written = reopened.session.loaded.source!.project.world.properties;
+    const written = hostScopeDecls(reopened.session.loaded.source!.project, "world");
     expect(written.find((d) => d.name === "clock")).toMatchObject({ writable: false });
     expect("writable" in written.find((d) => d.name === "gold")!).toBe(false);
     // And back up into the DTO the switch reads.
-    const dto = projectSettings(reopened.session).world;
+    const dto = projectSettings(reopened.session).hostScopes[0]!.declarations;
     expect(dto.find((d) => d.name === "clock")?.writable).toBe(false);
     expect("writable" in dto.find((d) => d.name === "gold")!).toBe(false);
   });
@@ -606,8 +607,8 @@ describe("card mutations", () => {
     writeFileSync(projFile, deck);
     const worldFile = join(session.loaded.dir, "saltmarsh.storyletproj");
     const proj = readFileSync(worldFile, "utf8").replace(
-      "    properties: [\n      {\n        default: 0,\n        name: \"danger\",",
-      "    properties: [\n      { default: false, name: \"raining\", type: \"boolean\" },\n      {\n        default: 0,\n        name: \"danger\",",
+      "        declarations: [\n          {\n            default: 0,\n            name: \"danger\",",
+      "        declarations: [\n          { default: false, name: \"raining\", type: \"boolean\" },\n          {\n            default: 0,\n            name: \"danger\",",
     );
     writeFileSync(worldFile, proj);
     const reopened = openProject(session.loaded.dir);

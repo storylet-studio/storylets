@@ -49,7 +49,13 @@ transliteration in C#; the three stay in lockstep.
   across flows, not just the state it reads: one goblin in the world, and a
   shared `redraw: never` spent for everyone the moment anyone plays it.
   `sharedCopies` is the world cap and defaults to `copies`.
-- **Play**: `UStoryletEngine::Create(Bundle, Seed, bRetainLog, World)` (`World` optional: a `UStoryletWorld`, the game's `@world` container, read and written by every flow, with `SetReadOnly` for the game's own policy) then
+- **Play**: `UStoryletEngine::Create(Bundle, HostScopes)` (`HostScopes` a map
+  of token to `UStoryletWorld`, the game's own container for each scope it
+  binds: `{ { TEXT("world"), World } }` for `@world`, or any other scope the
+  project declares, such as `player`; empty to bind none. Each is read and
+  written by every flow, with `SetReadOnly` for the game's own policy; a
+  declared scope left out is self-backed. `CreateWithOptions` adds the seed and
+  the retained log, `FStoryletEngineOptions`) then
   `Engine->OpenFlow("main")` for a flow to play on (open one per parallel
   playthrough; `GetFlow` / `Flows` / `CloseFlow` manage them). On the flow:
   `Deal` /
@@ -63,6 +69,12 @@ transliteration in C#; the three stay in lockstep.
   `"story.gold"`, `"box.b_x.heat"`); no generic value struct on a BP pin.
   `ListProperties` returns examiner rows (type, stringified value/default,
   enum options, `bIsDefault` for reset buttons).
+- **Refusals**: a Blueprint can't catch what the core throws, so a refusal is
+  handed back. The setters (`SetProperty*` on the engine and on a flow, and a
+  flow's `AdvanceTurns`) return it as a string, empty when the call landed;
+  every other refusing call returns its fallback (null, empty, false) and
+  keeps the message for `GetLastError()` on the engine or the flow, cleared by
+  the next call that succeeds. Each is also logged to `LogStoryletEngine`.
 - **Save/load**: `UStoryletSave::SaveStateToJson` / `LoadStateFromJson` -
   the `.storyletsave` string boundary (schema `storylets/savefile@1`: the
   engine's `storylets/save@2` envelope with every live flow in it, plus the
@@ -72,7 +84,8 @@ transliteration in C#; the three stay in lockstep.
   re-bind by name across the load.
 - **One registry per game**: every property value lives in a
   `storylets::ScopeRegistry`. Without one, the engine makes its own, self-backs
-  `@world` when no `UStoryletWorld` is bound, and a save carries every value.
+  each host scope the bundle declares (`@world`, `@player`, ...) that no
+  `UStoryletWorld` is bound to, and a save carries every value.
   A C++ game running several engines (Patterplay, say) passes its one registry
   through `UStoryletEngine::CreateWithRegistry(Bundle, Registry)`, or
   `EngineOptions::registry` on the core: the engine registers `@story` under
@@ -80,8 +93,8 @@ transliteration in C#; the three stay in lockstep.
   other scope in the registry, and leaves the values out of its save, so the
   game saves the registry once, beside it (`storylets::saveRegistry(registry)` /
   `loadRegistry(registry, json)` in `Storylets/Save.h` are its text door), and loads it
-  before or after the engine. `@world` is then the game's to register, unless a `UStoryletWorld` is
-  bound. The registry is the shared kernel's `wildwinter::expr::ScopeRegistry`, the same type
+  before or after the engine. The host scopes are then the game's to register,
+  but for those bound through `HostScopes`. The registry is the shared kernel's `wildwinter::expr::ScopeRegistry`, the same type
   Patterplay's `UPatterEngine::CreateWithRegistry` takes, so a game running both hands one registry
   to each; include `Storylets/Kernel.h` where you make it, with `bEnableExceptions = true` in that
   module's Build.cs. Both plugins must be built from the same kernel (a mismatch is a compile error

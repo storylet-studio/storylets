@@ -290,7 +290,8 @@ own the engine refuses such content, naming the scope, and the command exits 1. 
 declares, so the content plays. `--set` can move one of them (`--set patter.visits=3`).
 
 `--set` takes the same paths the runtime does, the owner named as you name it in a shard:
-`story.started`, `world.market_day`, `value.docks.danger`, `box.street.heat`. Where two boxes
+`story.started`, `world.market_day`, `player.hp` (any host scope), `value.docks.danger`,
+`box.street.heat`. Where two boxes
 name a tag the same way, say which box the tag is in:
 `--set value.harbour/docks.danger=3`. A zone of the project map is always the short form, `value.docks.danger`,
 because it belongs to no box.
@@ -416,14 +417,16 @@ wrote /work/my-game/game-scopes/game.scopes.json
 
 It makes the game's `game-scopes/` folder, by default at the version-control root above the
 project (else beside the project), with the Storylet Engine's `storylets.scopes.json` and a
-`game.scopes.json` holding the project's `@world`, which the project keeps as its synced copy.
+`game.scopes.json` holding the project's host scopes (`@world`, and any others it declares),
+which the project keeps as its synced copy.
 
 | Flag | Does |
 |---|---|
 | `--at DIR` | Put `game-scopes/` in `DIR` instead. When looking up from the project wouldn't find it there, the project names it in its `gameScopes` field. |
 
 A folder that already exists, made by another tool, is joined rather than replaced: its
-`game.scopes.json` keeps every scope it holds, and gains `@world` only when it has none. A
+`game.scopes.json` keeps every scope it holds, and gains each of the project's host scopes
+only when it has none of that token. A
 project that already shares its scopes is refused, naming the folder.
 
 ## pack
@@ -563,7 +566,7 @@ Seeded playthroughs that report what your content can actually reach.
 ```
 $ storyletengine coverage saltmarsh.storylets --runs 20 --seed 1
 coverage: 20 run(s), seed 1, max 100 turns/run, 2000 turns, 2000 plays
-no input drivers: content gated on @world reads as never dealt
+no input drivers: content gated on @world (or any host scope) reads as never dealt
 runs ended: 0 saw everything, 20 ran to the turn cap, 0 stuck
 cards dealt 2/4, played 2/4; outcomes played 2/5
 never dealt 2, rarely dealt 0 (under 5% of runs), dealt but never played 0
@@ -586,7 +589,8 @@ never played: ambush-at-the-ford/stand-and-fight
 never played: pickpocket/caught
 ```
 
-The second line names the `@world` properties the run drove, or says that none were. A run
+The second line names the host scope properties (`@world`, ...) the run drove, or says that
+none were. A run
 with no drivers reports host-gated content as never dealt, which is true of the run, not of
 the content.
 

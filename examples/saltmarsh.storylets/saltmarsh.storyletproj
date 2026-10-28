@@ -9,6 +9,21 @@
     bundle: "../storylet-dist/saltmarsh.storyletsc",
     metadata: "full",
   },
+  scopeRegistry: {
+    scopes: [
+      {
+        declarations: [
+          {
+            default: 0,
+            name: "danger",
+            type: "number",
+          },
+        ],
+        token: "world",
+      },
+    ],
+    version: 1,
+  },
   settings: {
     playAdvancesTurns: 1,
   },
@@ -31,14 +46,4 @@
     ],
   },
   templates: {},
-  world: {
-    properties: [
-      {
-        default: 0,
-        name: "danger",
-        type: "number",
-      },
-    ],
-    registry: {},
-  },
 }

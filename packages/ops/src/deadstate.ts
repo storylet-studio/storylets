@@ -30,7 +30,7 @@
 import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import type { Bundle, Expression } from "@storylet-studio/model";
-import { effectiveGameId, groupsOfBox } from "@storylet-studio/model";
+import { bundleHostScopes, effectiveGameId, groupsOfBox } from "@storylet-studio/model";
 import { keyOf, splitKey, writesOf } from "./analysis-common.js";
 import type { Owner } from "./analysis-common.js";
 
@@ -106,7 +106,7 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
   };
   // An owner's id, back to the gameId a warning names it by.
   const ownerNames = new Map<string, string>();
-  declsOf("world", bundle.world.properties, {});
+  for (const host of bundleHostScopes(bundle)) declsOf(host.token, host.declarations, {});
   declsOf("story", bundle.story.properties, {});
   for (const box of bundle.boxes) {
     ownerNames.set(box.id, effectiveGameId(box));
@@ -169,9 +169,11 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
   const one = (wheres: string[]): string => wheres[0] ?? "";
   // Another engine's game-wide scope (`@patter.visits`): that engine writes it, where nothing here can see.
   const otherEngines = bundle.externalScopes ?? [];
+  // The game's own scopes: the game writes them, where nothing here can see (@world always).
+  const hostTokens = ["world", ...bundleHostScopes(bundle).map((h) => h.token)];
   for (const [key, l] of [...m].sort(([a], [b]) => a.localeCompare(b))) {
     const scoped = splitKey(key).ref, ref = displayOf(key);
-    if (scoped.startsWith("@world.") || scoped.startsWith("@hand.")) continue;   // host-owned / composed
+    if (hostTokens.some((t) => scoped.startsWith(`@${t}.`)) || scoped.startsWith("@hand.")) continue;   // host-owned / composed
     if (otherEngines.some((t) => scoped.startsWith(`@${t}.`))) continue;          // another engine writes it
 
     // The READ side warns everywhere content can be gated: an unwritten read

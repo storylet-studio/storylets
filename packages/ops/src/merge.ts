@@ -240,6 +240,10 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
   project: object({
     project: RECORD,
     settings: RECORD,
+    // The game's own scopes: per scope by token, and in each its declarations
+    // per name, as @story's are. `world` is the legacy block, merged until format
+    // moves it.
+    scopeRegistry: object({ scopes: keyedBy("token", object({ declarations: DECLS }), { order: "preserve" }) }),
     world: object({ properties: DECLS }),
     story: object({ properties: DECLS }),
     templates: { kind: "map", of: ATOMIC },

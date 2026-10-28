@@ -73,8 +73,8 @@ const engine = new Engine(bundle, { seed: 7, log: true });
 let flow = engine.openFlow("main");
 ```
 
-The engine is the world. It holds the bundle, the shared state, and your game's `@world`
-binding. Every play call lives on a **flow** (one playthrough) opened by name. A
+The engine is the world. It holds the bundle, the shared state, and your game's host
+scopes (`@world`, and any others the project declares). Every play call lives on a **flow** (one playthrough) opened by name. A
 single-player game opens `"main"` and never thinks about it again. An experience with many
 participants opens one flow each, all over the same shared world
 ([the sharing rules](/play/world-state/)). Re-opening a name replaces that flow with a fresh
@@ -89,6 +89,21 @@ one, and a closed flow's handle refuses every call.
 keeps each flow's trace events so you can read them back later (capped at 1000, oldest
 dropped first; `{ cap: n }` sets your own). It's off by default, and with no subscribers and
 no retained log the flow does no trace work at all.
+
+`hostScopes` binds your game's own state, one resolver per scope the project declares:
+
+```js
+const engine = new Engine(bundle, {
+  hostScopes: { world: { get: (name) => state[name], set: (name, value) => { state[name] = value; } } },
+  onError: (e) => console.warn(e.kind, e.node, e.message),
+});
+```
+
+Leave a scope out and the engine backs it itself, from its declared defaults
+([Your game's state](/play/world-state/#binding-it)). `onError` hears every problem the engine
+played through: a condition it couldn't evaluate, and how it was set up (`kind: "setup"`), such
+as a token the bundle doesn't declare or an option it doesn't take, reported as the
+constructor ends. Without one, each goes to `console.warn`.
 
 ## Deal, peek, outcomes, play
 
@@ -207,9 +222,9 @@ const flow = engine.openFlow("visitor-7", {
 });
 ```
 
-An engine built on its own carries every property value in its envelope, a self-backed
-`@world` included, so the two lines above are the whole run. A `@world` you bind to a resolver is
-your game's state, and your game saves it ([why](/play/world-state/)). A game that hands the engine
+An engine built on its own carries every property value in its envelope, its self-backed host
+scopes included, so the two lines above are the whole run. A host scope you bind to a resolver
+is your game's state, and your game saves it ([why](/play/world-state/)). A game that hands the engine
 its own registry saves that registry once, beside the envelope
 ([Running it with Patter](/play/with-patter/#one-registry)). For files, `play-helpers` gives you
 the string boundary, which wraps the envelope together with your world values:
@@ -219,7 +234,7 @@ import { Engine } from "@storylet-studio/runtime";
 import { serializeState, deserializeState, createWorldContainer } from "@storylet-studio/play-helpers";
 
 const world = createWorldContainer(bundle);                  // or bind your own resolver
-const engine = new Engine(bundle, { seed: 7, world: world.resolver });
+const engine = new Engine(bundle, { seed: 7, hostScopes: { world: world.resolver } });
 let flow = engine.openFlow("main");
 
 const text = serializeState(engine, world.values());   // write this to a .storyletsave

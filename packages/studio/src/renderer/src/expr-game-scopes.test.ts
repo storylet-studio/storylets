@@ -72,3 +72,26 @@ describe("pills, with no folder", () => {
     expect(pills("@player.hp > 0", own)).toEqual([]);
   });
 });
+
+describe("pills, with the project's own host scopes and no folder", () => {
+  const own: ConditionProperty[] = [
+    { scope: "story", name: "act", type: "number" },
+    { scope: "player", name: "hp", type: "number" },
+  ];
+
+  it("a host scope the project declares parses, and a name it doesn't declare is marked", () => {
+    setGameScopes(undefined, { tokens: ["player"], opaque: [] });
+    expect(pills("@player.hp > 0", own)).toEqual([{ label: "player.hp", err: false, title: "" }]);
+    expect(pills("@player.mp > 0", own)[0]!.err).toBe(true);
+  });
+
+  it("an opaque one takes any name", () => {
+    setGameScopes(undefined, { tokens: ["weather"], opaque: ["weather"] });
+    expect(pills("@weather.rain == true", own)[0]!.err).toBe(false);
+  });
+
+  it("the project's say wins over the folder's for a token both declare", () => {
+    setGameScopes(FOLDER, { tokens: ["weather"], opaque: [] });
+    expect(pills("@weather.rain == true", own)[0]!.err).toBe(true);
+  });
+});

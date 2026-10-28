@@ -233,10 +233,13 @@ const API = [
   { on: "Engine", member: "traceTap",
     js: { re: "emitEngine" }, unity: { re: "EmitEngine" }, godot: { re: "emit_engine" }, unreal: { re: "emitEngine" }, bp: null,
     why: "the (flowId, event) engine-level stream behind subscribeTrace; probed by its emit seam because the subscribe name is shared with the flow's. No delegate crosses a BP pin (as subscribeTrace)" },
-  { on: "Engine", member: "worldSeam",
-    js: { re: "world\\?: ScopeResolver" }, unity: { re: "IScopeResolver World" },
-    godot: { re: '"world"' }, unreal: { re: "WorldResolver" }, bp: null,
-    why: "the host's @world binding (EngineOptions) is a std::function/interface, which does not cross a BP pin; Blueprint binds @world through a UStoryletWorld instead, which the engine registers as a foreign scope" },
+  // Host scopes like Patter's (ruled 2026-10-28): ONE map of token to resolver
+  // in place of the single `world` option, named and shaped as Patterplay's.
+  { on: "Engine", member: "hostScopes",
+    js: { re: "hostScopes\\?: Record<string, HostScope>" }, unity: { re: "Dictionary<string, IHostScope> HostScopes" },
+    godot: { re: '"host_scopes"' }, unreal: { re: "std::map<std::string, HostScope> hostScopes" },
+    bp: { re: "Create\\(UStoryletBundle\\* Bundle, const TMap<FString, UStoryletWorld\\*>& HostScopes\\)" },
+    why: "the game's binding of its own scopes (@world, @player, ...) by token. The std core takes it in its options as JS does; Blueprint takes it as Create's own parameter, a map of token to UStoryletWorld, as Patterplay's UPatterEngine::Create does" },
   // The diagnostic hooks (2026-10-06): a JS-side warning or callback is port
   // parity, the same as any member, and until this review no row held them,
   // which is how the Blueprint wrapper came to have neither. Option fields, so
@@ -258,6 +261,13 @@ const API = [
     unreal: { re: "std::function<void\\(const PlayError&\\)> onError" },
     bp: { re: "FStoryletErrorEvent OnError" },
     why: "a field or option in the cores; Blueprint binds it as an assignable delegate on the engine, as Patterplay's FPatterErrorEvent OnError" },
+  // The refusal a Godot or Blueprint caller reads back, since those hosts don't
+  // throw (Patterplay's convention, adopted 2026-10-28): set by a refused verb,
+  // cleared by the next good one, on the engine and on the flow.
+  { on: "Engine", member: "lastError", js: null, unity: null, godot: "last_error", unreal: null, bp: "GetLastError",
+    why: "JS and C# throw, and the C++ core throws for the Blueprint wrapper to catch; GDScript and Blueprint can't, so they keep the refusal" },
+  { on: "Flow", member: "lastError", js: null, unity: null, godot: "last_error", unreal: null, bp: "GetLastError",
+    why: "as the engine's: a refused flow verb keeps its refusal where the host can't catch a throw" },
   { on: "Flow", member: "onRestoreReport",
     js: { re: "onRestoreReport\\?: \\(report: LoadReport\\) => void" },
     unity: { re: "Action<LoadReport> OnRestoreReport" },

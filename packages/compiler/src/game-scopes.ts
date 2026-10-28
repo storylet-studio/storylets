@@ -6,18 +6,24 @@
 // the others. The loader finds and reads the folder (ops, which has the file
 // system); this is the pure half, over what it read.
 //
-// Two things reach a compile from here. The shared `@world`, when the folder
-// declares one, IS the project's @world (decision 2): it types the checks and
-// fills the bundle's world, so a standalone engine self-backs it. And the other
-// tools' scopes (`@patter`, a game's `@player`) are checked, as warnings only
-// (decision 3), since the other project may be a save behind on someone's branch.
+// Two things reach a compile from here. The project's HOST scopes (the game's
+// own, `@world`, `@player`, ...), except that the folder wins where it declares
+// the same token: its file is the source and the project keeps a synced copy
+// (decision 2). `@world` from the folder joins them even when the project
+// doesn't declare it, because a standalone engine self-backs `@world` from the
+// bundle. These are strict and ship in the bundle's `scopeRegistry`. And
+// everything else in the folder (`@patter`, a game's `@player` the project
+// doesn't declare) is checked, as warnings only (decision 3), since the other
+// project may be a save behind on someone's branch. Patter's rule, its
+// `projectScopes`.
 // ---------------------------------------------------------------------------
 
 import { defaultFor } from "@wildwinter/scoperegistry";
 import type { ScopeDeclaration } from "@wildwinter/scoperegistry";
 import { GAME_SCOPES_DIR } from "@wildwinter/scoperegistry/scopes";
 import type { MergedScopes, ScopesFile } from "@wildwinter/scoperegistry/scopes";
-import type { PropertyDecl } from "@storylet-studio/model";
+import { bundleHostScopes } from "@storylet-studio/model";
+import type { HostScopeSpec, PropertyDecl } from "@storylet-studio/model";
 import type { SourceProject } from "./project.js";
 
 /** The Storylet Engine's own game-wide token: the one scope its file declares. */
@@ -53,24 +59,83 @@ export const fromScopeDeclaration = (d: ScopeDeclaration, scopeWritable?: boolea
 };
 
 /**
- * The shared `@world`, when the project's game scopes folder declares one (in
- * `game.scopes.json`, by the design; whichever file holds it, the folder has one owner per
- * token). Undefined with no folder, no `world` scope, or an opaque one, which says nothing to
- * check against: the project's own declarations apply then.
+ * A game scope as the project's game scopes folder declares it (in `game.scopes.json`, by the
+ * design; whichever file holds it, the folder has one owner per token), its scope-level
+ * `writable` carried onto each declaration. Undefined with no folder, no such scope, an opaque
+ * one, which says nothing to check against, or the Storylet Engine's own `@story`: the
+ * project's own declarations apply then.
  */
-export function sharedWorld(source: SourceProject): { decls: PropertyDecl[]; fileName: string } | undefined {
+export function sharedHostScope(source: SourceProject, token: string): { decls: PropertyDecl[]; fileName: string } | undefined {
   const merged = source.gameScopes?.merged;
-  const scope = merged?.spec.scopes.find((s) => s.token === "world");
+  const scope = token === STORYLETS_TOKEN ? undefined : merged?.spec.scopes.find((s) => s.token === token);
   if (!merged || !scope?.declarations) return undefined;
   return {
     decls: scope.declarations.map((d) => fromScopeDeclaration(d, scope.writable)),
-    fileName: merged.owners.get("world")?.fileName ?? "",
+    fileName: merged.owners.get(token)?.fileName ?? "",
   };
+}
+
+/** The shared `@world`, when the folder declares one (`sharedHostScope(source, "world")`). */
+export function sharedWorld(source: SourceProject): { decls: PropertyDecl[]; fileName: string } | undefined {
+  return sharedHostScope(source, "world");
+}
+
+/** One host scope the compile treats as the project's: where its declarations come from, for
+ *  anchoring an issue about them, and whether the project's own copy differs from the folder. */
+export interface ProjectHostScope {
+  spec: HostScopeSpec;
+  /** The shard or scopes file its declarations are read from, project-relative. */
+  path: string;
+  /** The scopes file it was read from, when it was the folder's. */
+  sharedFile?: string;
+  /** True when the folder's declarations won over a project copy that says otherwise. */
+  differs?: boolean;
+}
+
+/**
+ * The project's host scopes once its game's folder is taken into account, in the project's
+ * order and then `@world` from the folder when the project doesn't declare it: each scope
+ * the project declares, the folder's declarations winning where the folder declares the same
+ * token (with `differs` set when the project's copy says otherwise). With no folder they are
+ * the project's own, a project not yet formatted reading its `world` block as the scope
+ * `world`.
+ */
+export function projectHostScopes(source: SourceProject): ProjectHostScope[] {
+  const out: ProjectHostScope[] = [];
+  for (const own of bundleHostScopes(source.project)) {
+    const shared = sharedHostScope(source, own.token);
+    if (shared === undefined) { out.push({ spec: own, path: source.path }); continue; }
+    // The project's copy as the folder's reads: the scope's own `writable` carried onto each.
+    const mine = (own.declarations ?? []).map((d): PropertyDecl => {
+      const writable = d.writable ?? own.writable;
+      return { ...d, ...(writable !== undefined ? { writable } : {}) };
+    });
+    out.push({
+      spec: { token: own.token, declarations: shared.decls },
+      path: scopesFilePath(source, shared.fileName), sharedFile: shared.fileName,
+      ...(own.declarations === undefined || !sameDeclarations(mine, shared.decls) ? { differs: true } : {}),
+    });
+  }
+  const world = out.some((s) => s.spec.token === "world") ? undefined : sharedHostScope(source, "world");
+  if (world !== undefined) {
+    // The project keeps a synced copy, so having none differs too.
+    out.push({
+      spec: { token: "world", declarations: world.decls }, path: scopesFilePath(source, world.fileName), sharedFile: world.fileName,
+      ...(world.decls.length > 0 ? { differs: true } : {}),
+    });
+  }
+  return out;
 }
 
 /** The project's `@world`: the shared file's when the folder declares one, else its own. */
 export function worldDeclarations(source: SourceProject): PropertyDecl[] {
-  return sharedWorld(source)?.decls ?? source.project.world?.properties ?? [];
+  return hostScopeDeclarations(source, "world");
+}
+
+/** One host scope's declarations as the compile reads them (`projectHostScopes`): empty when
+ *  the project doesn't declare it, or declares it opaque. */
+export function hostScopeDeclarations(source: SourceProject, token: string): PropertyDecl[] {
+  return (projectHostScopes(source).find((s) => s.spec.token === token)?.spec.declarations ?? []) as PropertyDecl[];
 }
 
 /** Do two lists of declarations say the same thing? Order aside, since a list is a set of

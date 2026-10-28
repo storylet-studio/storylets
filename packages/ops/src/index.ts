@@ -5,7 +5,7 @@ export { findProjectDir, loadProject } from "./load.js";
 // The game's shared scopes folder (patterkit design/shared-scopes.md): reading it, writing the
 // Storylet Engine's file and the game's @world, and the previews' stand-in registry.
 export {
-  defaultGameScopesParent, nodeScopesFs, planGameWorld, planShareScopes, planStoryletsScopes, previewRegistry,
+  defaultGameScopesParent, nodeScopesFs, planGameHostScopes, planGameScopes, planGameWorld, planShareScopes, planStoryletsScopes, previewRegistry,
   readGameFile, readGameScopes, staleScopesIssues, storyletsScopesText,
 } from "./game-scopes.js";
 export type { LoadedProject } from "./load.js";
@@ -69,9 +69,9 @@ export type { PropertyUsage } from "./usage.js";
 export { runFieldUsage, declaredFields } from "./field-usage.js";
 export type { FieldUsage, DeclaredField } from "./field-usage.js";
 export { renameStage, renameStageInExpression, stageGateCount } from "./stages.js";
-export type { StageRenameResult, StageTarget } from "./stages.js";
-export { locateProperty, renameProperty, renamePropertyInExpression } from "./rename-property.js";
-export type { PropertyRenameResult, PropertyTarget } from "./rename-property.js";
+export type { PropertyScope, StageRenameResult, StageTarget } from "./stages.js";
+export { locateProperty, renameProperty, renamePropertyInExpression, renameReferencesInExpression, renameScope } from "./rename-property.js";
+export type { PropertyRenameResult, PropertyTarget, ReferenceRename, ScopeRenameResult } from "./rename-property.js";
 export { runReplace } from "./replace.js";
 export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./replace.js";
 // Pin on publish: the editor's Publish writes down every address still following its title

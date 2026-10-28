@@ -1,5 +1,5 @@
 {
-  "schema": "storylets/bundle@1",
+  "schema": "storylets/bundle@2",
   "boxes": [
     {
       "decks": [
@@ -1493,7 +1493,7 @@
         {
           "default": "",
           "name": "music",
-          "purpose": "A host cue: which music stem this beat wants. Fields are for the HOST to read, and this one is deliberately NOT the dialogue handoff - a card's gameId already names its Patter scene (Reboot.md 10).",
+          "purpose": "A host cue: which music stem this beat wants. Fields are for the game to read, and this one isn't how the dialogue is found: a card's Game ID already names its Patter scene.",
           "type": "string"
         }
       ],
@@ -1555,7 +1555,7 @@
     }
   ],
   "content": {
-    "hash": "0jnpwoi",
+    "hash": "0hyg0ba",
     "project": "proj_hamlet_patter",
     "version": "0.1.0"
   },
@@ -1584,6 +1584,32 @@
     }
   },
   "metadata": "full",
+  "scopeRegistry": {
+    "scopes": [
+      {
+        "declarations": [
+          {
+            "default": false,
+            "name": "knows_road",
+            "purpose": "Written by DIALOGUE (Mira, about the road north) and read here: the one value in the joint demo that flows from Patter to the Storylet Engine, through the shared @world. Declared in both projects; the demo build checks they agree.",
+            "type": "boolean"
+          },
+          {
+            "default": "day",
+            "name": "time_of_day",
+            "purpose": "The host owns time. Read-only to the story, as the Patter project declares it too, and the game refuses a write at runtime as well: three places saying one thing, on purpose.",
+            "type": "enum",
+            "values": [
+              "day",
+              "night"
+            ]
+          }
+        ],
+        "token": "world"
+      }
+    ],
+    "version": 1
+  },
   "settings": {
     "playAdvancesTurns": 1
   },
@@ -1652,26 +1678,5 @@
         ]
       }
     ]
-  },
-  "world": {
-    "properties": [
-      {
-        "default": false,
-        "name": "knows_road",
-        "purpose": "Written by DIALOGUE (Mira, about the road north) and read here: the one value in the joint demo that flows from Patter to the Storylet Engine, through the shared @world. Declared in both projects; the demo build checks they agree.",
-        "type": "boolean"
-      },
-      {
-        "default": "day",
-        "name": "time_of_day",
-        "purpose": "The host owns time. Read-only to the story, as the Patter project declares it too, and the game refuses a write at runtime as well: three places saying one thing, on purpose.",
-        "type": "enum",
-        "values": [
-          "day",
-          "night"
-        ]
-      }
-    ],
-    "registry": {}
   }
 }

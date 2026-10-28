@@ -72,7 +72,7 @@ bool FStoryletDurableTest::RunTest(const FString& Parameters)
 	}
 
 	// --- the first run: every durable value moved, both one-shots spent ---------------
-	UStoryletEngine* First = UStoryletEngine::Create(Bundle);
+	UStoryletEngine* First = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("first engine"), First)) return false;
 	UStoryletFlow* Alice = First->OpenFlow(TEXT("alice"));
 	if (!TestNotNull(TEXT("alice opens"), Alice)) return false;
@@ -100,7 +100,7 @@ bool FStoryletDurableTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the pocket carries its own spend"), Pocket.Contains(TEXT("\"spent\": [\"once\"]")));
 
 	// --- a new run: the memory in, then alice's pocket ---------------------------------
-	UStoryletEngine* Next = UStoryletEngine::Create(Bundle);
+	UStoryletEngine* Next = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("next engine"), Next)) return false;
 	FString MemoryReport;
 	TestTrue(TEXT("the memory loads"), Next->LoadDurableFromJson(Memory, MemoryReport));
@@ -128,8 +128,8 @@ bool FStoryletDurableTest::RunTest(const FString& Parameters)
 
 	// --- the seeded durable open: the flow's own seed in place of the engine's ----------
 	{
-		UStoryletEngine* Seeded = UStoryletEngine::Create(Bundle);
-		UStoryletEngine* ByEngine = UStoryletEngine::Create(Bundle, 7);
+		UStoryletEngine* Seeded = UStoryletEngine::Create(Bundle, {});
+		UStoryletEngine* ByEngine = UStoryletEngine::CreateWithOptions(Bundle, FStoryletEngineOptions{ 7, false }, {});
 		if (!TestNotNull(TEXT("engines"), Seeded) || !TestNotNull(TEXT("seeded engine"), ByEngine)) return false;
 		FString SeededReport;
 		UStoryletFlow* SeededFlow = Seeded->OpenFlowWithDurableJsonSeeded(TEXT("alice"), Pocket, 7, SeededReport);
@@ -146,7 +146,7 @@ bool FStoryletDurableTest::RunTest(const FString& Parameters)
 
 	// --- a value no property can hold is reported, not refused ---------------------------
 	{
-		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("fresh engine"), Fresh)) return false;
 		FString NullReport;
 		TestTrue(TEXT("a memory holding a null loads"),

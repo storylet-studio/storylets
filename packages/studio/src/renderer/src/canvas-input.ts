@@ -38,7 +38,13 @@ export function ownsKeys(state: { focusInside: boolean; pointerOver: boolean; no
 export type CanvasKey =
   | "commitTool" | "cancelTool" | "holdSpace" | "delete" | "dropMarquee" | "clearSelection"
   | "selectAll" | "actualSize" | "zoomIn" | "zoomOut" | "showSelection" | "fitAll"
+  | "activate" | "menu" | { step: StepDirection }
   | { letter: string };
+
+/** Which way an arrow key moves the keyboard's place on a canvas. */
+export type StepDirection = "left" | "right" | "up" | "down";
+
+const ARROWS: Record<string, StepDirection> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
 
 /**
  * The canvas's key map, in the order it is asked. Undefined is "not ours":
@@ -55,10 +61,18 @@ export type CanvasKey =
  * Home). Deliberately NOT Cmd+F: that is Find, app-wide, and the listener is on
  * the window, so binding it here quietly stole it. Any other plain letter is
  * the caller's (`onKey`).
+ *
+ * The keyboard's way round the items (the hands-on review, 2026-10, foundation
+ * 8: a node took no focus at all). The canvas is ONE tab stop and the selection
+ * is the keyboard's place on it, as a list's focused row is: the arrows move it
+ * to the nearest item that way (canvas-geometry `stepTo`), Enter does what a
+ * double-click does, and the ContextMenu key or Shift+F10 opens the item's
+ * menu. Only while the keys are on the canvas itself (`browse`), never on a
+ * button of its control strip, whose Enter is its own.
  */
 export function canvasKey(
-  e: { key: string; metaKey: boolean; ctrlKey: boolean },
-  state: { tool: boolean; owns: boolean; marquee: boolean; selected: number },
+  e: { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey?: boolean },
+  state: { tool: boolean; owns: boolean; marquee: boolean; selected: number; browse?: boolean },
 ): CanvasKey | undefined {
   if (state.tool && e.key === "Enter") return "commitTool";
   if (e.key === "Escape" && state.tool) return "cancelTool";
@@ -77,6 +91,12 @@ export function canvasKey(
   if (mod && e.key === "-") return "zoomOut";
   if (!mod && e.key.toLowerCase() === "f") return "showSelection";
   if (!mod && e.key === "Home") return "fitAll";
+  if (state.browse !== false && !mod) {
+    const step = ARROWS[e.key];
+    if (step !== undefined && e.shiftKey !== true) return { step };
+    if (e.key === "Enter" && state.selected === 1) return "activate";
+    if ((e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey === true)) && state.selected > 0) return "menu";
+  }
   if (!mod && e.key.length === 1) return { letter: e.key.toLowerCase() };
   return undefined;
 }

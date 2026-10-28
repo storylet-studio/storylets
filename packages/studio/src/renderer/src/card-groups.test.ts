@@ -95,7 +95,7 @@ describe("the headings", () => {
     expect(labels(village, "place")).toEqual([
       ["The Wishing Well", ["two-places"]],
       ["The Inn", ["inn-only", "two-places"]],
-      ["Anywhere in square", ["in-square"]],
+      ["Any hand in square", ["in-square"]],
       ["Anywhere", ["loose", "arrive"]],
     ]);
     const site = groupEntries(village, boxEntries(village), "place")[0]!;

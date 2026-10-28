@@ -199,10 +199,10 @@ describe("the bundle a project map compiles to", () => {
     ],
   });
 
-  it("carries the zone group once, flattened, in no box, with @1 and the opt-in", () => {
+  it("carries the zone group once, flattened, in no box, with the current schema and the opt-in", () => {
     const { bundle, issues } = compile(files);
     expect(errors(issues)).toEqual([]);
-    expect(bundle!.schema).toBe("storylets/bundle@1");
+    expect(bundle!.schema).toBe("storylets/bundle@2");
     expect(bundle!.map).toEqual({
       group: {
         id: "d_district", gameId: "district",
@@ -233,9 +233,9 @@ describe("the bundle a project map compiles to", () => {
     expect(flow.getProperty("value.quay.danger")).toBe(2);
   });
 
-  it("writes @1 on a project with no map too, and nothing else changes", () => {
+  it("writes the current schema on a project with no map too, and nothing else changes", () => {
     const { bundle } = compile(project({ boxes: [{ folder: "codex", id: "b_codex", cards: [card("c_entry")] }] }));
-    expect(bundle!.schema).toBe("storylets/bundle@1");
+    expect(bundle!.schema).toBe("storylets/bundle@2");
     expect(bundle!.map).toBeUndefined();
     expect(bundle!.boxes[0]!.usesMap).toBeUndefined();
   });
