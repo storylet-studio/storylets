@@ -5,7 +5,7 @@
 # derivation rules (game_idify / effective_game_id), the home group and the
 # project map's reading helpers (groups_of_box / all_tag_groups). The bundle stays a parsed JSON Dictionary - raw JSON is the
 # cross-runtime contract, never re-serialised into engine-native shapes -
-# and the session reads it as-is (expressions are compiled lazily into a
+# and the flow reads it as-is (expressions are compiled lazily into a
 # "__node" cache key on each {src, ast} envelope, idempotently).
 class_name StoryletBundle
 
@@ -24,15 +24,24 @@ const BUNDLE_SCHEMA := "storylets/bundle@1"
 const BUNDLE_SCHEMA_V0 := "storylets/bundle@0"
 ## Every bundle schema this runtime accepts.
 const BUNDLE_SCHEMAS := [BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA]
-## The engine's save envelope. Version 2 is the one-registry model: property
+## The engine's save envelope. Version 3 (the hands-on review, 2026-10,
+## foundation 7): a flow's turns, cooldowns and board, and the shared spent
+## cards, are keyed by GAME ID, as the play log always was, so a card deleted
+## and made again under the same Game ID keeps its cooldown and its place as
+## well as its play count. Since version 2, the one-registry model, property
 ## values are the registry's, so the envelope holds what is NOT a property, plus
 ## the engine's own registry's values under "registry" when it made that
-## registry itself. Version 1 envelopes still load: their property partitions
-## move into the registry under the keys StoryletEngine.shared_key and
-## flow_key write.
-const SAVE_SCHEMA := "storylets/save@2"
-## The version 1 envelope's schema tag, still read.
+## registry itself.
+const SAVE_SCHEMA := "storylets/save@3"
+## Version 2, keyed by internal id: still read, every key resolved as a Game ID
+## first and an internal id second.
+const SAVE_SCHEMA_V2 := "storylets/save@2"
+## The version 1 envelope's schema tag, still read: its property partitions
+## move into the registry under the keys StoryletEngine.shared_key and flow_key
+## write.
 const SAVE_SCHEMA_V1 := "storylets/save@1"
+## Every save envelope schema this runtime reads.
+const SAVE_SCHEMAS := [SAVE_SCHEMA_V1, SAVE_SCHEMA_V2, SAVE_SCHEMA]
 const SAVEFILE_SCHEMA := "storylets/savefile@1"
 ## The schema tag every DURABLE HALF carries (ruling H, 2026-10-06): what
 ## save_durable writes and load_durable and open_flow's "durable" read, so the

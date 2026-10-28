@@ -1,6 +1,6 @@
 // Save-file plumbing over the .storyletsave file (storylets/savefile@1): the
-// HOST's file - the engine's envelope (storylets/save@2; storylets/save@1 still
-// read) plus, when the host keeps one, its @world container. Mirrors
+// HOST's file - the engine's envelope (storylets/save@3; storylets/save@2 and
+// storylets/save@1 still read) plus, when the host keeps one, its @world container. Mirrors
 // @storylet-studio/play-helpers' save.ts: "host saves its container once,
 // each engine saves its own envelope" (design/flows.md) folded into one file
 // for the single-host case. These helpers are the string boundary - a
@@ -93,7 +93,7 @@ namespace StoryletStudio.StoryletEngine
             var engineSchema = engineToken?["schema"]?.Type == JTokenType.String ? engineToken.Value<string>("schema") : null;
             if (parsed.Value<string>("schema") != Model.SAVEFILE_SCHEMA
                 || engineToken == null
-                || (engineSchema != Model.SAVE_SCHEMA && engineSchema != Model.SAVE_SCHEMA_V1))
+                || (engineSchema != Model.SAVE_SCHEMA && engineSchema != Model.SAVE_SCHEMA_V2 && engineSchema != Model.SAVE_SCHEMA_V1))
             {
                 throw new StoryletError($"not a storylets save (expected schema \"{Model.SAVEFILE_SCHEMA}\")");
             }
@@ -444,6 +444,17 @@ namespace StoryletStudio.StoryletEngine
             return f;
         }
 
+        /// <summary>An envelope already read as JSON. Anything but an object
+        /// is refused as not a save at all, as LoadGame refuses a null
+        /// envelope (the hands-on review, 2026-10, foundation 5).</summary>
+        public static SaveEnvelope FromJson(JToken token)
+        {
+            if (token is JObject o) return FromJson(o);
+            throw new StoryletError($"not a Storylets save: expected an object, got {BundleLoader.Describe(token)}");
+        }
+
+        /// <summary>A missing `content` is left null, so LoadGame refuses the
+        /// envelope naming it rather than reading it as another project's.</summary>
         public static SaveEnvelope FromJson(JObject o)
         {
             // The schema as the JSON carries it, so LoadGame can read either
@@ -452,7 +463,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 Schema = o["schema"]?.Type == JTokenType.String ? o.Value<string>("schema") : null,
             };
-            if (o["content"] is JObject) env.Content = ParseContent(o["content"]);
+            env.Content = o["content"] is JObject ? ParseContent(o["content"]) : null;
             if (o["registry"] is JObject registry) env.Registry = ParseKind(registry);
             env.Shared = ParseShared(o["shared"]);
             if (o["flows"] is JObject flows)

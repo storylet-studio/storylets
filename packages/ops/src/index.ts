@@ -70,6 +70,8 @@ export { runFieldUsage, declaredFields } from "./field-usage.js";
 export type { FieldUsage, DeclaredField } from "./field-usage.js";
 export { renameStage, renameStageInExpression, stageGateCount } from "./stages.js";
 export type { StageRenameResult, StageTarget } from "./stages.js";
+export { locateProperty, renameProperty, renamePropertyInExpression } from "./rename-property.js";
+export type { PropertyRenameResult, PropertyTarget } from "./rename-property.js";
 export { runReplace } from "./replace.js";
 export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./replace.js";
 // Pin on publish: the editor's Publish writes down every address still following its title

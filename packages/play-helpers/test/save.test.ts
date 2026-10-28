@@ -24,6 +24,19 @@ describe("serialize / load round trip", () => {
     expect(engineB.getFlow("main")!.getProperty("story.gold")).toBe(7);
   });
 
+  it("still loads a file written before save version 3, keyed by internal id", () => {
+    const engineA = new Engine(bundle, { seed: 0 });
+    const a = engineA.openFlow("main");
+    a.deal("seat");
+    // The same file as an older runtime wrote it: save@2, the board by hand and card id.
+    const file = JSON.parse(serializeState(engineA));
+    file.engine.schema = "storylets/save@2";
+    file.engine.flows.main.board = { h_seat: ["c_a"] };
+    const engineB = new Engine(bundle, { seed: 0 });
+    deserializeState(engineB, JSON.stringify(file));
+    expect(engineB.getFlow("main")!.board()["seat"]!.map((c) => c.id)).toEqual(["c_a"]);
+  });
+
   it("rejects non-JSON and foreign blobs", () => {
     const engineB = new Engine(bundle, { seed: 0 });
     expect(() => deserializeState(engineB, "not json")).toThrow(/JSON/);

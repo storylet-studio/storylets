@@ -1,4 +1,4 @@
-// Headless: the loop, the survivor rule, a mid-scene save/load, and the
+// Headless: the loop, the survivor rule, a mid-scene save/load, a refused load, and the
 // cross-host envelopes the JS client wrote. Drives FHamletGame directly.
 //
 //   UnrealEditor-Cmd HamletDemo.uproject -ExecCmds="Automation RunTests StoryletStudio.Hamlet; Quit" -unattended -nullrhi -nosplash
@@ -7,6 +7,10 @@
 #include "HamletGame.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHamletLoopTest, "StoryletStudio.Hamlet.Loop",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::ProductFilter)
@@ -56,6 +60,22 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	FHamletGame g4; if (!Fresh(g4)) return false; FString e4; const bool bLoaded4 = g4.Load(midjs, e4);
 	if (!TestTrue(TEXT("the JS client's mid-scene envelope loads here: ") + e4, bLoaded4)) return false;
 	TestTrue(TEXT("a MID-SCENE envelope from the JS client brings the conversation back, two choices on screen"), g4.Playing && g4.Playing->Choices.Num() == 2);
+	// The hand is READ, so a save holds the hand on screen: the same cards come back, and a redraw changes nothing.
+	FHamletGame g5; if (!Fresh(g5)) return false; FString e5;
+	TestTrue(TEXT("a save of the road's end loads: ") + e5, g5.Load(g2.Save(), e5));
+	TestEqual(TEXT("the loaded hand is the hand that was on screen"), Join(g5.Hand()), Join(g2.Hand()));
+	TestEqual(TEXT("a redraw changes nothing"), Join(g5.Hand()), Join(g2.Hand()));
+	// A refused load leaves the game as it was: the saved world went in first, and comes out again.
+	TSharedPtr<FJsonObject> broken; auto reader = TJsonReaderFactory<>::Create(between);
+	if (!TestTrue(TEXT("the JS client's envelope parses"), FJsonSerializer::Deserialize(reader, broken) && broken.IsValid())) return false;
+	broken->SetStringField(TEXT("storylets"), TEXT("{}"));
+	FString brokenJson; auto writer = TJsonWriterFactory<>::Create(&brokenJson); FJsonSerializer::Serialize(broken.ToSharedRef(), writer);
+	FHamletGame g6; if (!Fresh(g6)) return false; FString e6;
+	const FString worldBefore = g6.World.Line();
+	AddExpectedError(TEXT("LoadStateFromJson"), EAutomationExpectedErrorFlags::Contains, 1);
+	TestFalse(TEXT("an envelope whose storylets half is refused does not load"), g6.Load(brokenJson, e6));
+	TestEqual(TEXT("a refused load puts the old world back"), g6.World.Line(), worldBefore);
+	TestFalse(TEXT("a refused load leaves knows_road as it was"), g6.World.Store->GetBool(TEXT("knows_road")));
 	return true;
 }
 #endif

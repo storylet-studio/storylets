@@ -24,7 +24,7 @@ const atTheForge = () => {
   const engine = new Engine(hamlet(), { seed: 11 });
   const s = engine.openFlow("main");
   atTheForge.lastEngine = engine;
-  s.setProperty("story.act", "settling_in");
+  s.setProperty("story.act", "act-1");
   s.setProperty("story.rel_blacksmith", ["met", "warm"]);
   s.setProperty("story.reputation", 2);
   return s;

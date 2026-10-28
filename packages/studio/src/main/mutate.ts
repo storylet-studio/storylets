@@ -12,7 +12,7 @@ export {
 } from "./mutate/write-path.js";
 export {
   createCard, createCardOnCanvas, deleteCard, deleteCards, deleteCardsAcross, duplicateCard, layoutDeck, moveCard,
-  moveCardsOnCanvas, saveCard, setCanvasFurniture,
+  moveCardToDeck, moveCardsOnCanvas, saveCard, setCanvasFurniture,
 } from "./mutate/cards.js";
 export {
   createBox, createDeck, createTagGroup, deleteBox, deleteDeck, deleteTagGroup, duplicateBox, duplicateDeck,

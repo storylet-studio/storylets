@@ -19,9 +19,10 @@ chmod +x ./storyletengine-macos-arm64
 ./storyletengine-macos-arm64 validate ./my-project.storylets
 ```
 
-The binaries are the distribution. Neither the CLI nor the runtimes are published to npm, so
-put the binary somewhere on your `PATH` and call it `storyletengine` if you want the short
-form. The runtimes ship as zips on the Download page.
+The binaries are how the CLI ships for now: it isn't on npm yet, so there's no `npx` for it.
+Put the binary somewhere on your `PATH` and call it `storyletengine` if you want the short
+form. The JS runtime is on npm (`@storylet-studio/runtime`), and every runtime also ships as a
+zip on the Download page.
 
 Every command that writes a project file writes through your version control (checking a file
 out first, adding new files), so a locked or read-only file fails the write instead of being

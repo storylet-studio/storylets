@@ -32,7 +32,7 @@ const stubActions = (over: Partial<ViewActions> = {}): ViewActions => ({
   openThreads: () => 0, showComments: vi.fn(), focus: vi.fn(), toggleNav: vi.fn(), openProjectSettings: vi.fn(), revealProject: vi.fn(), inspectCard: vi.fn(), inspectTemplate: vi.fn(), inspectTagGroup: vi.fn(), inspectHand: vi.fn(), openHand: vi.fn(),
   newCard: vi.fn(), newDeck: vi.fn(), newBox: vi.fn(), newTemplate: vi.fn(), newTagGroup: vi.fn(), newMap: vi.fn(), newHand: vi.fn(), editBox: vi.fn(), saveDeck: vi.fn(), saveBox: vi.fn(), saveDeckLater: vi.fn(), saveBoxLater: vi.fn(),
   duplicateBox: vi.fn(), deleteBox: vi.fn(), moveBox: vi.fn(), moveDeck: vi.fn(), moveHand: vi.fn(),
-  duplicateCard: vi.fn(), deleteCard: vi.fn(), showLinks: vi.fn(), selectCard: vi.fn(), setViewMode: vi.fn(), mountNodeView: vi.fn(), mountBoxSites: vi.fn(), openMap: vi.fn(), useProjectMap: vi.fn(), cardGroup: () => undefined, setCardGroup: vi.fn(), deckCatalogue: () => [], moveCard: vi.fn(),
+  duplicateCard: vi.fn(), moveCardToDeck: vi.fn(), deleteCard: vi.fn(), showLinks: vi.fn(), selectCard: vi.fn(), setViewMode: vi.fn(), mountNodeView: vi.fn(), mountBoxSites: vi.fn(), openMap: vi.fn(), useProjectMap: vi.fn(), cardGroup: () => undefined, setCardGroup: vi.fn(), deckCatalogue: () => [], moveCard: vi.fn(),
   duplicateDeck: vi.fn(), deleteDeck: vi.fn(), duplicateTemplate: vi.fn(), deleteTemplate: vi.fn(),
   duplicateHand: vi.fn(), deleteHand: vi.fn(), duplicateTagGroup: vi.fn(), deleteTagGroup: vi.fn(), ...over,
 });

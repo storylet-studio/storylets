@@ -23,7 +23,7 @@ var _panel: PanelContainer = null
 var _engine: StoryletEngine = null
 
 
-## A session whose one property has moved on to "dusk": what the refresh reads.
+## A flow whose one property has moved on to "dusk": what the refresh reads.
 class _Dusk:
 	extends RefCounted
 	func get_property(_path: String) -> Variant:
@@ -119,13 +119,13 @@ func _process(_delta: float) -> bool:
 				_check("it opens on the current stage", ob.selected == 1,
 					"selected=%d, expected 1 (noon)" % ob.selected)
 				# ...and FOLLOWS the story, as an enum row does: the refresh redraws
-				# a quality's dropdown from the session's current value. It skipped
+				# a quality's dropdown from the flow's current value. It skipped
 				# qualities until 2026-10-06, so the row kept its first stage.
 				# Alone, because open_flow("alice") above replaced the flow the
 				# panel's own rows read, and the panel's tick rebuilds those first.
 				var reset := Button.new()
 				var rows: Array = _panel._value_widgets
-				_panel._value_widgets = [{"widget": ob, "type": "quality", "session": _Dusk.new(),
+				_panel._value_widgets = [{"widget": ob, "type": "quality", "flow": _Dusk.new(),
 					"path": "story.hour", "default": "dawn", "reset": reset}]
 				_panel._refresh_values()
 				_check("a quality row follows the story's value", ob.selected == 2,

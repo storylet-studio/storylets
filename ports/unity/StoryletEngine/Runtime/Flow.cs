@@ -586,7 +586,12 @@ namespace StoryletStudio.StoryletEngine
             catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
         }
 
-        private bool Passes(Expression expr, EvalContext ctx, string where = null)
+        /// <summary>Does a condition pass? <paramref name="kind"/> ("card",
+        /// "deck", "hand" or "outcome") with <paramref name="of"/> and, for an
+        /// outcome, <paramref name="outcome"/> name whose condition it is; the
+        /// label is built only when an evaluation fails, so a deal that throws
+        /// nothing allocates nothing for it.</summary>
+        private bool Passes(Expression expr, EvalContext ctx, string kind, IIdentified of, IIdentified outcome = null)
         {
             if (expr == null) return true;
             try
@@ -596,12 +601,36 @@ namespace StoryletStudio.StoryletEngine
             catch (Exception e)
             {
                 // An eval error is never a silent pass: the card/deck is
-                // unavailable (schema 3.1), and the trace surfaces the diagnostic.
+                // unavailable (schema 3.1), and the game hears of it through
+                // OnError, tracing or not; the trace carries it too.
+                var at = NodeLabel(kind, of, outcome);
+                _engine.ReportPlayError(new PlayError
+                {
+                    Flow = Id,
+                    Kind = "condition",
+                    Node = at,
+                    Source = string.IsNullOrEmpty(expr.Src) ? null : expr.Src,
+                    Message = e.Message,
+                });
                 if (Tracing)
                 {
-                    Emit(new DiagnosticEvent { Where = where ?? "condition", Message = e.Message });
+                    Emit(new DiagnosticEvent { Where = kind == "deck" ? $"{at} gate" : $"{at} condition", Message = e.Message });
                 }
                 return false;
+            }
+        }
+
+        /// <summary>A PlayError's Node: `card &lt;gameId&gt;`, `deck &lt;gameId&gt;`,
+        /// `hand &lt;gameId&gt;` or `outcome &lt;card gameId&gt;/&lt;outcome gameId&gt;`,
+        /// as the reference names them (a card's and a deck's gameId as
+        /// written, a hand's and an outcome's effective one).</summary>
+        private static string NodeLabel(string kind, IIdentified of, IIdentified outcome)
+        {
+            switch (kind)
+            {
+                case "hand": return $"hand {(of != null ? Model.EffectiveGameId(of) : "")}";
+                case "outcome": return $"outcome {Model.EffectiveGameId(of)}/{Model.EffectiveGameId(outcome)}";
+                default: return $"{kind} {of?.GameId}";
             }
         }
 
@@ -965,8 +994,7 @@ namespace StoryletStudio.StoryletEngine
             }
 
             // The hand's condition: ask-constant, evaluated once (schema 3.1 step 4).
-            var handWhere = $"hand {(ask.Hand != null ? Model.EffectiveGameId(ask.Hand) : "")} condition";
-            if (!Passes(ask.Condition, EvalCtx(box, null, handEnv), handWhere))
+            if (!Passes(ask.Condition, EvalCtx(box, null, handEnv), "hand", ask.Hand))
             {
                 return (new List<CardEntry>(), handEnv);
             }
@@ -975,7 +1003,7 @@ namespace StoryletStudio.StoryletEngine
             var gateOk = new Dictionary<string, bool>();
             foreach (var deck in box.Decks)
             {
-                gateOk[deck.Id] = Passes(deck.Condition, EvalCtx(box, deck, handEnv), $"deck {deck.GameId} gate");
+                gateOk[deck.Id] = Passes(deck.Condition, EvalCtx(box, deck, handEnv), "deck", deck);
             }
 
             var turn = _turnCounts.GetOrDefault(box.Id);
@@ -1018,11 +1046,10 @@ namespace StoryletStudio.StoryletEngine
                         continue;
                     }
                     var ctx = deckCtx;
-                    // The label is only read when an eval THROWS and only when
-                    // tracing, so interpolating it per card was waste on the path
-                    // that matters.
-                    if (card.Condition != null && !Passes(card.Condition, ctx,
-                        Tracing ? $"card {card.GameId} condition" : null))
+                    // The label is only built when an eval THROWS, so
+                    // interpolating it per card would be waste on the path that
+                    // matters.
+                    if (card.Condition != null && !Passes(card.Condition, ctx, "card", card))
                     {
                         Verdict(card, TraceVerdict.Condition);
                         continue;
@@ -1214,6 +1241,111 @@ namespace StoryletStudio.StoryletEngine
             return DealMany(new[] { handRef }).GetOrDefault(Model.EffectiveGameId(found.Hand)) ?? new List<DealtCard>();
         }
 
+        /// <summary>Drop the cards a hand holds that are no longer available to
+        /// it, as a deal does before it fills, and add to `evicted` (when given)
+        /// which went and why: the deal's first pass, and the load's check of
+        /// what it put back (<see cref="DropUnqualified"/>).</summary>
+        private void EvictUnavailable(Hand hand, Box box, List<EvictEvent> evicted)
+        {
+            var ask = AskForHand(hand, box);
+            var handEnv = BuildHandEnv(ask);
+            var conditionOk = Passes(ask.Condition, EvalCtx(box, null, handEnv), "hand", hand);
+            var gateOk = new Dictionary<string, bool>();
+            // ONE context per deck, serving the gate and then every held card
+            // of that deck, rather than a fresh one per surviving card: box,
+            // deck and handEnv do not vary, and a condition is a read-only
+            // gate (schema 3.1), as RunAsk's per-deck context already relies on.
+            var deckCtx = new Dictionary<string, EvalContext>();
+            foreach (var deck in box.Decks)
+            {
+                var ctx = EvalCtx(box, deck, handEnv);
+                deckCtx[deck.Id] = ctx;
+                gateOk[deck.Id] = Passes(deck.Condition, ctx, "deck", deck);
+            }
+            var turn = _turnCounts.GetOrDefault(box.Id);
+            // The card is named by gameId (4.4). A card the build no longer
+            // has - the "vanished" branch below - has no gameId left, so it
+            // is named by the id the board carries, which is the rule a load
+            // report has always used for the same reason.
+            bool Evict(string cardId, string reason)
+            {
+                if (evicted != null)
+                {
+                    var known = _engine._cardsById.GetOrDefault(cardId);
+                    evicted.Add(new EvictEvent
+                    {
+                        Hand = Model.EffectiveGameId(hand),
+                        Card = known != null ? Model.EffectiveGameId(known.Card) : cardId,
+                        Reason = reason,
+                    });
+                }
+                return false;
+            }
+            var contents = _boardContents.GetOrDefault(hand.Id) ?? new List<string>();
+            var survivors = contents.Where(cardId =>
+            {
+                if (!conditionOk) return Evict(cardId, "hand-condition");
+                var entry = _engine._cardsById.GetOrDefault(cardId);
+                if (entry == null) return Evict(cardId, "vanished");   // edited content: dropped
+                // Its deck is in ANOTHER box now (a load, resume or hot swap
+                // into an edited build): gone from this hand's box, as a
+                // deleted card is (ruling D). Before the gate and context
+                // lookups below, which are keyed by this box's decks and
+                // threw on it.
+                if (entry.Box.Id != box.Id) return Evict(cardId, "vanished");
+                if (!gateOk[entry.Deck.Id]) return Evict(cardId, VerdictWire(TraceVerdict.DeckGate));
+                // Taken out of the world by somebody's shared one-shot (ruling
+                // C): checked where the fill checks it, after the gate and
+                // before this flow's own clock, so a card one playthrough
+                // holds goes once another has spent it, as a cooldown evicts.
+                if (CardIsShared(entry.Card, entry.Deck.Shared ?? false) && _engine.IsTaken(cardId))
+                {
+                    return Evict(cardId, VerdictWire(TraceVerdict.Taken));
+                }
+                if (_cooldowns.GetOrDefault(cardId) > turn) return Evict(cardId, VerdictWire(TraceVerdict.Cooldown));
+                if (!TagsMatch(entry.Card, handEnv.BoundTags)) return Evict(cardId, VerdictWire(TraceVerdict.Tags));
+                // No condition passes outright, which is what Passes answers
+                // for null. The label is only built when an eval THROWS.
+                if (entry.Card.Condition == null) return true;
+                if (!Passes(entry.Card.Condition, deckCtx[entry.Deck.Id], "card", entry.Card))
+                {
+                    return Evict(cardId, VerdictWire(TraceVerdict.Condition));
+                }
+                return true;
+            }).ToList();
+            _boardContents.Set(hand.Id, survivors);
+        }
+
+        /// <summary>After a load puts this flow's board back, drop every held
+        /// card that no longer qualifies, as a deal would (the hands-on review,
+        /// 2026-10, foundation 7: a save from before a content edit could put
+        /// back a card whose condition is now false, and nothing said so).
+        /// Every hand, in id order, on a copy of the flow's generator, so the
+        /// check draws nothing and the next deal is exactly what it would have
+        /// been. Each entry is named by hand and card Game ID; Flow is left for
+        /// the caller.</summary>
+        internal List<LoadEviction> DropUnqualified()
+        {
+            var own = _prng;
+            _prng = new Mulberry32(own.State);
+            try
+            {
+                var handIds = new List<string>(_engine._handsById.Keys);
+                handIds.Sort(StringComparer.Ordinal);
+                var evicted = new List<EvictEvent>();
+                foreach (var handId in handIds)
+                {
+                    var found = _engine._handsById.GetOrDefault(handId);
+                    EvictUnavailable(found.Hand, found.Box, evicted);
+                }
+                return evicted.Select(e => new LoadEviction { Hand = e.Hand, Card = e.Card, Reason = e.Reason }).ToList();
+            }
+            finally
+            {
+                _prng = own;
+            }
+        }
+
         /// <summary>Re-deal several / all hands (schema 3.5): seeded hand-order
         /// shuffle (fairness), evict, seed the ledger from survivors, fill in
         /// order. Returns the dealt slice - the new contents of exactly the hands
@@ -1236,86 +1368,20 @@ namespace StoryletStudio.StoryletEngine
             Prng.ShuffleInPlace(dealt, _prng);
 
             // Eviction first: drop dealt cards no longer available to their hand
-            // (minus the claims check against their own seat).
+            // (minus the claims check against their own seat). Trace events fire
+            // after the state they report has landed (a handler reading the board
+            // sees the eviction), so they are collected per hand and emitted once
+            // its survivors are set. One list for the whole deal, and none at
+            // all when nothing is tracing.
+            var evicted = Tracing ? new List<EvictEvent>() : null;
             foreach (var handInBox in dealt)
             {
-                var hand = handInBox.Hand;
-                var box = handInBox.Box;
-                var ask = AskForHand(hand, box);
-                var handEnv = BuildHandEnv(ask);
-                var conditionOk = Passes(ask.Condition, EvalCtx(box, null, handEnv));
-                var gateOk = new Dictionary<string, bool>();
-                // ONE context per deck, serving the gate and then every held card
-                // of that deck, rather than a fresh one per surviving card: box,
-                // deck and handEnv do not vary, and a condition is a read-only
-                // gate (schema 3.1), as RunAsk's per-deck context already relies on.
-                var deckCtx = new Dictionary<string, EvalContext>();
-                foreach (var deck in box.Decks)
+                EvictUnavailable(handInBox.Hand, handInBox.Box, evicted);
+                if (evicted != null && evicted.Count > 0)
                 {
-                    var ctx = EvalCtx(box, deck, handEnv);
-                    deckCtx[deck.Id] = ctx;
-                    gateOk[deck.Id] = Passes(deck.Condition, ctx);
-                }
-                var turn = _turnCounts.GetOrDefault(box.Id);
-                // Trace events fire after the state they report has landed (a
-                // handler reading the board sees the eviction), so they are
-                // collected here and emitted once the survivors are set.
-                var evicted = new List<EvictEvent>();
-                // The card is named by gameId (4.4). A card the build no longer
-                // has - the "vanished" branch below - has no gameId left, so it
-                // is named by the id the board carries, which is the rule a load
-                // report has always used for the same reason.
-                bool Evict(string cardId, string reason)
-                {
-                    if (Tracing)
-                    {
-                        var known = _engine._cardsById.GetOrDefault(cardId);
-                        evicted.Add(new EvictEvent
-                        {
-                            Hand = Model.EffectiveGameId(hand),
-                            Card = known != null ? Model.EffectiveGameId(known.Card) : cardId,
-                            Reason = reason,
-                        });
-                    }
-                    return false;
-                }
-                var contents = _boardContents.GetOrDefault(hand.Id) ?? new List<string>();
-                var survivors = contents.Where(cardId =>
-                {
-                    if (!conditionOk) return Evict(cardId, "hand-condition");
-                    var entry = _engine._cardsById.GetOrDefault(cardId);
-                    if (entry == null) return Evict(cardId, "vanished");   // edited content: dropped
-                    // Its deck is in ANOTHER box now (a load, resume or hot swap
-                    // into an edited build): gone from this hand's box, as a
-                    // deleted card is (ruling D). Before the gate and context
-                    // lookups below, which are keyed by this box's decks and
-                    // threw on it.
-                    if (entry.Box.Id != box.Id) return Evict(cardId, "vanished");
-                    if (!gateOk[entry.Deck.Id]) return Evict(cardId, VerdictWire(TraceVerdict.DeckGate));
-                    // Taken out of the world by somebody's shared one-shot (ruling
-                    // C): checked where the fill checks it, after the gate and
-                    // before this flow's own clock, so a card one playthrough
-                    // holds goes once another has spent it, as a cooldown evicts.
-                    if (CardIsShared(entry.Card, entry.Deck.Shared ?? false) && _engine.IsTaken(cardId))
-                    {
-                        return Evict(cardId, VerdictWire(TraceVerdict.Taken));
-                    }
-                    if (_cooldowns.GetOrDefault(cardId) > turn) return Evict(cardId, VerdictWire(TraceVerdict.Cooldown));
-                    if (!TagsMatch(entry.Card, handEnv.BoundTags)) return Evict(cardId, VerdictWire(TraceVerdict.Tags));
-                    // No condition passes outright, which is what Passes answers
-                    // for null, so such a card skips the label too. The label is
-                    // only read when an eval THROWS while tracing.
-                    if (entry.Card.Condition == null) return true;
-                    if (!Passes(entry.Card.Condition, deckCtx[entry.Deck.Id], Tracing ? $"card {entry.Card.GameId} condition" : null))
-                    {
-                        return Evict(cardId, VerdictWire(TraceVerdict.Condition));
-                    }
-                    return true;
-                }).ToList();
-                _boardContents.Set(hand.Id, survivors);
-                if (Tracing)
-                {
+                    var turn = _turnCounts.GetOrDefault(handInBox.Box.Id);
                     foreach (var e in evicted) Emit(e, turn);
+                    evicted.Clear();
                 }
             }
 
@@ -1438,7 +1504,7 @@ namespace StoryletStudio.StoryletEngine
                 Purpose = o.Purpose,
                 Fields = Handed.Fields(o.Fields),
                 Extensions = Handed.Extensions(o.Extensions),
-                Available = Passes(o.Condition, ctx),
+                Available = Passes(o.Condition, ctx, "outcome", entry.Card, o),
             }).ToList();
         }
 
@@ -1474,7 +1540,7 @@ namespace StoryletStudio.StoryletEngine
 
             var handEnv = BuildHandEnv(ask);
             var ctx = EvalCtx(entry.Box, entry.Deck, handEnv);
-            if (outcome != null && !Passes(outcome.Condition, ctx))
+            if (outcome != null && !Passes(outcome.Condition, ctx, "outcome", entry.Card, outcome))
             {
                 throw new StoryletError($"outcome \"{outcomeGameId}\" on \"{Model.EffectiveGameId(entry.Card)}\" is gated shut");
             }
@@ -1866,6 +1932,7 @@ namespace StoryletStudio.StoryletEngine
             var parts = path.Split('.');
             if (parts.Length == 2 && parts[0] == "world")
             {
+                _engine.CheckHostWrite(path, parts, null, value);
                 if (!_engine.WorldCanSet) throw new StoryletError("@world is read-only here: the host bound no write");
                 _engine.WorldSet(parts[1], value, host: true);
                 return;
@@ -1878,6 +1945,7 @@ namespace StoryletStudio.StoryletEngine
             }
             (PropertyBag Own, PropertyBag Shared) halves;
             string name;
+            string ownerId = null;
             if (parts.Length == 2 && parts[0] == "story")
             {
                 halves = HalvesOf("story", null);
@@ -1885,7 +1953,8 @@ namespace StoryletStudio.StoryletEngine
             }
             else if (parts.Length == 3 && Engine.IsOwnedKind(parts[0]))
             {
-                halves = HalvesOf(parts[0], ResolveOwner(parts[0], parts[1], parts[2]));
+                ownerId = ResolveOwner(parts[0], parts[1], parts[2]);
+                halves = HalvesOf(parts[0], ownerId);
                 if (halves.Own == null && halves.Shared == null) throw new StoryletError($"no {parts[0]} store \"{parts[1]}\"");
                 name = parts[2];
             }
@@ -1893,6 +1962,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 throw new StoryletError($"bad property path \"{path}\"");
             }
+            _engine.CheckHostWrite(path, parts, ownerId, value);
             // The same routing a play's writes take (PlanBag), so the two can
             // never disagree about which half a name lives in.
             var bag = DeclaringBag(halves, name, path);
@@ -1956,9 +2026,22 @@ namespace StoryletStudio.StoryletEngine
                 foreach (var pair in _stores.Value) props.Value.Set(pair.Key, pair.Value.Save());
                 save.Props = props;
             }
-            foreach (var pair in _turnCounts) save.Turns.Set(pair.Key, pair.Value);
-            foreach (var pair in _cooldowns) save.Cooldowns.Set(pair.Key, pair.Value);
-            foreach (var pair in _boardContents) save.Board.Set(pair.Key, new List<string>(pair.Value));
+            // Keyed by Game ID (save version 3; see Engine.SavedCard): the turns
+            // by box, the cooldowns by card, the board by hand with its cards,
+            // in the order the flow holds them, then in JS object order (ruling
+            // E: a Game ID may be all digits), so the bytes match the
+            // reference's.
+            foreach (var pair in _turnCounts) save.Turns.Set(_engine.BoxKey(pair.Key), pair.Value);
+            foreach (var pair in _cooldowns) save.Cooldowns.Set(_engine.CardKey(pair.Key), pair.Value);
+            foreach (var pair in _boardContents)
+            {
+                var cards = new List<string>(pair.Value.Count);
+                foreach (var cardId in pair.Value) cards.Add(_engine.CardKey(cardId));
+                save.Board.Set(_engine.HandKey(pair.Key), cards);
+            }
+            save.Turns = Model.InJsKeyOrder(save.Turns);
+            save.Cooldowns = Model.InJsKeyOrder(save.Cooldowns);
+            save.Board = Model.InJsKeyOrder(save.Board);
             foreach (var record in _playLog)
             {
                 save.PlayLog.Add(new PlayRecord { Card = record.Card, Outcome = record.Outcome, Turn = record.Turn });

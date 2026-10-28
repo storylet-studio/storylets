@@ -206,8 +206,12 @@ function restore() {
         return false;
     try {
         const s = JSON.parse(raw);
+        // The saved world goes in first, since the load checks the hand it puts
+        // back against it; a refused load puts the old world back.
+        const before = Object.fromEntries(world.values);
         world.load(s.world ?? {});
-        deserializeState(storylets, s.storylets);
+        try { deserializeState(storylets, s.storylets); }
+        catch (e) { world.load(before); throw e; }
         if (typeof s.patter === "string")
             patterDeserialize(patter, s.patter);
         else
@@ -305,7 +309,10 @@ function render() {
         stage.replaceChildren(p);
     }
     else {
-        const cards = story.deal(at).map((card) => {
+        // READ from the board, never dealt here: the actions deal (arriving, a
+        // card played, time passing), so a redraw changes nothing and a save
+        // holds the hand on screen.
+        const cards = (story.board()[at] ?? []).map((card) => {
             const b = document.createElement("button");
             b.className = "card";
             b.textContent = card.title ?? card.gameId;

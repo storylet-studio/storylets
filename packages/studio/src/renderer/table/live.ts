@@ -11,14 +11,14 @@ import { LIVE_LOG_CAP } from "../../shared/api.js";
 import type { LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
 import type { LiveLinkFrame } from "../../shared/api.js";
 import { whyNotOf } from "./model.js";
-import type { WhyNot } from "./model.js";
+import type { CardLabel, WhyNot } from "./model.js";
 
 export interface LiveRunDeps {
   /** The box a hand belongs to (both gameIds), for stamping a deal with its
    *  clock; undefined for a hand the Board's bundle does not know. */
   handBox: (handGameId: string) => string | undefined;
   /** A card's display label from its id, for the why-panel. */
-  label: (cardId: string) => { gameId: string; title?: string };
+  label: (cardId: string) => CardLabel;
 }
 
 /** What one frame changed that the window may want to act on: the cards the

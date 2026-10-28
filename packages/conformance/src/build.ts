@@ -62,8 +62,24 @@ import type {
  *  17: what the engine hands a host is a copy (the hands-on review, 2026-10, foundation 6): the op
  *  `scribble` defaces every dealt card's, outcome's and box's fields and extension values in place, and
  *  the card-field, outcome-field and extensions cases assert the bundle's values again after it. No
- *  earlier expectation changed. */
-export const CORPUS_VERSION = 17;
+ *  earlier expectation changed.
+ *  18: what the game hands in is checked (the hands-on review, 2026-10, foundation 5): a host write that
+ *  does not fit its declaration, or names an undeclared @world property, is refused with what it takes;
+ *  a load case's bundle may be JSON `null` or lack top-level parts (`drop`), and is refused by what is
+ *  wrong; the op `loadEnvelope` hands `loadGame` a broken envelope; and the engine reports a condition it
+ *  could not evaluate to an `onError` the runner records, pinned by `deal`'s `expectPlayErrors`. No
+ *  earlier expectation changed.
+ *  19: a save names cards, hands and boxes by Game ID (save version 3; the hands-on review, 2026-10,
+ *  foundation 7), as its play log always did: a load reads each key as a Game ID first and an internal
+ *  id second, and a load report names a vanished card or hand by the key the save carries, now its Game
+ *  ID (the drifted-save, edited-away, park-and-resume, previewLoad, hand-vanished and spent-shared cases
+ *  changed to say so). New: a card made again under the same Game ID keeps its place, its cooldown and
+ *  its play count.
+ *  20: a load checks every held card it puts back as a deal would, when the envelope carries the values,
+ *  and drops what no longer qualifies with a deal's reason in the report's `evicted` (the hands-on review,
+ *  2026-10, foundation 7); previewLoad says the same. The moved-deck case's card now goes at the load,
+ *  not the next deal. New: a load drops a held card that no longer qualifies, and says why. */
+export const CORPUS_VERSION = 20;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
@@ -417,9 +433,17 @@ export function buildCorpus(fixtures: Fixtures): Corpus {
       const bundle = expandBundle(f);
       return {
         name: f.name,
-        bundle: f.schema === undefined ? bundle : ({ ...bundle, schema: f.schema } as Bundle),
+        bundle: f.nullBundle === true ? null : withoutParts(f.schema === undefined ? bundle : ({ ...bundle, schema: f.schema } as Bundle), f.drop),
         expectRefused: f.expectRefused,
       };
     }),
   };
+}
+
+/** A bundle with some of its top-level parts left out (a load case's `drop`). */
+function withoutParts(bundle: Bundle, drop: string[] | undefined): Bundle {
+  if (drop === undefined) return bundle;
+  const out: Record<string, unknown> = { ...bundle };
+  for (const part of drop) delete out[part];
+  return out as unknown as Bundle;
 }

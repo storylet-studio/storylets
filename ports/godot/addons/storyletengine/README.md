@@ -17,8 +17,10 @@ addons/storyletengine/
   storyletengine_plugin.gd   # EditorPlugin: registers the .storyletsc importer
   storylet_debug.gd          # StoryletDebug - the static engine registry
   runtime/                   # the pure GDScript runtime (works with the plugin disabled)
-    values.gd mulberry32.gd ast.gd expression.gd dialect.gd specificity.gd
-    property_bag.gd scope_registry.gd bundle.gd engine.gd flow.gd save.gd
+    values.gd mulberry32.gd expression.gd dialect.gd specificity.gd
+    property_bag.gd scope_registry.gd bundle.gd describe_bundle.gd
+    engine.gd flow.gd save.gd state_logger.gd
+    expr/                    # the expression kernel, shared with Patterplay
     live_link.gd             # StoryletLiveLink - the Storyletter Live Link client (debug builds)
   editor/                    # the .storyletsc import plugin + bundle resource
   ui/                        # StoryletStatePanel - the in-game examiner
@@ -80,7 +82,8 @@ diagnostic; never a silent pass, never a crash.
   defaults to `copies`.
 - **Save / load**: `engine.save_game()` / `engine.load_game(envelope)`
   snapshot and restore the whole run, every open flow included. The envelope
-  is `storylets/save@2`; `storylets/save@1` envelopes and files still load.
+  is `storylets/save@3`, naming cards, hands and boxes by Game ID;
+  `storylets/save@2` and `storylets/save@1` envelopes and files still load.
   `StoryletSave.serialize_state` / `deserialize_state` are the
   `.storyletsave` string boundary: a foreign, malformed or wrong-project blob
   is refused instead of corrupting a run.
@@ -133,12 +136,13 @@ diagnostic; never a silent pass, never a crash.
 
 ## Exporting your game
 
-Godot's export silently drops non-resource files from the `.pck`, and that
-includes raw `.storyletsc` bundles: add `*.storyletsc` to your export
-preset's **Resources > "Filters to export non-resource files/folders"** or
-any bundle you read with `FileAccess` at runtime (the demo does this, and so
-does DLC-style loading) will be missing from the exported game. Bundles you
-reference only through the importer (`load("res://....storyletsc")`) ship as
-their imported resources, but keeping the filter is the safe habit.
+With the plugin enabled there's nothing to configure: the addon's export hook
+puts each raw `.storyletsc` into the exported build at its original path, so
+`FileAccess.get_file_as_string("res://story.storyletsc")` reads the same bytes
+in the editor and in the export, on every platform.
+
+With the plugin disabled, Godot treats a `.storyletsc` as a non-resource file
+and leaves it out of the export: add `*.storyletsc` to your export preset's
+**Resources > "Filters to export non-resource files/folders"**.
 
 Changes per release: [CHANGELOG.md](CHANGELOG.md).

@@ -78,8 +78,11 @@ func go(place: String) -> void:
 	at = place; playing = null
 	if place != "": story.deal(place)
 
+## What the place offers now: READ from the board, never dealt here. The
+## actions deal (arriving, a card played, time passing), so a redraw changes
+## nothing, and a save holds the hand on screen.
 func hand() -> Array:
-	return story.deal(at) if at != "" else []
+	return story.board().get(at, []) if at != "" else []
 
 ## Pick a card: the storylet side has chosen the beat, so Patter performs it.
 ## The scene is found BY NAME, the card's own gameId.
@@ -204,9 +207,16 @@ func save() -> Dictionary:
 	return env
 
 func load(env: Dictionary) -> bool:
+	if not env.has("storylets"): return false
+	# The saved world goes in first, since the load checks the hand it puts
+	# back against it; a refused load puts the old world back, so the game is
+	# left as it was.
+	var before: Dictionary = world.duplicate()
 	var loaded: Dictionary = env.get("world", world).duplicate()
 	world.clear(); world.merge(loaded)
-	if StoryletSave.deserialize_state(story_engine, str(env["storylets"])) == null and not env.has("storylets"): return false
+	if StoryletSave.deserialize_state(story_engine, str(env["storylets"])) == null:
+		world.clear(); world.merge(before)
+		return false
 	var pt = env["patter"]
 	var patter_ok := PatterSave.deserialize_state(patter, pt) if pt is String else true
 	if not (pt is String): patter.load_game(pt)

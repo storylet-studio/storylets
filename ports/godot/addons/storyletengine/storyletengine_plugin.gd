@@ -1,7 +1,7 @@
 @tool
 extends EditorPlugin
 
-# The Storylet Engine runtime is plain GDScript (StoryletSession / StoryletBundle
+# The Storylet Engine runtime is plain GDScript (StoryletFlow / StoryletBundle
 # / ...), usable with or without enabling this plugin. The EditorPlugin exists so
 # the addon installs tidily, to register the .storyletsc import plugin (which
 # turns compiled bundles into first-class StoryletBundleResource assets in the

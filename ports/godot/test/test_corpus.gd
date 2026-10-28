@@ -529,7 +529,9 @@ func _run_peek(cases: Array) -> int:
 		var name: String = c["name"]
 		# The seed as the corpus gives it: the engine reduces it as JS's toUint32
 		# does, and int() here would clamp one of 2^63 or more first.
-		var engine := StoryletEngine.create(c["bundle"], {"seed": c.get("seed", 0)})
+		# A no-op on_error, as runner.ts passes: a condition that fails in a peek
+		# case is the case's business, not a warning on the run's output.
+		var engine := StoryletEngine.create(c["bundle"], {"seed": c.get("seed", 0), "on_error": func(_e: Dictionary) -> void: pass})
 		if engine == null:
 			_fail("peek", name, "engine refused its options")
 			continue
@@ -569,12 +571,13 @@ func _run_peek(cases: Array) -> int:
 # and push_errors the reason, which is the engine's _init_error, so the case
 # asks create() for the null and a probe built with new() for the reason, the
 # way the one-registry checks read a refused registration. Each expected string
-# must appear in that reason.
+# must appear in that reason. The bundle is untyped: from corpus 18 it may be a
+# JSON null, or lack top-level parts.
 func _run_load(cases: Array) -> int:
 	var pass_count := 0
 	for c in cases:
 		var name: String = c["name"]
-		var bundle: Dictionary = c["bundle"]
+		var bundle = c["bundle"]
 		if StoryletEngine.create(bundle, {"seed": 0}) != null:
 			_fail("load", name, "expected the engine to refuse the bundle at construction, it was accepted")
 			continue
@@ -623,7 +626,14 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	var failures: Array = []
 	var bundle: Dictionary = c["bundle"]
 	var seed = c.get("seed", 0)
-	var first_engine := StoryletEngine.create(bundle, {"seed": seed})
+	# What the engine reported to its on_error (corpus 18), as `node`s, reset per
+	# op as the trace sinks are. Every engine the script creates is opened with
+	# it, as runner.ts does. The sink lives in a holder because GDScript lambdas
+	# capture by VALUE; rc.clear() at the end breaks the cycle it makes.
+	var play_errors := {"nodes": []}
+	var on_error := func(e: Dictionary) -> void: (play_errors["nodes"] as Array).append(str(e["node"]))
+	var engine_opts := {"seed": seed, "on_error": on_error}
+	var first_engine := StoryletEngine.create(bundle, engine_opts)
 	if first_engine == null:
 		_case_finished = true
 		return ["engine refused its options"]
@@ -640,7 +650,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	# outside the engine for the reason a parked blob is: a pocket and an
 	# installation's memory outlive the run.
 	var rc := {"engine": first_engine, "handles": {}, "parked": {},
-		"running": bundle, "pockets": {}, "memory": null}
+		"running": bundle, "pockets": {}, "memory": null, "play_errors": play_errors}
 	var names := _hand_game_ids(bundle)
 
 	# Verdicts from the deal or peek an op just ran, card id -> verdict, taken
@@ -747,6 +757,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			"setState":
 				rc["diagnostics"] = []
 				rc["traces"] = []
+				play_errors["nodes"] = []
 				var write_refused := _apply_state(session, op)
 				check_diagnostic.call(at, op, failures)
 				check_refused.call(at, op, write_refused, failures)
@@ -755,6 +766,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				rc["verdicts"] = {}
 				rc["diagnostics"] = []
 				rc["traces"] = []
+				play_errors["nodes"] = []
 				# A JSON null cap is passed through as null, never dropped: it is a
 				# different cap from an absent one (it returns nothing).
 				var list := session.peek(op.get("box", "box"), op.get("criteria", {}), op["n"] if op.has("n") else INF)
@@ -774,10 +786,20 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				rc["verdicts"] = {}
 				rc["diagnostics"] = []
 				rc["traces"] = []
+				play_errors["nodes"] = []
 				var dealt := session.deal_many(op.get("hands"))
 				check_verdicts.call(at, op, failures)
 				check_diagnostic.call(at, op, failures)
 				check_trace.call(at, op, failures)
+				if op.has("expectPlayErrors"):
+					# The distinct nodes on_error was told of, sorted (corpus 18).
+					var reported: Array = []
+					for node in play_errors["nodes"]:
+						if not reported.has(node):
+							reported.append(node)
+					reported.sort()
+					if not _same_list(reported, op["expectPlayErrors"]):
+						failures.append("%s: on_error expected %s, got %s" % [at, _show_list(op["expectPlayErrors"]), _show_list(reported)])
 				for hand_id in op.get("expectBoard", {}):
 					var the_board := session.board()
 					var key: String = names.get(hand_id, hand_id)
@@ -1039,7 +1061,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				# load_game rebuilds every flow, so the handles are re-taken.
 				var envelope: Dictionary = (rc["engine"] as StoryletEngine).save_game()
 				var into: Dictionary = c["bundleB"] if op.get("into") == "B" else bundle
-				var next_engine := StoryletEngine.create(into, {"seed": seed})
+				var next_engine := StoryletEngine.create(into, engine_opts)
 				if op.get("previewOnly", false):
 					# The purity claim, checked rather than asserted: the engine
 					# that was asked what a load would cost writes the same
@@ -1129,7 +1151,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				# crosses is what the script kept, and only through the durable
 				# verbs.
 				rc["running"] = c["bundleB"] if op.get("into") == "B" else bundle
-				rc["engine"] = StoryletEngine.create(rc["running"], {"seed": seed})
+				rc["engine"] = StoryletEngine.create(rc["running"], engine_opts)
 				rc["handles"] = {}
 				if rc["memory"] != null:
 					var loaded := (rc["engine"] as StoryletEngine).load_durable(rc["memory"])
@@ -1170,9 +1192,26 @@ func _run_scripted_case(c: Dictionary) -> Array:
 							_check_report(at, op.get("expectReport"), reported, failures)
 
 			"reset":
-				rc["engine"] = StoryletEngine.create(bundle, {"seed": seed})
+				rc["engine"] = StoryletEngine.create(bundle, engine_opts)
 				rc["running"] = bundle
 				rc["handles"] = {}
+
+			"loadEnvelope":
+				# Raw JSON that need not be a save at all, handed to a fresh
+				# engine's load_game (corpus 18). GDScript has no exceptions:
+				# load_game returns {} and push_errors the reason, which is
+				# _unreadable_save_error's, so the case asks load_game for the {}
+				# and that probe for the reason, as the load family reads
+				# _init_error.
+				var envelope_in = op["envelope"]
+				var loaded := StoryletEngine.create(bundle, engine_opts).load_game(envelope_in)
+				if not loaded.is_empty():
+					failures.append("%s: expected the envelope to be refused, it was loaded" % at)
+				else:
+					var reason := StoryletEngine._unreadable_save_error(envelope_in)
+					for want in op["expectRefused"]:
+						if not reason.contains(str(want)):
+							failures.append('%s: expected the refusal to name "%s", got "%s"' % [at, str(want), reason])
 
 			_:
 				failures.append("%s: unknown op" % at)

@@ -7,6 +7,15 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A save holds the hand on screen.** Every host dealt the place's hand each time it drew the screen, after the
+  game had saved, so a save never held the hand the player was looking at and a load dealt a different one. The
+  hand is now read from the board, and only the game's actions deal (arriving, a card played, time passing), in all
+  four hosts.
+- **A refused load leaves the game as it was.** A save the engine refused still replaced the world first; the old
+  world now goes back.
+
 ## [0.9.1] - 2026-10-27
 
 ### Fixed

@@ -43,7 +43,7 @@
 class_name StoryletEngine
 extends RefCounted
 
-const CREATE_OPTION_KEYS := ["seed", "log", "world", "registry", "on_replaced_flow"]
+const CREATE_OPTION_KEYS := ["seed", "log", "world", "registry", "on_replaced_flow", "on_error"]
 ## The owner label on everything this engine registers: named in a clash error
 ## and carried on the registry's examiner rows.
 const OWNER := "Storylet Engine"
@@ -151,6 +151,9 @@ var _self_world := false
 ## registry turned down, a token clash. create() returns null when it is set.
 var _init_error := ""
 var _on_replaced_flow = null
+## The game's "on_error" Callable(error: Dictionary), told of every condition a
+## flow could not evaluate and counted as false; null for the default warning.
+var _on_error = null
 ## Every OTHER scope in the registry as an eval context sees it (instance keys
 ## left out), rebuilt only when the registry's revision moves.
 var _view_revision := -1
@@ -355,7 +358,12 @@ func legacy_address_message(kind: String, segment: String, name: String) -> Stri
 ## flow's PRNG default), "log": bool | {"cap": int} (per-flow retained
 ## logs), "world": {"get": Callable, "set": Callable?} (the host's @world
 ## resolver, never saved), "registry": StoryletScopeRegistry (the game's one
-## registry)}. Unknown option keys are an error: returns null with push_error.
+## registry), "on_error": Callable(error: Dictionary) (told of every condition
+## a deal could not evaluate and counted as false, whether or not anything is
+## tracing: {"flow", "kind": "condition", "node", "source" (when the bundle
+## carries it), "message"}, Patterplay's on_error shape; default, a
+## push_warning)}. Unknown option keys are an error: returns null with
+## push_error.
 ##
 ## "registry" is the game's ONE registry, holding every engine's properties
 ## except those the game keeps itself, saved once. Given one, the engine
@@ -374,7 +382,7 @@ func legacy_address_message(kind: String, segment: String, name: String) -> Stri
 ## does a bundle this engine cannot read faithfully: a schema tag it does not
 ## know, or a project map whose rules the bundle breaks
 ## (design/project-map-contract.md 3.8; see _unreadable_bundle_error).
-static func create(bundle: Dictionary, opts: Dictionary = {}) -> StoryletEngine:
+static func create(bundle, opts: Dictionary = {}) -> StoryletEngine:
 	var bad := _options_error(opts)
 	if bad != "":
 		push_error("StoryletEngine.create: " + bad)
@@ -399,12 +407,22 @@ static func create(bundle: Dictionary, opts: Dictionary = {}) -> StoryletEngine:
 ## missing. Only what would make the engine's OWN resolution ambiguous or
 ## wrong is refused here; the compiler's bundle-wide group-name rule is
 ## stricter.
-static func _unreadable_bundle_error(bundle: Dictionary) -> String:
+static func _unreadable_bundle_error(bundle) -> String:
+	# Not an object at all (create(null), a bundle file read as text): said
+	# plainly, rather than as whichever part the engine reached for first (the
+	# hands-on review, 2026-10, foundation 5).
+	if not (bundle is Dictionary):
+		return "not a Storylets bundle: expected an object, got %s" % _describe_input(bundle)
 	# The schema tag (D4). Alone and first: a bundle of a schema this runtime
 	# does not know may not have any of the shape the rest reads.
 	var schema_refused := StoryletBundle.schema_error(bundle)
 	if schema_refused != "":
 		return schema_refused
+	# The parts every bundle of a known schema has, by name: a bundle missing
+	# one is cut short or hand-built, and would fail later as a script error.
+	var missing := _bundle_shape_problems(bundle)
+	if not missing.is_empty():
+		return "not a complete Storylets bundle: " + "; ".join(missing)
 	var problems: Array[String] = []
 	var map = bundle.get("map")
 	var group = map["group"] if map is Dictionary else null
@@ -468,6 +486,39 @@ static func _unreadable_bundle_error(bundle: Dictionary) -> String:
 	return "bundle refused: " + "; ".join(problems)
 
 
+## What a refused input was, for the message, as the reference says it: "null",
+## "an array", "a string", "a number", "a boolean".
+static func _describe_input(value) -> String:
+	if value == null:
+		return "null"
+	if value is Array:
+		return "an array"
+	if value is String or value is StringName:
+		return "a string"
+	if value is bool:
+		return "a boolean"
+	if value is int or value is float:
+		return "a number"
+	return "a " + type_string(typeof(value))
+
+
+## The parts of a bundle the engine reads before anything else, each named with
+## what it should be; empty when they are all there.
+static func _bundle_shape_problems(bundle: Dictionary) -> Array[String]:
+	var problems: Array[String] = []
+	if not (bundle.get("content") is Dictionary):
+		problems.append("no content")
+	if not (bundle.get("settings") is Dictionary):
+		problems.append("no settings")
+	for scope in ["story", "world"]:
+		var part = bundle.get(scope)
+		if not (part is Dictionary) or not ((part as Dictionary).get("properties") is Array):
+			problems.append("no %s properties" % scope)
+	if not (bundle.get("boxes") is Array):
+		problems.append("no boxes")
+	return problems
+
+
 ## What is wrong with create's options, or "" when nothing is.
 static func _options_error(opts: Dictionary) -> String:
 	for key in opts:
@@ -487,6 +538,8 @@ static func _options_error(opts: Dictionary) -> String:
 			return 'world option must be {"get": Callable, "set": Callable?}'
 	if opts.has("registry") and not _is_registry(opts["registry"]):
 		return "registry option must be a scope registry (StoryletScopeRegistry, or any copy of the shared one)"
+	if opts.get("on_error") != null and not (opts["on_error"] is Callable):
+		return "on_error option must be a Callable(error: Dictionary)"
 	return ""
 
 
@@ -507,11 +560,13 @@ func _notification(what: int) -> void:
 			(flow as StoryletFlow).engine_freed()
 
 
-func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
+func _init(bundle, opts: Dictionary = {}) -> void:
 	# A copy: the host's own Dictionary stays the host's, and an edit to it after
 	# create() must not change what a later hot_swap rebuilds with.
 	_creation_options = opts.duplicate()
-	_bundle = bundle
+	# Untyped, so that a null or a bundle read as text reaches the refusal below
+	# rather than a type error at the call.
+	_bundle = bundle if bundle is Dictionary else {}
 	# First, before anything is indexed or registered: a bundle this engine
 	# cannot read faithfully is refused whole (design/project-map-contract.md
 	# 3.8), and a refusal must leave the game's registry untouched.
@@ -538,6 +593,8 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 	# after load_game and discards the restored hand - get_flow is the call.
 	# Parity with the JS runtime's onReplacedFlow. Zero cost when unset.
 	_on_replaced_flow = opts.get("on_replaced_flow")
+	# The game's on_error (see create); null leaves the default push_warning.
+	_on_error = opts.get("on_error")
 
 	# The value scope's segments come off the whole bundle at once (a tag gameId
 	# is only unique within its group), so they are built before the walk rather
@@ -1164,9 +1221,12 @@ static func _is_array_index(k: String) -> bool:
 	return k.to_int() < 4294967295
 
 
-## The spent set as a sorted Array, so a save is byte-stable for a diff.
+## The spent set as the save names it, by card Game ID (save version 3; see
+## _saved_card), sorted so a save is byte-stable for a diff.
 func _spent_ids() -> Array:
-	var ids: Array = _spent.keys()
+	var ids: Array = []
+	for id in _spent:
+		ids.append(card_key(str(id)))
 	ids.sort()
 	return ids
 
@@ -1221,6 +1281,10 @@ func set_property(path: String, value) -> String:
 	if r.has("error"):
 		push_error("StoryletEngine.set_property: " + r["error"])
 		return r["error"]
+	var unfit := host_write_refusal(path, value)
+	if unfit != "":
+		push_error("StoryletEngine.set_property: " + unfit)
+		return unfit
 	if r["kind"] == "world":
 		if not world_can_set():
 			var msg := "@world is read-only here: the host bound no write"
@@ -1277,6 +1341,110 @@ func _resolve_shared(path: String) -> Dictionary:
 			return {"error": 'no %s store "%s"' % [kind, segment]}
 		return {"error": 'no property at "%s"' % path}
 	return {"error": 'bad property path "%s"' % path}
+
+
+## @internal - why a host write of `value` to `path` does not fit what the
+## content declared, or "" when it does (the hands-on review, 2026-10,
+## foundation 5): a string for a number, a value an enum or a quality does not
+## list, a flag a flags property does not, or a @world name the content never
+## declared. The rule is the kernel's value_fits, the one a load walks saved
+## values with, so a value the game may set is exactly one a save may carry.
+## Another engine's scope ("patter.x") is that engine's to check. The caller
+## has resolved the path already, so an owner segment that names nothing is its
+## refusal, not this one's.
+func host_write_refusal(path: String, value) -> String:
+	var parts := path.split(".")
+	var decl = null
+	if parts.size() == 2 and parts[0] == "world":
+		var name := parts[1]
+		var decls: Array = _bundle["world"]["properties"]
+		for d in decls:
+			if str(d["name"]) == name:
+				decl = d
+				break
+		if decl == null:
+			for d in decls:
+				if str(d["name"]).to_lower() == name.to_lower():
+					decl = d
+					break
+		if decl == null:
+			return 'no property at "%s": the content declares no @world.%s' % [path, name]
+	elif parts.size() == 2 and parts[0] == "story":
+		decl = _decl_named(_shared_decls["story"], parts[1])
+		if decl == null:
+			decl = _decl_named(_flow_decls["story"], parts[1])
+	elif parts.size() == 3 and OWNED_KINDS.has(parts[0]):
+		var owner := resolve_owner(parts[0], parts[1])
+		if not owner.has("id"):
+			return ""
+		decl = _decl_named((_shared_decls[parts[0]] as Dictionary).get(owner["id"], []), parts[2])
+		if decl == null:
+			decl = _decl_named((_flow_decls[parts[0]] as Dictionary).get(owner["id"], []), parts[2])
+	# An enum whose own default is "" (none chosen, what an editor writes for
+	# "(none)") takes "" back, so a game can put its default back.
+	if decl == null:
+		return ""
+	var none_chosen: bool = str(decl.get("type", "")) == "enum" and decl.get("default") is String and str(decl["default"]) == ""
+	if not StoryletPropertyBag.value_fits(decl, value, none_chosen):
+		return '"%s" takes %s; %s doesn\'t fit' % [path, _takes(decl), _js_json(value)]
+	return ""
+
+
+static func _decl_named(decls: Array, name: String) -> Variant:
+	for d in decls:
+		if str(d["name"]) == name:
+			return d
+	return null
+
+
+## What a declared property takes, in words, for a refused host write.
+static func _takes(decl: Dictionary) -> String:
+	var quoted := func(xs) -> String:
+		var out: Array[String] = []
+		for x in (xs if xs is Array else []):
+			out.append(JSON.stringify(str(x)))
+		return ", ".join(out)
+	match str(decl.get("type", "")):
+		"number":
+			return "a number"
+		"boolean":
+			return "true or false"
+		"enum":
+			return "one of %s" % quoted.call(decl.get("values"))
+		"flags":
+			var values = decl.get("values")
+			if values is Array and not (values as Array).is_empty():
+				return "a list of flags from %s" % quoted.call(values)
+			return "a list of flags"
+		"quality":
+			return "one of its stages %s" % quoted.call(decl.get("stages"))
+	return "text"
+
+
+## A value as JavaScript's JSON.stringify writes it, for a refusal that quotes
+## what the game handed over: a whole number with no ".0", a string quoted, a
+## list with no spaces.
+static func _js_json(value) -> String:
+	if value == null:
+		return "null"
+	if value is bool:
+		return "true" if value else "false"
+	if value is int or value is float:
+		var n := float(value)
+		return "null" if is_nan(n) or is_inf(n) else StoryletValues.js_number(n)
+	if value is String or value is StringName:
+		return JSON.stringify(str(value))
+	if value is Array or value is PackedStringArray:
+		var items: Array[String] = []
+		for item in value:
+			items.append(_js_json(item))
+		return "[" + ",".join(items) + "]"
+	if value is Dictionary:
+		var fields: Array[String] = []
+		for key in value:
+			fields.append(JSON.stringify(str(key)) + ":" + _js_json(value[key]))
+		return "{" + ",".join(fields) + "}"
+	return JSON.stringify(str(value))
 
 
 ## The engine's own surface has no flow, so an engine-level diagnostic carries
@@ -1530,9 +1698,10 @@ static func _swap_refused(message: String) -> Dictionary:
 	return {"ok": false, "error": message}
 
 
-## The whole engine's NON-property state, one envelope ("storylets/save@2"):
+## The whole engine's NON-property state, one envelope ("storylets/save@3"):
 ## the spent cards once, then every live flow (board, clocks, cooldowns, PRNG,
-## play log) keyed by its id. The property values are the registry's: a
+## play log) keyed by its id, and every card, hand and box in it named by its
+## Game ID. The property values are the registry's: a
 ## standalone engine (one that made its own registry) carries them here under
 ## "registry", self-backed @world included; a game that passed a registry
 ## saves it once itself, beside each engine's envelope.
@@ -1657,14 +1826,43 @@ func load_durable(memory) -> Dictionary:
 ## any of it (design/engine-server.md 4.9). Pure: nothing on this engine moves.
 ## A project mismatch is refused here exactly as load_game refuses it - it is
 ## the one thing neither call will tolerate - and returns {} with push_error.
-func preview_load(envelope: Dictionary) -> Dictionary:
-	var refusal := _project_mismatch(envelope)
+func preview_load(envelope) -> Dictionary:
+	var refusal := _unreadable_save_error(envelope)
 	if refusal == "":
-		refusal = _schema_mismatch(envelope)
+		refusal = _project_mismatch(envelope)
 	if refusal != "":
 		push_error("StoryletEngine.preview_load: " + refusal)
 		return {}
-	return (_plan_load(envelope)["report"] as Dictionary)
+	var plan := _plan_load(envelope)
+	if not plan.has("sections"):
+		return plan["report"]
+	# The held cards are checked against the values the envelope carries, which
+	# only a load puts in place: so the load runs on a scratch engine of its own,
+	# with its own registry, and this one is left as it was.
+	var scratch_opts := {"on_error": _ignore_errors()}
+	if _creation_options.has("seed"):
+		scratch_opts["seed"] = _creation_options["seed"]
+	if _creation_options.has("world"):
+		scratch_opts["world"] = _creation_options["world"]
+	var scratch := StoryletEngine.new(_bundle, scratch_opts)
+	var report: Dictionary = plan["report"]
+	# A load the scratch engine would refuse (content naming another engine's
+	# scope, which only the game's registry holds) falls back to the plain plan,
+	# quietly: the refusal is load_game's to make.
+	if scratch._init_error == "" and scratch._external_scope_refusal() == "":
+		var loaded := scratch.load_game(envelope)
+		if not loaded.is_empty():
+			report = loaded
+	# Every flow closed and its bags out of the scratch registry, so nothing the
+	# scratch engine made outlives this call.
+	scratch._drop_run(null)
+	return report
+
+
+## An on_error that says nothing, for preview_load's scratch engine. Made in a
+## static function, so the lambda holds no reference to the engine asking.
+static func _ignore_errors() -> Callable:
+	return func(_e): pass
 
 
 ## What open_flow(id, {"restore": saved}) would do to a flow of that name,
@@ -1678,7 +1876,8 @@ func preview_flow_restore(id: String, saved: Dictionary) -> Dictionary:
 
 ## Restore: shared state once, then every flow REBUILT from its blob.
 ## Handles held from before the load are closed and inert; take fresh ones
-## from get_flow()/flows(). Takes "storylets/save@2" and "storylets/save@1".
+## from get_flow()/flows(). Takes "storylets/save@3", "storylets/save@2" and
+## "storylets/save@1".
 ##
 ## Property values come from the registry. An envelope that carries them (a
 ## standalone engine's, or a version 1 envelope) has them walked, cleaned, and
@@ -1694,16 +1893,16 @@ func preview_flow_restore(id: String, saved: Dictionary) -> Dictionary:
 ## save (wrong project, or a schema this runtime does not read) is refused: {}
 ## with push_error, and nothing is touched. So is any load of content that names
 ## another engine's scope nothing on this registry registered.
-func load_game(envelope: Dictionary) -> Dictionary:
-	var refusal := _project_mismatch(envelope)
+func load_game(envelope) -> Dictionary:
+	var refusal := _unreadable_save_error(envelope)
+	if refusal == "":
+		refusal = _project_mismatch(envelope)
 	if refusal == "":
 		refusal = _external_scope_refusal()
-	if refusal == "":
-		refusal = _schema_mismatch(envelope)
 	if refusal != "":
 		push_error("StoryletEngine.load_game: " + refusal)
 		return {}
-	var plan := _plan_load(envelope.duplicate(true))
+	var plan := _plan_load((envelope as Dictionary).duplicate(true))
 	if plan.has("sections"):
 		# The envelope carries the values: every bag of this engine back to its
 		# defaults, then the cleaned values over them.
@@ -1727,7 +1926,27 @@ func load_game(envelope: Dictionary) -> Dictionary:
 	# here refuses.
 	for id in flows_clean:
 		_open(str(id), {}, true).restore(flows_clean[id])
-	return plan["report"]
+	var report: Dictionary = plan["report"]
+	if not plan.has("sections"):
+		return report
+	# With the values in place, every held card is checked as a deal checks it,
+	# and what no longer qualifies goes, in the report (the hands-on review,
+	# 2026-10, foundation 7). A game that loads its own registry has no values
+	# here yet: its next deal does the same.
+	var dropped: Array = []
+	for id in flows_clean:
+		var flow = _flows.get(str(id))
+		if flow == null:
+			continue
+		for e in (flow as StoryletFlow).drop_unqualified():
+			dropped.append({"flow": str(id), "hand": e["hand"], "card": e["card"], "reason": e["reason"]})
+	if dropped.is_empty():
+		return report
+	var evicted: Array = (report["evicted"] as Array).duplicate()
+	evicted.append_array(dropped)
+	report["exact"] = false
+	report["evicted"] = _sort_by_key(evicted, ["flow", "hand", "card", "reason"])
+	return report
 
 
 ## "" when the save is for this project, else the refusal message.
@@ -1738,13 +1957,21 @@ func _project_mismatch(envelope: Dictionary) -> String:
 	return ""
 
 
-## "" when this runtime reads the envelope's schema (version 2, or version 1
-## from before the registry held the properties), else the refusal message.
-static func _schema_mismatch(envelope: Dictionary) -> String:
-	var schema = envelope.get("schema")
-	if schema == StoryletBundle.SAVE_SCHEMA or schema == StoryletBundle.SAVE_SCHEMA_V1:
-		return ""
-	return "unsupported save schema: %s" % str(schema)
+## "" when this runtime can read the envelope, else the refusal, by what is
+## wrong with it, before anything reads it (the hands-on review, 2026-10,
+## foundation 5): not an object, a schema this runtime does not read (version
+## 3; version 2, keyed by internal id; or version 1 from before the registry
+## held the properties), or no content.
+static func _unreadable_save_error(envelope) -> String:
+	if not (envelope is Dictionary):
+		return "not a Storylets save: expected an object, got %s" % _describe_input(envelope)
+	var schema = (envelope as Dictionary).get("schema")
+	if not (schema is String and StoryletBundle.SAVE_SCHEMAS.has(schema)):
+		var said: String = _js_text(schema) if (envelope as Dictionary).has("schema") else "undefined"
+		return "unsupported save schema: %s (this runtime reads %s, %s and %s)" % [said, StoryletBundle.SAVE_SCHEMA_V1, StoryletBundle.SAVE_SCHEMA_V2, StoryletBundle.SAVE_SCHEMA]
+	if not ((envelope as Dictionary).get("content") is Dictionary):
+		return "not a complete Storylets save: no content"
+	return ""
 
 
 # --- the load report (design/engine-server.md 4.9) ---------------------------------
@@ -1918,11 +2145,12 @@ func _plan_load(envelope: Dictionary) -> Dictionary:
 	if moved != null:
 		shared_clean = _walk_partition(_shared_decls, moved["shared"], null, draft)
 	var spent: Array = []
-	for card_id in shared_half.get("spent", []):
-		if _cards_by_id.has(str(card_id)):
-			spent.append(str(card_id))
+	for key in shared_half.get("spent", []):
+		var spent_entry = _saved_card(str(key))
+		if spent_entry != null:
+			spent.append(str(spent_entry["card"]["id"]))
 		else:
-			(draft["droppedSpent"] as Array).append(str(card_id))
+			(draft["droppedSpent"] as Array).append(str(key))
 	var sections = null
 	if moved != null:
 		sections = (moved["rest"] as Dictionary).duplicate()
@@ -1964,35 +2192,39 @@ func _plan_flow_restore(id: String, saved: Dictionary, other_claims, draft: Dict
 	if saved.has("props"):
 		clean["props"] = _walk_partition(_flow_decls, saved["props"], id, draft)
 	clean.merge({
-		"turns": (saved.get("turns", {}) as Dictionary).duplicate(true),
+		"turns": {},
 		"prng": int(saved.get("prng", 0)),
 		"cooldowns": {},
 		"board": {},
 		"playLog": (saved.get("playLog", []) as Array).duplicate(true),
 	})
-	for card_id in saved.get("cooldowns", {}):
-		if _cards_by_id.has(str(card_id)):
-			clean["cooldowns"][str(card_id)] = saved["cooldowns"][card_id]
+	# Every key the save carries resolves to the build's internal id (see
+	# _saved_card); one the build no longer has is named by the key itself.
+	for key in saved.get("cooldowns", {}):
+		var cooled = _saved_card(str(key))
+		if cooled != null:
+			clean["cooldowns"][str(cooled["card"]["id"])] = saved["cooldowns"][key]
 		else:
-			(draft["droppedCooldowns"] as Array).append({"flow": id, "card": str(card_id)})
+			(draft["droppedCooldowns"] as Array).append({"flow": id, "card": str(key)})
 	var restored := {}
-	for hand_id in saved.get("board", {}):
-		var known = _hands_by_id.get(str(hand_id))
+	for hand_key in saved.get("board", {}):
+		var known = _saved_hand(str(hand_key))
 		if known == null:
-			# A deleted entity has no gameId left, so it is named by the id the
+			# A deleted entity has no gameId left, so it is named by the key the
 			# save carries; everything the build still knows keeps its gameId.
-			for card_id in saved["board"][hand_id]:
-				(draft["evicted"] as Array).append({"flow": id, "hand": str(hand_id),
-					"card": _card_report_name(str(card_id)), "reason": "hand-vanished"})
+			for key in saved["board"][hand_key]:
+				(draft["evicted"] as Array).append({"flow": id, "hand": str(hand_key),
+					"card": _card_report_name(str(key)), "reason": "hand-vanished"})
 			continue
 		var hand_name := StoryletBundle.effective_game_id(known["hand"])
 		var kept: Array = []
-		for card_id in saved["board"][hand_id]:
-			var entry = _cards_by_id.get(str(card_id))
+		for key in saved["board"][hand_key]:
+			var entry = _saved_card(str(key))
 			if entry == null:
 				(draft["evicted"] as Array).append({"flow": id, "hand": hand_name,
-					"card": str(card_id), "reason": "vanished"})
+					"card": str(key), "reason": "vanished"})
 				continue
+			var card_id := str(entry["card"]["id"])
 			if other_claims != null and StoryletFlow._card_is_shared(entry["card"], bool(entry["deck"].get("shared", false))):
 				var elsewhere := float((other_claims as Dictionary).get(str(card_id), 0))
 				var here := float(restored.get(str(card_id), 0))
@@ -2000,15 +2232,65 @@ func _plan_flow_restore(id: String, saved: Dictionary, other_claims, draft: Dict
 					(draft["evicted"] as Array).append({"flow": id, "hand": hand_name,
 						"card": StoryletBundle.effective_game_id(entry["card"]), "reason": "claimed-elsewhere"})
 					continue
-				restored[str(card_id)] = here + 1.0
-			kept.append(str(card_id))
-		clean["board"][str(hand_id)] = kept
+				restored[card_id] = here + 1.0
+			kept.append(card_id)
+		clean["board"][str(known["hand"]["id"])] = kept
+	for key in saved.get("turns", {}):
+		var box = _saved_box(str(key))
+		if box != null:
+			clean["turns"][str(box["id"])] = saved["turns"][key]
 	return clean
 
 
-func _card_report_name(card_id: String) -> String:
-	var entry = _cards_by_id.get(card_id)
-	return StoryletBundle.effective_game_id(entry["card"]) if entry != null else card_id
+func _card_report_name(key: String) -> String:
+	var entry = _saved_card(key)
+	return StoryletBundle.effective_game_id(entry["card"]) if entry != null else key
+
+
+# --- save keys ------------------------------------------------------------------
+#
+# A save names cards, hands and boxes by GAME ID from version 3 (the hands-on
+# review, 2026-10, foundation 7), as its play log always did: a card deleted
+# and made again under the same Game ID is the same card to a game, so it keeps
+# its cooldown and its place as well as its play count. Earlier saves name them
+# by internal id, so a saved key is read as a Game ID first and an internal id
+# second; the two never collide, ids being generated.
+
+## The card entry ({"card", "deck", "box"}) a saved key names, or null.
+func _saved_card(key: String) -> Variant:
+	var entry = _cards_by_game_id.get(key)
+	return entry if entry != null else _cards_by_id.get(key)
+
+
+## The hand ({"hand", "box"}) a saved key names, or null.
+func _saved_hand(key: String) -> Variant:
+	var found = _hands_by_game_id.get(key)
+	return found if found != null else _hands_by_id.get(key)
+
+
+## The box a saved key names, or null.
+func _saved_box(key: String) -> Variant:
+	var box = _boxes_by_game_id.get(key)
+	return box if box != null else _boxes_by_id.get(key)
+
+
+## @internal - the Game ID a save names a card by; the id itself for one the
+## build no longer has, which is all there is to name it by.
+func card_key(id: String) -> String:
+	var entry = _cards_by_id.get(id)
+	return StoryletBundle.effective_game_id(entry["card"]) if entry != null else id
+
+
+## @internal - the Game ID a save names a hand by, or the id itself.
+func hand_key(id: String) -> String:
+	var found = _hands_by_id.get(id)
+	return StoryletBundle.effective_game_id(found["hand"]) if found != null else id
+
+
+## @internal - the Game ID a save names a box by, or the id itself.
+func box_key(id: String) -> String:
+	var box = _boxes_by_id.get(id)
+	return StoryletBundle.effective_game_id(box) if box != null else id
 
 
 static func _sort_by_key(list: Array, fields: Array) -> Array:

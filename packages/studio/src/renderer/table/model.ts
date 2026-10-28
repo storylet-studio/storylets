@@ -40,8 +40,13 @@ const VERDICT_REASON: Record<TraceVerdict, string> = {
 };
 
 /** The plain-language reason for a verdict, the same words for the Board's own
- *  deals and for a game's in Live mode. */
-export const verdictReason = (verdict: TraceVerdict): string => VERDICT_REASON[verdict] ?? verdict;
+ *  deals and for a game's in Live mode. A card whose Redraw is "never" is not
+ *  cooling down: it has come up, and won't again (the hands-on review, 2026-10). */
+export const verdictReason = (verdict: TraceVerdict, once = false): string =>
+  verdict === "cooldown" && once ? "already played, and it comes up once" : VERDICT_REASON[verdict] ?? verdict;
+
+/** What the Board knows about a card to name it, and to word its reason. */
+export interface CardLabel { gameId: string; title?: string; once?: boolean }
 
 /** One hand's latest deal, read back as "why not?" (the Board's Why not? tab).
  *  `couldHave` is every card the deal looked at whose tags fit this hand and
@@ -66,14 +71,14 @@ export interface WhyNot {
  *  into a hand that already held some cards only records the ones it added. */
 export function whyNotOf(
   cards: readonly { id: string; verdict: TraceVerdict }[],
-  label: (gameId: string) => { gameId: string; title?: string },
+  label: (gameId: string) => CardLabel,
   here: readonly string[],
   turn?: number,
 ): WhyNot {
   const held = new Set(here);
   const row = (c: { id: string; verdict: TraceVerdict }): NotDealt => {
     const l = label(c.id);
-    return { gameId: l.gameId, ...(l.title !== undefined ? { title: l.title } : {}), reason: verdictReason(c.verdict), verdict: c.verdict };
+    return { gameId: l.gameId, ...(l.title !== undefined ? { title: l.title } : {}), reason: verdictReason(c.verdict, l.once === true), verdict: c.verdict };
   };
   const missed = cards.filter((c) => c.verdict !== "dealt" && c.verdict !== "tags" && !held.has(c.id));
   return {
@@ -211,7 +216,7 @@ export class Table {
   readonly engine: Engine;
   session: Flow;
   /** Card id -> display label, for naming non-dealt cards from their trace id. */
-  private readonly cardLabels = new Map<string, { gameId: string; title?: string }>();
+  private readonly cardLabels = new Map<string, CardLabel>();
   /** Card gameId -> its internal id. A trace event names cards, hands and
    *  boxes by gameId (design/engine-server.md 4.4) while the three maps below
    *  are keyed by the id the editor addresses; this is the one hop between
@@ -262,7 +267,10 @@ export class Table {
     for (const box of bundle.boxes) {
       for (const deck of box.decks) {
         for (const card of deck.cards) {
-          this.cardLabels.set(card.id, { gameId: card.gameId ?? card.id, ...(card.title !== undefined ? { title: card.title } : {}) });
+          this.cardLabels.set(card.id, {
+            gameId: card.gameId ?? card.id, ...(card.title !== undefined ? { title: card.title } : {}),
+            ...(card.redraw === "never" ? { once: true } : {}),
+          });
           this.cardHomes.set(card.id, { box: box.id, deck: deck.id, card: card.id });
           this.cardBoxes.set(card.id, box.gameId ?? box.id);
           this.cardIdsByGameId.set(card.gameId ?? card.id, card.id);

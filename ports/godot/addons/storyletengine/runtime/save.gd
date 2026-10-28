@@ -3,7 +3,8 @@
 # StoryletSave: the .storyletsave string boundary, in the RUNTIME of every
 # port, never editor-only (the parity rule; design/engine-runtimes.md 1).
 # The FILE is the HOST's ("storylets/savefile@1"): the engine's envelope
-# ("storylets/save@2" when written, "storylets/save@1" still read) plus, when
+# ("storylets/save@3" when written, "storylets/save@2" and "storylets/save@1"
+# still read) plus, when
 # the host keeps one, its @world container - "host saves its container once,
 # each engine saves its own envelope" folded into one file (design/flows.md).
 # A standalone engine's envelope carries its registry's values, a self-backed
@@ -57,7 +58,7 @@ static func load_state(engine: StoryletEngine, file, opts: Dictionary = {}) -> V
 			return null
 	if not (file is Dictionary) or file.get("schema") != SCHEMA \
 			or not (file.get("engine") is Dictionary) \
-			or not [StoryletBundle.SAVE_SCHEMA, StoryletBundle.SAVE_SCHEMA_V1].has((file["engine"] as Dictionary).get("schema")):
+			or not StoryletBundle.SAVE_SCHEMAS.has((file["engine"] as Dictionary).get("schema")):
 		push_error("StoryletSave.load_state: not a %s file" % SCHEMA)
 		return null
 	# Asked before the load rather than read from its return: load_game answers

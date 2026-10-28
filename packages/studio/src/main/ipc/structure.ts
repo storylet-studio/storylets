@@ -12,7 +12,7 @@ import {
   createHand, createTemplate, deleteHand, deleteTemplate, duplicateHand, duplicateTemplate, moveHand, saveHand, saveTemplate,
 } from "../mutate/hands.js";
 import { createGroupAsMap } from "../mutate/map.js";
-import { renameQualityStage, stageGates } from "../mutate/stages.js";
+import { renamePropertyEverywhere, renameQualityStage, stageGates } from "../mutate/stages.js";
 import { redo, undo, undoStep } from "../mutate/write-path.js";
 import { boxCatalogue } from "../read/catalogue.js";
 import { handCards, handDetail, tagGroupDetail, templateDetail } from "../read/details.js";
@@ -29,6 +29,7 @@ export function registerStructure(ipc: Ipc, deps: Pick<MainContext, "session">):
   ipc.write("box:move", project(moveBox));
   ipc.write("box:save", project(saveBox));
   ipc.write("stage:rename", project(renameQualityStage));
+  ipc.write("property:rename", project(renamePropertyEverywhere));
   ipc.handle("stage:gates", read(stageGates, 0));
   ipc.handle("box:catalogue", read(boxCatalogue, []));
 

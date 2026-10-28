@@ -263,6 +263,25 @@ UStoryletEngine* UStoryletEngine::CreateOn(UStoryletBundle* Bundle, std::shared_
 		{
 			if (UStoryletEngine* Self = Weak.Get()) Self->OnReplacedFlow.Broadcast(Ue(FlowId), static_cast<int32>(Dealt));
 		};
+		// A condition the core played through: the Blueprint event, or with
+		// nothing bound a Warning in the log, so a content bug is never silent.
+		Opts.onError = [Weak](const storylets::PlayError& Err)
+		{
+			UStoryletEngine* Self = Weak.Get();
+			if (!Self || !Self->OnError.IsBound())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Storylet Engine: the condition on %s in flow '%s' failed, counted as false: %s"),
+					*Ue(Err.node), *Ue(Err.flow), *Ue(Err.message));
+				return;
+			}
+			FStoryletPlayError Out;
+			Out.Flow = Ue(Err.flow);
+			Out.Kind = Ue(Err.kind);
+			Out.Node = Ue(Err.node);
+			Out.Source = Ue(Err.source);
+			Out.Message = Ue(Err.message);
+			Self->OnError.Broadcast(Out);
+		};
 		TPimplPtr<FStoryletEngineImpl> Impl = MakePimpl<FStoryletEngineImpl>();
 		Impl->Bundle = Bundle->GetCompiled()->Bundle;
 		Impl->Engine = std::make_unique<storylets::Engine>(Impl->Bundle, Opts);

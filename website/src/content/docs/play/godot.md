@@ -133,9 +133,9 @@ flow = engine.get_flow("main")               # ...so re-take your handles
 ```
 
 An engine built on its own carries every property value in its envelope, a self-backed
-`@world` included, so those two calls are the whole run. The envelope is `storylets/save@2`,
-written in the same order every time, so the same run always saves the same bytes, and a
-`storylets/save@1` envelope or file from an earlier release still loads. A game that
+`@world` included, so those two calls are the whole run. The envelope is `storylets/save@3`,
+written in the same order every time, so the same run always saves the same bytes, and an
+older `storylets/save@2` or `@1` envelope or file still loads. A game that
 hands the engine its own registry saves that registry once, beside the envelope
 ([below](#one-registry-for-the-game)).
 

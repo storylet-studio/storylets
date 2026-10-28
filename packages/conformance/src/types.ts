@@ -184,7 +184,12 @@ export type ScriptOp =
    *  substring rather than the whole message because the message is prose an
    *  author reads, not a contract - what is pinned is that the runtime spoke
    *  up rather than filling a hole silently (4.6). */
-  | { op: "deal"; flow?: string; hands?: string[]; expectBoard?: Record<string, string[]>; expectDealt?: Record<string, string[]>; expectVerdicts?: Record<string, TraceVerdictKind>; expectDiagnostic?: string; expectTrace?: string[] }
+  | { op: "deal"; flow?: string; hands?: string[]; expectBoard?: Record<string, string[]>; expectDealt?: Record<string, string[]>; expectVerdicts?: Record<string, TraceVerdictKind>; expectDiagnostic?: string; expectTrace?: string[];
+      /** Corpus 18: the distinct `node`s the engine reported to its `onError`
+       *  during the deal (a condition it could not evaluate, counted as
+       *  false), sorted. A runner opens every engine with an onError that
+       *  records them; an absent key leaves them unchecked. */
+      expectPlayErrors?: string[] }
   /** Read the board and check it WHOLE: `expect` is keyed by hand ID and its
    *  key set must MATCH, not merely be included - that is what pins the
    *  filter. `box` (a box gameId or id) narrows the read to one box's hands;
@@ -241,6 +246,10 @@ export type ScriptOp =
    *  what a host is handed is a copy (the hands-on review, 2026-10,
    *  foundation 6). */
   | { op: "scribble"; flow?: string; from: string }
+  /** Corpus 18: hand a fresh engine on the case's bundle this envelope, raw
+   *  JSON that need not be a save at all, through `loadGame`. It must be
+   *  refused, with every string in `expectRefused` in the error. */
+  | { op: "loadEnvelope"; envelope: unknown; expectRefused: string[] }
   /** A node's extension values read off the bundle by the helper
    *  `extensionsOf(bundle, kind, address)`: `project` (no address), `box`,
    *  `deck`, `card` and `hand` by gameId, `handTemplate` as "box/template",
@@ -374,7 +383,8 @@ export interface ScriptedCase {
  *  what is pinned is that it names the box and the group or tag at fault. */
 export interface LoadCase {
   name: string;
-  bundle: Bundle;
+  /** JSON `null` when the case hands the engine no bundle at all (corpus 18). */
+  bundle: Bundle | null;
   expectRefused: string[];
 }
 
@@ -628,6 +638,10 @@ export interface LoadFixture extends BundleFixture {
   /** Override the bundle's schema tag. Only the unknown-schema case uses it:
    *  every other refusal is about the bundle's content, not its label. */
   schema?: string;
+  /** Top-level parts of the bundle to leave out (corpus 18): a bundle cut short. */
+  drop?: string[];
+  /** No bundle at all: the engine is handed `null` (corpus 18). */
+  nullBundle?: true;
   /** Every string must appear in the refusal. */
   expectRefused: string[];
 }

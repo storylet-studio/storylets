@@ -12,6 +12,12 @@ here is part of shipping, not a courtesy.
 
 ### Added
 
+- **Renaming a property renames it everywhere.** Rename a property on the Story page, a box, deck, hand or tag
+  group, or in the World settings, and every condition, priority and change that reads or writes it follows, with
+  a tag group's binding, a hand's holes and a coverage driver: one step, so one Undo puts it all back. It used to
+  rename the declaration alone, and every card that used the property broke.
+- **Move a card to another deck.** A card's menu lists the other decks in its box: Move to Docks, Move to Market.
+  The card keeps its Game ID, so everything that names it still does, and it lands at the end of its new deck.
 - **What's new, after an update.** The first time Storyletter opens after an update, it shows what's new in that
   version, or in every version since you last ran it. Help ▸ What's New shows the latest at any time, and a
   tickbox turns the after-update window off.
@@ -63,6 +69,15 @@ here is part of shipping, not a courtesy.
 - **Delete only deletes cards when you're on the cards.** Delete or Backspace with a button focused (+ New card, a
   tab) deleted the selected cards, and so did Delete, Enter or an arrow key with a dialog or menu open. Those keys
   now act on the selection only from the cards themselves, the table, or the canvas, and never past a dialog.
+- **A copy is "Ambush 2", not "Ambush (copy)".** Duplicate gives the copy the next free title and lets its Game ID
+  follow that title, as a new card's does. It used to pin "ambush-copy", so copies of copies spread
+  "-copy-copy-copy" through warnings, coverage and conditions.
+- **The Board says a once-only card was already played.** Why not? said "on cooldown" for a card whose Redraw is
+  never, as if it would come back; it now says it was already played, and comes up once.
+- **Coverage doesn't warn about drivers a project can't use.** A project with no @world has nothing a coverage
+  driver could feed, so the note about drivers no longer shows for one.
+- **Saves from earlier versions open.** A save file written before saves named cards by Game ID opens on the Board
+  as before.
 - **A comment appears as soon as you post it.** A reply posted with the Reply button didn't show until the comment
   panel was closed and opened again, a second post on a new comment started a second thread, and Reopen showed the
   thread as it was before. The panel now shows each thread as it stands after every change.

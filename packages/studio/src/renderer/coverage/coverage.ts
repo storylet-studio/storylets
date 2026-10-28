@@ -42,6 +42,8 @@ let ran: RanStamp | undefined;
 let stale = false;
 let name = "";
 let driverCount = 0;
+/** The project's @world declarations; undefined until main has said. */
+let worldCount: number | undefined;
 let hasProject = false;
 /** The card table's order, remembered in the app's state (main keeps it). */
 let order: CoverageOrder = "least";
@@ -188,6 +190,9 @@ function syncControls(): void {
 
 function render(): void {
   nameEl.textContent = name;
+  // A project with no @world has nothing a driver could feed: no note, rather
+  // than a warning about something it can't have (the hands-on review, 2026-10).
+  note.hidden = hasProject && driverCount === 0 && worldCount === 0;
   noteText.className = hasProject && driverCount === 0 ? "hint warnish" : "hint";
   noteText.textContent = !hasProject
     ? "Open a project to run coverage."
@@ -355,6 +360,7 @@ function takeProject(info: CoverageInfo): void {
   hasProject = info.hasProject;
   name = info.name;
   driverCount = info.driverCount;
+  worldCount = info.worldCount;
 }
 
 /** Has the project moved on since the report ran? */

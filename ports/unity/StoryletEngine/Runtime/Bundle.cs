@@ -2,7 +2,7 @@
 // (packages/model/src/index.ts): the bundle schema "storylets/bundle@1"
 // (world/story property decls, boxes with decks/cards/outcomes/tag groups/
 // hands/hand templates, ranking, fields, redraw, copies, the home group, the
-// project map), SaveEnvelope ("storylets/save@2"), the gameId derivation rules
+// project map), SaveEnvelope ("storylets/save@3"), the gameId derivation rules
 // (gameIdify / effectiveGameId) and the project map's reading helpers
 // (GroupsOfBox / GroupById / AllTagGroups). No behaviour lives here.
 
@@ -39,12 +39,20 @@ namespace StoryletStudio.StoryletEngine
         public const string BUNDLE_SCHEMA_V0 = "storylets/bundle@0";
         /// <summary>Every bundle schema a runtime accepts.</summary>
         public static readonly IReadOnlyList<string> BUNDLE_SCHEMAS = new[] { BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA };
-        /// <summary>The engine's save envelope, version 2 (the one-registry
-        /// model): property values are the game's ScopeRegistry's, so the
+        /// <summary>The engine's save envelope, version 3 (the hands-on
+        /// review, 2026-10, foundation 7): version 2's shape (the one-registry
+        /// model: property values are the game's ScopeRegistry's, so the
         /// envelope holds what is NOT a property, plus the registry's values
-        /// under Registry when the engine made its own registry. See
-        /// SaveEnvelope for the registry keys.</summary>
-        public const string SAVE_SCHEMA = "storylets/save@2";
+        /// under Registry when the engine made its own registry), with a
+        /// flow's turns, cooldowns and board, and the shared spent cards, keyed
+        /// by GAME ID, as the play log always was. A card deleted and made
+        /// again under the same Game ID keeps its cooldown and its place as
+        /// well as its play count. See SaveEnvelope for the registry
+        /// keys.</summary>
+        public const string SAVE_SCHEMA = "storylets/save@3";
+        /// <summary>Version 2, keyed by internal id: still read, every key
+        /// resolved as a Game ID first and an internal id second.</summary>
+        public const string SAVE_SCHEMA_V2 = "storylets/save@2";
         /// <summary>The version 1 envelope's schema tag, still read: its
         /// property partitions move into the registry as it loads.</summary>
         public const string SAVE_SCHEMA_V1 = "storylets/save@1";
@@ -733,16 +741,19 @@ namespace StoryletStudio.StoryletEngine
         /// properties are the registry's. Present in every flow of a version 1
         /// envelope.</summary>
         public PropsPartition Props;
-        /// <summary>Per-box turn counters, keyed by box id (schema 3.4) - per
-        /// flow: there is deliberately no global turn.</summary>
+        /// <summary>Per-box turn counters, keyed by box Game ID (schema 3.4; by
+        /// box id before version 3) - per flow: there is deliberately no global
+        /// turn.</summary>
         public OrderedMap<string, double> Turns = new OrderedMap<string, double>();
         /// <summary>mulberry32 state, uint32 (schema 3.3), per flow.</summary>
         public uint Prng;
         /// <summary>Absolute next-eligible turn (of the card's box's clock) per
-        /// card id; MAX_SAFE_INTEGER = never.</summary>
+        /// card Game ID (card id before version 3); MAX_SAFE_INTEGER =
+        /// never.</summary>
         public OrderedMap<string, double> Cooldowns = new OrderedMap<string, double>();
-        /// <summary>Hand contents (card ids, in dealt order), keyed by hand id.
-        /// The claims ledger is derived from this (schema 3.5).</summary>
+        /// <summary>Hand contents (card Game IDs, in dealt order), keyed by hand
+        /// Game ID (internal ids before version 3). The claims ledger is
+        /// derived from this (schema 3.5).</summary>
         public OrderedMap<string, List<string>> Board = new OrderedMap<string, List<string>>();
         public List<PlayRecord> PlayLog = new List<PlayRecord>();
     }
@@ -757,7 +768,8 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>The shared property partitions: version 1 only (null in a
         /// version 2 envelope, whose properties are the registry's).</summary>
         public PropsPartition Props;
-        /// <summary>Card ids, sorted, so a save is byte-stable for a diff.</summary>
+        /// <summary>Card Game IDs (ids before version 3), sorted, so a save is
+        /// byte-stable for a diff.</summary>
         public List<string> Spent = new List<string>();
     }
 
@@ -765,12 +777,14 @@ namespace StoryletStudio.StoryletEngine
     /// every live flow keyed by its id - Patter's shape (one shared blob + N
     /// flow blobs; multi-flow and save/load are the same feature).
     ///
-    /// Version 2 (storylets/save@2, the one-registry model) holds what is NOT a
-    /// property (boards, clocks, cooldowns, PRNGs, play logs, spent cards),
+    /// Version 3 (storylets/save@3) holds what is NOT a property (boards,
+    /// clocks, cooldowns, PRNGs, play logs, spent cards), keyed by Game ID,
     /// plus, when the engine made its own registry (a standalone game), that
     /// registry's values under Registry. A game that passed a registry saves it
-    /// once itself. Version 1 envelopes (storylets/save@1) still load: their
-    /// property partitions move into the registry.
+    /// once itself. Version 2 envelopes (storylets/save@2, the same shape keyed
+    /// by internal id) still load, and so do version 1 envelopes
+    /// (storylets/save@1): their property partitions move into the
+    /// registry.
     ///
     /// Registry keys, identical on every runtime since they are in the save:
     /// `story` for the shared @story; `storylets/&lt;kind&gt;/&lt;id&gt;` for a
@@ -804,21 +818,34 @@ namespace StoryletStudio.StoryletEngine
     // computes it and applies it, and PreviewFlowRestore answers the same
     // questions for one flow.
     //
-    // Identities are GAME IDS. The one exception is an entity the edit DELETED -
-    // a vanished card, a vanished hand - which has no gameId left to give, so
-    // the report carries the id the save itself carries.
+    // Identities are GAME IDS. An entity the edit DELETED - a vanished card, a
+    // vanished hand - is named by the key the save itself carries, which is its
+    // Game ID from save version 3 (an internal id in an older save). There is
+    // nothing else to name it by.
 
-    /// <summary>Why a restore refused to put a card back on the board.</summary>
+    /// <summary>Why a restore refused to put a card back on the board, or a
+    /// load dropped one it had put back. The first three are the restore's own.
+    /// The rest are a deal's eviction reasons, the same as an EvictEvent's: a
+    /// load whose envelope carries the property values checks every held card
+    /// as a deal would, once the values are in place, and drops what no longer
+    /// qualifies (the hands-on review, 2026-10, foundation 7).</summary>
     public static class EvictionReasons
     {
         public const string Vanished = "vanished";
         public const string HandVanished = "hand-vanished";
         public const string ClaimedElsewhere = "claimed-elsewhere";
+        public const string HandCondition = "hand-condition";
+        public const string DeckGate = "deck-gate";
+        public const string Taken = "taken";
+        public const string Cooldown = "cooldown";
+        public const string Tags = "tags";
+        public const string Condition = "condition";
     }
 
-    /// <summary>One card a restore refused to put back. ClaimedElsewhere is only
-    /// ever a single-flow restore into a LIVE engine: the card is shared and the
-    /// other open flows already hold every copy the world has.</summary>
+    /// <summary>One card a restore refused to put back, or a load dropped
+    /// (Reason is one of <see cref="EvictionReasons"/>). ClaimedElsewhere is
+    /// only ever a single-flow restore into a LIVE engine: the card is shared
+    /// and the other open flows already hold every copy the world has.</summary>
     public sealed class LoadEviction
     {
         public string Flow;

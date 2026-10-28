@@ -1061,7 +1061,14 @@ export function propertyAddresses(bundle: {
 // A self-backed @world (no resolver bound) is a stored property too, under
 // `world`.
 
-export const SAVE_SCHEMA = "storylets/save@2";
+/** Version 3 (the hands-on review, 2026-10, foundation 7): a flow's turns,
+ *  cooldowns and board, and the shared spent cards, are keyed by GAME ID, as
+ *  the play log always was, so a card deleted and made again under the same
+ *  Game ID keeps its cooldown and its place as well as its play count. */
+export const SAVE_SCHEMA = "storylets/save@3";
+/** Version 2, keyed by internal id: still read, every key resolved as a Game
+ *  ID first and an internal id second. */
+export const SAVE_SCHEMA_V2 = "storylets/save@2";
 /** The version 1 envelope's schema tag, still read. */
 export const SAVE_SCHEMA_V1 = "storylets/save@1";
 
@@ -1099,17 +1106,18 @@ export interface FlowSave {
    *  flow whole; absent from a version 2 envelope's flows, whose properties
    *  are the registry's. Present in every flow of a version 1 envelope. */
   props?: PropsPartition;
-  /** Per-box turn counters, keyed by box id (schema 3.4) - per flow: there
-   *  is deliberately no global turn. */
+  /** Per-box turn counters, keyed by box Game ID (schema 3.4; by box id
+   *  before version 3) - per flow: there is deliberately no global turn. */
   turns: Record<string, number>;
   /** mulberry32 state, uint32 (schema 3.3), per flow. */
   prng: number;
-  /** Absolute next-eligible turn (of the card's box's clock) per card id;
-   *  MAX_SAFE_INTEGER = never (deliberately not Infinity, which
-   *  JSON-serialises to null). */
+  /** Absolute next-eligible turn (of the card's box's clock) per card Game ID
+   *  (card id before version 3); MAX_SAFE_INTEGER = never (deliberately not
+   *  Infinity, which JSON-serialises to null). */
   cooldowns: Record<string, number>;
-  /** Hand contents (card ids, in dealt order), keyed by hand id. The claims
-   *  ledger is derived from this (schema 3.5). */
+  /** Hand contents (card Game IDs, in dealt order), keyed by hand Game ID
+   *  (internal ids before version 3). The claims ledger is derived from this
+   *  (schema 3.5). */
   board: Record<string, string[]>;
   playLog: PlayRecord[];
 }
@@ -1124,12 +1132,15 @@ export interface FlowSave {
 export interface SharedSave {
   /** The shared property partitions: version 1 only. */
   props?: PropsPartition;
-  /** Card ids, sorted, so a save is byte-stable for a diff. */
+  /** Card Game IDs (ids before version 3), sorted, so a save is byte-stable
+   *  for a diff. */
   spent: string[];
 }
 
 export interface SaveEnvelope {
-  schema: typeof SAVE_SCHEMA;
+  /** Written as version 3; a version 2 envelope has the same shape, keyed by
+   *  internal id. */
+  schema: typeof SAVE_SCHEMA | typeof SAVE_SCHEMA_V2;
   content: BundleContent;
   /** The engine's own registry's values, keyed by registry key: present only
    *  when the engine made the registry itself (a standalone game). A game that
@@ -1160,17 +1171,18 @@ export interface SaveEnvelopeV1 {
 // one flow (4.1's `openFlow(id, { restore })`).
 //
 // Card, hand and flow identities are GAME IDS: a report is host-facing and
-// internal ids mean nothing outside the project. The one exception is an
-// entity the edit DELETED - a vanished card, a vanished hand - which has no
-// gameId left to give, so the report carries the id the save itself carries.
-// There is nothing else to name it by.
+// internal ids mean nothing outside the project. An entity the edit DELETED -
+// a vanished card, a vanished hand - is named by the key the save itself
+// carries, which is its Game ID from save version 3 (an internal id in an
+// older save). There is nothing else to name it by.
 //
 // A property is named differently, and deliberately: by its ENGINE ADDRESS,
 // the string listProperties() prints and getProperty()/setProperty() accept.
 // A report entry is then something a host can act on rather than merely
 // print, and the runtimes have one property grammar instead of two.
 
-/** One card that a restore refused to put back on the board.
+/** One card that a restore refused to put back on the board, or a load
+ *  dropped from it because it no longer qualifies.
  *
  *  `vanished` and `hand-vanished` are the edit's doing (the card, or the hand
  *  it sat in, is no longer in the bundle). `claimed-elsewhere` is only ever a
@@ -1180,7 +1192,12 @@ export interface LoadEviction {
   flow: string;
   hand: string;
   card: string;
-  reason: "vanished" | "hand-vanished" | "claimed-elsewhere";
+  /** The rest are a deal's own reasons, met as a load checks what it put
+   *  back (save version 3 era; the hands-on review, 2026-10, foundation 7):
+   *  the card, its deck or its hand no longer qualifies with the values the
+   *  save carries. Checked only when the envelope carries them. */
+  reason: "vanished" | "hand-vanished" | "claimed-elsewhere"
+    | "condition" | "deck-gate" | "hand-condition" | "cooldown" | "tags" | "taken";
 }
 
 /** One property the restore could not put back as it was. `flow` names the

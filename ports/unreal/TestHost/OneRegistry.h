@@ -284,7 +284,7 @@ namespace oneregistry
             Game g = MakeGame(MakeBundle());
             Heist(*g.engine->openFlow("f"));
             const SaveEnvelope save = RoundTrip(g.engine->saveGame());
-            c.eq("schema", save.schema, "storylets/save@2");
+            c.eq("schema", save.schema, "storylets/save@3");
             c.yes("the envelope carries no registry", !save.registry.has_value());
             c.yes("the shared half carries no props", !save.shared.props.has_value());
             c.yes("the shared half's spent is empty", save.shared.spent.empty());

@@ -248,6 +248,16 @@ const API = [
     unreal: { re: "std::function<void\\(const std::string&, int\\)> onReplacedFlow" },
     bp: { re: "FStoryletReplacedFlow OnReplacedFlow" },
     why: "a field or option in the cores; Blueprint binds it as an assignable delegate on the engine" },
+  // A condition the engine could not evaluate, counted as false and reported
+  // whether or not anything traces (the hands-on review, 2026-10, foundation
+  // 5). Patterplay's onError, the same shape and spellings in every port.
+  { on: "Engine", member: "onError",
+    js: { re: "onError\\?: \\(error: PlayError\\) => void" },
+    unity: { re: "Action<PlayError> OnError" },
+    godot: { re: '"on_error"' },
+    unreal: { re: "std::function<void\\(const PlayError&\\)> onError" },
+    bp: { re: "FStoryletErrorEvent OnError" },
+    why: "a field or option in the cores; Blueprint binds it as an assignable delegate on the engine, as Patterplay's FPatterErrorEvent OnError" },
   { on: "Flow", member: "onRestoreReport",
     js: { re: "onRestoreReport\\?: \\(report: LoadReport\\) => void" },
     unity: { re: "Action<LoadReport> OnRestoreReport" },

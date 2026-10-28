@@ -331,6 +331,9 @@ export function createActions(ctx: ActionsContext) {
     duplicateCard(box, deck, card) {
       making(() => studio.duplicateCard(deck, card), (created) => actions.inspectCard(box, deck, created.cardId), true);
     },
+    moveCardToDeck(_box, deck, card, toDeck) {
+      void (async () => { if (ctx.applied(await studio.moveCardToDeck(deck, card, toDeck))) ctx.render(); })();
+    },
     // Every route to deleting a card goes through the one path: the context menus
     // in all three views and a box's Contents, the Delete key, and the canvas. The
     // deck comes from the caller, since a box's Contents shows several.
@@ -444,6 +447,7 @@ export function createActions(ctx: ActionsContext) {
     saveTagGroup: saves.saveTagGroup,
     saveHand: saves.saveHand,
     renameStage: saves.renameStage,
+    renameProperty: saves.renameProperty,
     stageGates: (target) => studio.stageGates(target),
     // The one path, like every other route to deleting a card: this one is the
     // card's own page.

@@ -7,11 +7,11 @@
 // Flattened path scheme (the JS play-helpers logger's, verbatim):
 //   world.x / story.x / box.<gameId>.x / deck.<gameId>.x / hand.<gameId>.x /
 //   value.<gameId>.x  the property half, addressed as getProperty addresses it (4.4)
-//   turn:<boxId>      per-box clocks
-//   cooldown:<cardId> next-eligible turns
-//   board:<handId>    hand contents (card ids, dealt order)
-// The three colon keys stay on INTERNAL ids: they are the save envelope's own
-// keys, and a save is keyed by id so it survives a rename.
+//   turn:<boxGameId>       per-box clocks
+//   cooldown:<cardGameId>  next-eligible turns
+//   board:<handGameId>     hand contents (card Game IDs, dealt order)
+// The three colon keys are the save envelope's own keys: Game IDs from save
+// version 3, internal ids before.
 // Line format: `${label}${path}: ${from} -> ${to}`, `<unset>` for nullopt.
 
 #pragma once

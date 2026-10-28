@@ -3,7 +3,7 @@
 # runs in its own process, so live inspection lives in the running game, not
 # an editor dock).
 #
-# Watches AND edits a live session's declared properties during play (with a
+# Watches AND edits a live flow's declared properties during play (with a
 # name/path filter over the rows), shows each box's clock and the board's
 # current hands (read-only, keyed by title or gameId, never internal ids),
 # and saves / loads the whole run to a .storyletsave file through
@@ -14,13 +14,13 @@
 # everything the panel writes back speak the names an author chose. The rows
 # arrive addressed from the bags; nothing here composes a path.
 #
-# The log panel (design 2.3: the session's retained log surfaced in every
+# The log panel (design 2.3: the flow's retained log surfaced in every
 # examiner; the old port's Unreal log panel is the high-water mark): the
-# lines of session.log() behind per-kind filters (a peek files under Deal -
-# both are asks), with Autoscroll, Copy and Clear. Empty until the session
+# lines of flow.log() behind per-kind filters (a peek files under Deal -
+# both are asks), with Autoscroll, Copy and Clear. Empty until the flow
 # is created with the log option ({"log": true}).
 #
-# Usage - drop it into your scene and point it at sessions:
+# Usage - drop it into your scene and point it at flows:
 #   var panel := preload("res://addons/storyletengine/ui/storylet_state_panel.gd").new()
 #   add_child(panel)
 #   StoryletDebug.register(engine, "main")   # the panel auto-discovers
@@ -46,12 +46,12 @@ const LOG_KIND_LABELS := ["Deal", "Play", "Write", "Evict", "Turns", "Diag"]
 var _body: VBoxContainer
 var _filter := ""
 var _signature := ""
-# of {"widget", "type", "session", "path", "default", "reset"}
+# of {"widget", "type", "flow", "path", "default", "reset"}
 var _value_widgets: Array = []
-# of {"label", "session"} - the read-only turns/board text blocks
+# of {"label", "flow"} - the read-only turns/board text blocks
 var _live_labels: Array = []
 # The log panel's state: kind filters and autoscroll are panel-wide (they
-# survive rebuilds); each session gets a view {"session", "label", "scroll",
+# survive rebuilds); each flow gets a view {"flow", "label", "scroll",
 # "last_seq"}.
 var _log_kind_on := {}
 var _log_autoscroll := true
@@ -98,7 +98,7 @@ func _entries() -> Array:
 	return StoryletDebug.list()
 
 
-# A cheap fingerprint of "which sessions, with which property paths" - rebuild
+# A cheap fingerprint of "which flows, with which property paths" - rebuild
 # the rows only when it changes, so editing a field is not interrupted by the
 # refresh timer.
 func _current_signature() -> String:
@@ -200,7 +200,7 @@ func _build_live_block(s: StoryletFlow) -> void:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.text = _live_text(s)
 	_body.add_child(label)
-	_live_labels.append({"label": label, "session": s})
+	_live_labels.append({"label": label, "flow": s})
 
 
 static func _live_text(s: StoryletFlow) -> String:
@@ -269,7 +269,7 @@ func _build_property_row(s: StoryletFlow, row: Dictionary) -> void:
 	_value_widgets.append({
 		"widget": widget,
 		"type": row["type"],
-		"session": s,
+		"flow": s,
 		"path": row["path"],
 		"default": row["default"],
 		"reset": reset,
@@ -373,7 +373,7 @@ func _build_log(s, caption_text := "Log") -> void:
 	lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(lines)
 	_body.add_child(scroll)
-	_log_views.append({"session": s, "label": lines, "scroll": scroll, "last_seq": -1})
+	_log_views.append({"flow": s, "label": lines, "scroll": scroll, "last_seq": -1})
 	_refresh_log()
 
 
@@ -441,7 +441,7 @@ func _visible_log_lines(s) -> Array:
 
 func _refresh_log(force := false) -> void:
 	for view in _log_views:
-		var s = view["session"]
+		var s = view["flow"]
 		var entries: Array = s.log()
 		var last_seq: int = entries[-1]["seq"] if not entries.is_empty() else -1
 		if not force and last_seq == view["last_seq"]:
@@ -473,11 +473,11 @@ func _clear_log(s) -> void:
 
 func _refresh_values() -> void:
 	for entry in _live_labels:
-		(entry["label"] as Label).text = _live_text(entry["session"])
+		(entry["label"] as Label).text = _live_text(entry["flow"])
 	_refresh_log()
 	for entry in _value_widgets:
 		var widget: Control = entry["widget"]
-		var value = entry["session"].get_property(entry["path"])
+		var value = entry["flow"].get_property(entry["path"])
 		(entry["reset"] as Button).disabled = StoryletValues.value_equals(value, entry["default"])
 		if widget.has_focus():
 			continue

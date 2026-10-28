@@ -770,7 +770,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 try
                 {
                     var bundle = BundleLoader.Parse((JObject)c["bundle"]);
-                    var session = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = SeedOf(c["seed"]) }).OpenFlow("main");
+                    var session = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = SeedOf(c["seed"]), OnError = _ => { } }).OpenFlow("main");
                     if (c["setup"] is JObject setup) ApplyState(session, setup);
                     var box = c.Value<string>("box");
                     var criteria = StoryletJson.ToStringMap(c["criteria"]);
@@ -806,7 +806,8 @@ namespace StoryletStudio.StoryletEngine.TestHost
         /// (design/project-map-contract.md 3.8): building the engine must throw,
         /// and the refusal must contain every expected string. The bundle is
         /// parsed first, as a host's would be; only the construction may
-        /// refuse it.</summary>
+        /// refuse it. A bundle that is not an object at all (JSON null, corpus
+        /// 18) is refused by the loader, with the engine's words.</summary>
         private static int RunLoad(JArray cases)
         {
             int pass = 0;
@@ -815,10 +816,10 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var name = c.Value<string>("name");
                 try
                 {
-                    var bundle = BundleLoader.Parse((JObject)c["bundle"]);
                     string error = null;
                     try
                     {
+                        var bundle = BundleLoader.Parse(c["bundle"]);
                         new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = 0 });
                     }
                     catch (StoryletError ex)
@@ -1259,7 +1260,12 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var bundle = BundleLoader.Parse((JObject)c["bundle"]);
             var bundleB = c["bundleB"] is JObject bb ? BundleLoader.Parse(bb) : null;
             var seed = SeedOf(c["seed"]);
-            var engine = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = seed });
+            // What the engine reported to its OnError (corpus 18), as nodes:
+            // every engine this case builds reports here, and the sink is
+            // emptied before each op, as the reference runner's is.
+            var playErrors = new List<string>();
+            EngineOptions Options() => new EngineOptions { Seed = seed, OnError = e => playErrors.Add(e.Node) };
+            var engine = new StoryletStudio.StoryletEngine.Engine(bundle, Options());
             // The bundle the engine runs now: a kept durable half must carry its
             // content.
             var running = bundle;
@@ -1408,6 +1414,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var op = (JObject)script[index];
                 var kind = op.Value<string>("op");
                 var at = $"op {index} ({kind})";
+                playErrors.Clear();
                 var session = NeedsFlow(kind) ? FlowOf(op) : null;
                 switch (kind)
                 {
@@ -1468,6 +1475,15 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         CheckVerdicts(at, op);
                         CheckDiagnostic(at, op);
                         CheckTrace(at, op);
+                        if (op["expectPlayErrors"] is JArray expectPlayErrors)
+                        {
+                            var reported = playErrors.Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
+                            var wanted = StringList(expectPlayErrors);
+                            if (!SameList(reported, wanted))
+                            {
+                                failures.Add($"{at}: onError expected {Show(wanted)}, got {Show(reported)}");
+                            }
+                        }
                         if (op["expectBoard"] is JObject expectBoard)
                         {
                             foreach (var pair in expectBoard)
@@ -1784,6 +1800,35 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         break;
                     }
 
+                    case "loadEnvelope":
+                    {
+                        // Raw JSON that need not be a save at all, handed to a
+                        // fresh engine through the JSON layer, as a game's save
+                        // file would be: it must be refused, naming what is wrong.
+                        string loadError = null;
+                        try
+                        {
+                            var fresh = new StoryletStudio.StoryletEngine.Engine(bundle, Options());
+                            fresh.LoadGame(StoryletSave.FromJson(op["envelope"]));
+                        }
+                        catch (Exception ex)
+                        {
+                            loadError = ex.Message;
+                        }
+                        if (loadError == null)
+                        {
+                            failures.Add($"{at}: expected the envelope to be refused, it was loaded");
+                        }
+                        else
+                        {
+                            foreach (var want in StringList(op["expectRefused"]))
+                            {
+                                if (!loadError.Contains(want)) failures.Add($"{at}: expected the refusal to name \"{want}\", got \"{loadError}\"");
+                            }
+                        }
+                        break;
+                    }
+
                     case "saveLoad":
                     {
                         // Serialise the WHOLE engine, discard it, restore into a
@@ -1794,11 +1839,11 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         // so the script's handles are re-taken. The envelope
                         // crosses the JSON layer on the way, as a game's save
                         // does, so every scripted save also holds the wire
-                        // shape (storylets/save@2) to the engine's own.
+                        // shape (storylets/save@3) to the engine's own.
                         var savedText = StoryletSave.ToJson(engine.SaveGame()).ToString();
                         var envelope = StoryletSave.FromJson(JObject.Parse(savedText));
                         var into = op.Value<string>("into") == "B" ? bundleB : bundle;
-                        var target = new StoryletStudio.StoryletEngine.Engine(into, new EngineOptions { Seed = seed });
+                        var target = new StoryletStudio.StoryletEngine.Engine(into, Options());
                         if (op.Value<bool?>("previewOnly") == true)
                         {
                             // The purity claim, checked rather than asserted: the
@@ -1974,7 +2019,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         // What crosses is what the script kept, and only through
                         // the durable verbs.
                         running = op.Value<string>("into") == "B" ? bundleB : bundle;
-                        engine = new StoryletStudio.StoryletEngine.Engine(running, new EngineOptions { Seed = seed });
+                        engine = new StoryletStudio.StoryletEngine.Engine(running, Options());
                         handles = new Dictionary<string, Flow>();
                         if (memory == null) break;
                         LoadReport report;
@@ -2030,7 +2075,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     }
 
                     case "reset":
-                        engine = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = seed });
+                        engine = new StoryletStudio.StoryletEngine.Engine(bundle, Options());
                         running = bundle;
                         handles = new Dictionary<string, Flow>();
                         break;

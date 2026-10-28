@@ -80,6 +80,11 @@ export interface PropListOptions {
     target: (decl: PropertyDeclDto) => StageTargetDto | undefined;
     rename: (target: StageTargetDto, from: string, to: string) => void;
     gates: (target: StageTargetDto) => Promise<number>;
+    /** A row's NAME renamed (app-shell's `onRename`, once the edit is
+     *  committed): carry every reference to the property (ops
+     *  `renameProperty`). Given the target under its OLD name. Absent, a
+     *  rename renames the declaration alone. */
+    renameProperty?: (target: StageTargetDto, from: string, to: string) => void;
   };
   /** A card or outcome TEMPLATE: offer the field types (the family's one list,
    *  shared with Patterpad's game data: text, multiline, number, boolean, enum,
@@ -164,6 +169,15 @@ function stageHooks(stages: NonNullable<PropListOptions["stages"]>, changed: () 
   };
 }
 
+/** The shell list's name hook: a committed rename is queued like a stage's,
+ *  ahead of the list's own save, under the name the property had. */
+function renameHook(stages: NonNullable<PropListOptions["stages"]>) {
+  return (decl: PropertyDeclDto, from: string, to: string): void => {
+    const target = stages.target({ ...decl, name: from });
+    if (target !== undefined) stages.renameProperty!(target, from, to);
+  };
+}
+
 /** Mount the declaration list into `host`. Mutates `decls` in place. */
 export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], opts: PropListOptions = {}): PropertyListHandle {
   const changed = (): void => opts.onChange?.();
@@ -198,5 +212,6 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
     extraLine: (decl) => [shareLineFor(decl), opts.rowExtras?.(decl) ?? null],
     extraDetails: (decl) => switches(decl, opts, changed, () => repaintShare(decl)),
     ...(opts.stages !== undefined ? stageHooks(opts.stages, changed) : {}),
+    ...(opts.stages?.renameProperty !== undefined ? { onRename: renameHook(opts.stages) } : {}),
   });
 }

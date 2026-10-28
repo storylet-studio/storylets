@@ -947,6 +947,61 @@ export const fixtures: Fixtures = {
         } },
       ] },
 
+    // What the game hands in is checked (the hands-on review, 2026-10,
+    // foundation 5). A host write is the game's, so `writable: false` never
+    // refuses it, but it must still be a value the content declared: the
+    // kernel's `valueFits`, the rule a load walks a save with. The refusal
+    // says what the property takes, and lands nothing.
+    { name: "a host write that does not fit its declaration is refused, saying what it takes",
+      story: [
+        { name: "gold", type: "number", default: 0 },
+        { name: "mood", type: "enum", default: "calm", values: ["calm", "tense"] },
+        { name: "marks", type: "flags", default: [], values: ["night", "rain"] },
+        { name: "act", type: "quality", default: "arrival", stages: ["arrival", "act-1"] },
+        // None chosen: an enum whose own default is "" takes "" back.
+        { name: "pick", type: "enum", default: "", values: ["left", "right"] },
+      ],
+      world: [{ name: "hour", type: "number", default: 9 }],
+      cards: [{ id: "c_any" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "setState", story: { gold: "5" }, expectRefused: ["story.gold", "takes a number"] },
+        { op: "setState", story: { mood: "angry" }, expectRefused: ["story.mood", 'takes one of "calm", "tense"'] },
+        { op: "setState", story: { marks: ["night", "snow"] }, expectRefused: ["story.marks", 'takes a list of flags from "night", "rain"'] },
+        { op: "setState", story: { act: "act-9" }, expectRefused: ["story.act", 'takes one of its stages "arrival", "act-1"'] },
+        { op: "setState", world: { hour: true }, expectRefused: ["world.hour", "takes a number"] },
+        { op: "setState", world: { nope: 1 }, expectRefused: ["world.nope", "declares no @world.nope"] },
+        { op: "assertState", expect: { "story.gold": 0, "story.mood": "calm", "story.act": "arrival", "world.hour": 9 } },
+        // And a value that fits lands as ever.
+        { op: "setState", story: { mood: "" }, expectRefused: ["story.mood", 'takes one of "calm", "tense"'] },
+        { op: "setState", story: { gold: 5, mood: "tense", marks: ["rain"], act: "act-1", pick: "left" }, world: { hour: 21 } },
+        { op: "setState", story: { pick: "" } },
+        { op: "assertState", expect: { "story.pick": "" } },
+        { op: "assertState", expect: { "story.gold": 5, "story.mood": "tense", "story.act": "act-1", "world.hour": 21 } },
+        // A save that is not one is refused by what is wrong with it, not as
+        // whichever part a loader reached for first.
+        { op: "loadEnvelope", envelope: null, expectRefused: ["not a Storylets save", "null"] },
+        { op: "loadEnvelope", envelope: { schema: "nonsense" }, expectRefused: ["unsupported save schema", "nonsense"] },
+        { op: "loadEnvelope", envelope: { schema: "storylets/save@2" }, expectRefused: ["not a complete Storylets save", "no content"] },
+      ] },
+
+    // A condition the engine cannot evaluate counts as false, and the game
+    // hears of it through onError whether or not anything is tracing (the
+    // hands-on review, 2026-10, foundation 5). A division by zero is content
+    // the compiler cannot see.
+    { name: "a condition that fails to evaluate counts as false and is reported to onError",
+      story: [{ name: "gold", type: "number", default: 3 }, { name: "zero", type: "number", default: 0 }],
+      cards: [
+        { id: "c_first", priority: 3 },
+        { id: "c_broken", priority: 2, condition: "@story.gold / @story.zero > 1" },
+        { id: "c_last", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_first", "c_last"] },
+          expectDiagnostic: "division by zero", expectPlayErrors: ["card broken"] },
+      ] },
+
     { name: "a bundle with no extensions hands back none, and the project map's nodes take them by bare name",
       projectMap: true,
       uses: true,
@@ -1808,17 +1863,51 @@ export const fixtures: Fixtures = {
         { op: "play", card: "c_gone", outcome: "done", from: "h_a" },   // turn 1; cooldown at 6
         // Nothing is evicted: playing c_gone took it off the board, so the
         // only thing the edit orphans is the cooldown it left behind. A
-        // deleted card has no gameId left, so the report names it by the id
-        // the save carries - there is nothing else to call it.
+        // deleted card is named by the key the save carries, its Game ID from
+        // save version 3 - there is nothing else to call it.
         { op: "saveLoad", into: "B", expectReport: {
           exact: false, project: "conf", flows: ["main"],
           version: { saved: "0.0.0", bundle: "0.0.0" }, hash: { saved: "", bundle: "" },
           evicted: [], droppedSpent: [],
-          droppedCooldowns: [{ flow: "main", card: "c_gone" }],
+          droppedCooldowns: [{ flow: "main", card: "gone" }],
           droppedProperties: [], defaultedProperties: [], retypedProperties: [],
         } },
         { op: "assertState", expect: { "turn.b_x": 1 } },
         { op: "peek", expect: ["c_stay"] },
+      ] },
+
+    // A save names cards by GAME ID from save version 3 (the hands-on review,
+    // 2026-10, foundation 7), as its play log always did. A card deleted and
+    // made again under the same Game ID is the same card to a game, so it
+    // keeps its place on the board and its cooldown as well as its play
+    // count; the version 2 save kept only the count. The `cc_` ids are the
+    // fixture's way to a new internal id under the old Game ID.
+    { name: "a card made again under the same Game ID keeps its place, its cooldown and its play count",
+      cards: [
+        { id: "c_relic", priority: 3, redraw: 5, outcomes: [{ id: "o_done" }] },
+        { id: "c_held", priority: 2, outcomes: [{ id: "o_done" }] },
+        { id: "c_late", priority: 1, condition: 'count_played("relic") >= 1' },
+      ],
+      hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      bundleB: {
+        cards: [
+          { id: "cc_relic", priority: 3, redraw: 5, outcomes: [{ id: "o_done" }] },
+          { id: "cc_held", priority: 2, outcomes: [{ id: "o_done" }] },
+          { id: "cc_late", priority: 1, condition: 'count_played("relic") >= 1' },
+        ],
+        hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      },
+      script: [
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_relic", "c_held"] } },
+        { op: "play", card: "c_relic", outcome: "done", from: "h_a" },   // turn 1; next eligible at 6
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: true, project: "conf", flows: ["main"],
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertBoard", expect: { h_a: ["cc_held"] } },
+        // The relic is still cooling down, and the play it left counts.
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["cc_held", "cc_late"] } },
       ] },
 
     // The eviction pass's "vanished" reason, which nothing here covered: the
@@ -1840,10 +1929,10 @@ export const fixtures: Fixtures = {
       script: [
         { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_gone"] } },
         // The hand survives, so it is named by its gameId; the card does not,
-        // so it is named by its saved id.
+        // so it is named by the key the save carries (its Game ID, version 3).
         { op: "saveLoad", into: "B", expectReport: {
           exact: false, project: "conf", flows: ["main"],
-          evicted: [{ flow: "main", hand: "a", card: "c_gone", reason: "vanished" }],
+          evicted: [{ flow: "main", hand: "a", card: "gone", reason: "vanished" }],
           droppedCooldowns: [], droppedSpent: [],
           droppedProperties: [], defaultedProperties: [], retypedProperties: [],
         } },
@@ -2514,7 +2603,7 @@ export const fixtures: Fixtures = {
         { op: "saveLoad", into: "B" },
         { op: "resumeFlow", flow: "alice", expectReport: {
           exact: false, project: "conf", flows: ["alice"],
-          evicted: [{ flow: "alice", hand: "a", card: "c_gone", reason: "vanished" }],
+          evicted: [{ flow: "alice", hand: "a", card: "gone", reason: "vanished" }],
           droppedCooldowns: [], droppedSpent: [], droppedProperties: [], retypedProperties: [],
           defaultedProperties: [{ flow: "alice", path: "box.box.heat" }],
         } },
@@ -2539,7 +2628,7 @@ export const fixtures: Fixtures = {
         // saveGame() to be identical either side of the call.
         { op: "saveLoad", into: "B", previewOnly: true, expectReport: {
           exact: false, project: "conf", flows: ["main"],
-          evicted: [{ flow: "main", hand: "a", card: "c_gone", reason: "vanished" }],
+          evicted: [{ flow: "main", hand: "a", card: "gone", reason: "vanished" }],
           droppedCooldowns: [], droppedSpent: [],
           droppedProperties: [], defaultedProperties: [], retypedProperties: [],
         } },
@@ -2547,7 +2636,7 @@ export const fixtures: Fixtures = {
         { op: "assertBoard", expect: { h_a: ["c_gone", "c_stay"] } },
         { op: "saveLoad", into: "B", expectReport: {
           exact: false, project: "conf", flows: ["main"],
-          evicted: [{ flow: "main", hand: "a", card: "c_gone", reason: "vanished" }],
+          evicted: [{ flow: "main", hand: "a", card: "gone", reason: "vanished" }],
           droppedCooldowns: [], droppedSpent: [],
           droppedProperties: [], defaultedProperties: [], retypedProperties: [],
         } },
@@ -2602,10 +2691,10 @@ export const fixtures: Fixtures = {
       script: [
         { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_seat"] } },
         // The card still has a gameId in the new build and is named by it; the
-        // hand does not, so it is named by the id the save carries.
+        // hand does not, so it is named by the key the save carries.
         { op: "saveLoad", into: "B", expectReport: {
           exact: false, project: "conf", flows: ["main"],
-          evicted: [{ flow: "main", hand: "h_a", card: "seat", reason: "hand-vanished" }],
+          evicted: [{ flow: "main", hand: "a", card: "seat", reason: "hand-vanished" }],
           droppedCooldowns: [], droppedSpent: [],
           droppedProperties: [], defaultedProperties: [], retypedProperties: [],
         } },
@@ -2627,7 +2716,7 @@ export const fixtures: Fixtures = {
         { op: "play", card: "c_relic", outcome: "take", from: "h_q" },   // shared one-shot: spent for everyone
         { op: "saveLoad", into: "B", expectReport: {
           exact: false, project: "conf", flows: ["main"],
-          evicted: [], droppedCooldowns: [], droppedSpent: ["c_relic"],
+          evicted: [], droppedCooldowns: [], droppedSpent: ["relic"],
           droppedProperties: [], defaultedProperties: [], retypedProperties: [],
         } },
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_plain"] } },
@@ -3632,10 +3721,12 @@ export const fixtures: Fixtures = {
 
     // Ruling D. After a load into an edited build, a seated card can belong
     // to a deck that is now in ANOTHER box. To the hand it has gone from its
-    // box, so the next deal evicts it as `vanished`, the reason a card the
-    // build no longer has already gets. The card still exists, so it is named
-    // by its gameId. (The JS reference evicted it as `deck-gate` by accident,
-    // through a missing map key; two ports crashed on the same lookup.)
+    // box, so it is evicted as `vanished`, the reason a card the build no
+    // longer has already gets. The card still exists, so it is named by its
+    // gameId. (The JS reference evicted it as `deck-gate` by accident, through
+    // a missing map key; two ports crashed on the same lookup.) From corpus 20
+    // the load itself checks what it puts back, so it goes at the load, in the
+    // report, and the next deal has nothing left to evict.
     { name: "a seated card whose deck moved to another box is evicted as vanished",
       cards: [
         { id: "c_move", priority: 2 },
@@ -3649,9 +3740,43 @@ export const fixtures: Fixtures = {
       },
       script: [
         { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_move"] } },
-        { op: "saveLoad", into: "B" },
-        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_stay"] },
-          expectTrace: ["evict a move vanished"] },
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, evicted: [{ flow: "main", hand: "a", card: "move", reason: "vanished" }],
+        } },
+        { op: "assertBoard", expect: { h_a: [] } },
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_stay"] } },
+      ] },
+
+    // A save from before a content edit can put back a card whose condition
+    // the edit made false. The load checks every held card as a deal would,
+    // with the values the save carries, and drops what no longer qualifies,
+    // in the report (the hands-on review, 2026-10, foundation 7). The check
+    // draws nothing: the next deal is exactly what it would have been.
+    { name: "a load drops a held card that no longer qualifies, and says why",
+      story: [{ name: "open", type: "boolean", default: true }],
+      cards: [
+        { id: "c_gate", priority: 2, condition: "@story.open" },
+        { id: "c_plain", priority: 1 },
+      ],
+      hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      bundleB: {
+        story: [{ name: "open", type: "boolean", default: true }],
+        cards: [
+          { id: "c_gate", priority: 2, condition: "not @story.open" },
+          { id: "c_plain", priority: 1 },
+        ],
+        hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      },
+      script: [
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_gate", "c_plain"] } },
+        { op: "saveLoad", into: "B", previewOnly: true, expectReport: {
+          exact: false, evicted: [{ flow: "main", hand: "a", card: "gate", reason: "condition" }],
+        } },
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, evicted: [{ flow: "main", hand: "a", card: "gate", reason: "condition" }],
+          droppedCooldowns: [], droppedSpent: [], droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertBoard", expect: { h_a: ["c_plain"] } },
       ] },
 
     // Ruling E. JS object order is the contract for keyed results: a key that
@@ -3834,5 +3959,18 @@ export const fixtures: Fixtures = {
       schema: "storylets/bundle@9",
       cards: [{ id: "c_any" }],
       expectRefused: ["storylets/bundle@9"] },
+
+    // No bundle, or one cut short, is refused by what is wrong with it rather
+    // than as whichever part the engine read first (the hands-on review,
+    // 2026-10, foundation 5).
+    { name: "no bundle at all is refused as not a bundle",
+      nullBundle: true,
+      cards: [{ id: "c_any" }],
+      expectRefused: ["not a Storylets bundle", "null"] },
+
+    { name: "a bundle cut short is refused, naming what it lacks",
+      drop: ["boxes", "story"],
+      cards: [{ id: "c_any" }],
+      expectRefused: ["not a complete Storylets bundle", "no story properties", "no boxes"] },
   ],
 };

@@ -127,6 +127,17 @@ describe("the Coverage window", () => {
     expect(document.querySelector(".cnote .hint")?.textContent).toBe("2 coverage drivers feeding @world.");
   });
 
+  it("says nothing about drivers for a project with no @world, which has nothing for one to feed", async () => {
+    info = { ...info, driverCount: 0, worldCount: 0 };
+    window.dispatchEvent(new Event("focus"));
+    await settle();
+    expect((document.querySelector(".cnote") as HTMLElement).hidden).toBe(true);
+    info = { ...info, worldCount: 2 };
+    window.dispatchEvent(new Event("focus"));
+    await settle();
+    expect((document.querySelector(".cnote") as HTMLElement).hidden).toBe(false);
+  });
+
   it("says what to do with no project open", async () => {
     info = { hasProject: false, name: "", driverCount: 0, pinned: true };
     projectChanged!();

@@ -178,6 +178,28 @@ export async function redo(session: ProjectSession): Promise<Written | null> {
 }
 
 /**
+ * Apply writes that finish the author's last step rather than make one of
+ * their own (History.fold): a property rename's references, when the list
+ * already saved the new name as its own step, so one Undo puts back the name
+ * and every reference together. The same checks as `commit`.
+ */
+export async function commitFolded(session: ProjectSession, given: FileState[]): Promise<Written> {
+  const writes = withGameScopes(session.loaded.source, session.loaded.dir, given);
+  const refusal = refuseWrite(readRemote(session.loaded.dir)?.role, writes.map((w) => w.path));
+  if (refusal !== undefined) return refuse(session, refusal);
+  const current = captureBefore(writes.map((w) => w.path));
+  const changing = writes.filter((w, i) => w.content !== current[i]!.content);
+  if (changing.length === 0) return reload(session);
+  const drifted = refuseDrift(session, changing.map((w) => w.path));
+  if (drifted !== undefined) return drifted;
+  const before = captureBefore(changing.map((w) => w.path));
+  const applied = await applyStates(changing);
+  if (applied.ok || applied.wrote) session.history.fold(before, changing);
+  if (!applied.ok) return refuse(session, applied.error);
+  return reload(session, true);
+}
+
+/**
  * Store a colour for every box on the map that has none yet (box-colours.ts),
  * the first time the map is drawn. Not an undo step of its own: it is folded
  * into the author's last one (History.fold), so the next Undo undoes what they

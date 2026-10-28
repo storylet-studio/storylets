@@ -16,9 +16,10 @@
 //   world.x / story.x / box.<gameId>.x / deck.<gameId>.x / hand.<gameId>.x /
 //   value.<tagGameId>.x, and value.<boxGameId>/<tagGameId>.x for a tag gameId
 //   two boxes share (4.4)
-//   turn:<boxId>      per-box clocks
-//   cooldown:<cardId> next-eligible turns
-//   board:<handId>    hand contents (card ids, dealt order)
+//   turn:<boxGameId>       per-box clocks
+//   cooldown:<cardGameId>  next-eligible turns
+//   board:<handGameId>     hand contents (card Game IDs, dealt order)
+// (Game IDs as the save keys them from version 3; internal ids before.)
 // Line format: `${label}${path}: ${from} -> ${to}`, `<unset>` for undefined.
 // ---------------------------------------------------------------------------
 

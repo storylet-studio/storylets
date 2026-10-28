@@ -318,7 +318,7 @@ describe("card mutations", () => {
     expect(card.fields?.["quiet"]).toBeUndefined();
   });
 
-  it("duplicates a card (fresh ids, deduped gameId, inserted after the original)", async () => {
+  it("duplicates a card (fresh ids, the next free title and the gameId it gives, inserted after the original)", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
     const before = session.dto.boxes[0]!.decks[0]!.cards.length;
@@ -331,7 +331,10 @@ describe("card mutations", () => {
     expect(cards.length).toBe(before + 1);
     const clone = cards.find((c) => c.id === dup.cardId)!;
     expect(clone.id).not.toBe(ratJob.id);
-    expect(clone.gameId).toBe("rat-job-copy");
+    // "A rat job 2", whose address follows its title: no pinned "-copy" id
+    // (the hands-on review, 2026-10, foundation 4).
+    expect(clone.title).toBe(`${ratJob.title} 2`);
+    expect(clone.gameId).toBe("a-rat-job-2");
     // Outcomes are cloned with fresh ids.
     const origOutcomeIds = new Set(cards.find((c) => c.id === ratJob.id)!.outcomes.map((o) => o.id));
     expect(clone.outcomes.every((o) => !origOutcomeIds.has(o.id))).toBe(true);

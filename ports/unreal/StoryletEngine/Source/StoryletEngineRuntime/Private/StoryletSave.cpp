@@ -45,7 +45,7 @@ bool UStoryletSave::LoadStateFromJsonWithReport(UStoryletEngine* Engine, const F
 	// The file's @world values are the HOST's to restore. A bound container
 	// takes them directly (its read-only policy binds the story, not a load);
 	// a self-backed engine takes them through setProperty (a storylets/save@2
-	// envelope already restored them from its registry; a storylets/save@1
+	// or @3 envelope already restored them from its registry; a storylets/save@1
 	// envelope never carried them, so this is where they come back). A name
 	// nothing answers for, such as a @world the game's registry does not hold,
 	// is dropped.
@@ -88,7 +88,7 @@ FString UStoryletSave::PreviewLoadFromJson(UStoryletEngine* Engine, const FStrin
 	const std::string EnvelopeSchema = EngineTree && EngineTree->isObject() ? EngineTree->strOr("schema") : std::string();
 	if (Tree.strOr("schema") != storylets::SAVEFILE_SCHEMA
 		|| !EngineTree || !EngineTree->isObject()
-		|| (EnvelopeSchema != storylets::SAVE_SCHEMA && EnvelopeSchema != storylets::SAVE_SCHEMA_V1))
+		|| !storylets::IsReadableSaveSchema(EnvelopeSchema))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson - not a storylets save"));
 		return FString();

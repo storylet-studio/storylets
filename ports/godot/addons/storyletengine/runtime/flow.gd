@@ -523,16 +523,43 @@ func _eval(expr: Dictionary, ctx: Dictionary) -> Variant:
 
 
 # A condition gate: absent passes; an eval error is never a silent pass - the
-# card/deck is unavailable (schema 3.1) and the trace surfaces the diagnostic.
-func _passes(expr, ctx: Dictionary, where: String = "condition") -> bool:
+# card/deck is unavailable (schema 3.1), the game hears of it through on_error,
+# tracing or not, and the trace carries it too. `what` ("card", "deck", "hand"
+# or "outcome") and `subject` (and, for an outcome, its card as `card`) name
+# whose condition it is; the label is built only when an evaluation fails.
+func _passes(expr, ctx: Dictionary, what: String, subject, card = null) -> bool:
 	if expr == null:
 		return true
 	var v = _eval(expr, ctx)
 	if StoryletExpression.is_error(v):
-		if _tracing():
-			_emit({"type": "diagnostic", "where": where, "message": v.message})
+		_condition_failed(expr, what, subject, card, v.message)
 		return false
 	return StoryletValues.condition_passes(v)
+
+
+# Report a condition the engine could not evaluate and counted as false: to the
+# game's "on_error" Callable (create's option), or push_warning when none is set,
+# so it is never silent; and to the trace as a `diagnostic`. Patterplay's
+# _report_error, the same shape. `node` is `card <gameId>`, `deck <gameId>`,
+# `hand <gameId>` or `outcome <card gameId>/<outcome gameId>`.
+func _condition_failed(expr, what: String, subject, card, message: String) -> void:
+	var node: String
+	if what == "outcome":
+		node = "outcome %s/%s" % [StoryletBundle.effective_game_id(card), StoryletBundle.effective_game_id(subject)]
+	else:
+		node = "%s %s" % [what, StoryletBundle.effective_game_id(subject) if subject is Dictionary else ""]
+	var err := {"flow": _id, "kind": "condition", "node": node}
+	var source = expr.get("src") if expr is Dictionary else null
+	if source is String and source != "":
+		err["source"] = source
+	err["message"] = message
+	var on_error = _engine._on_error
+	if on_error is Callable and (on_error as Callable).is_valid():
+		(on_error as Callable).call(err)
+	else:
+		push_warning("Storylet Engine: the condition on %s in flow '%s' failed, counted as false: %s" % [node, _id, message])
+	if _tracing():
+		_emit({"type": "diagnostic", "where": node + (" gate" if what == "deck" else " condition"), "message": message})
 
 
 # --- resolving asks (schema 2.6 + 3.6) -----------------------------------------
@@ -871,14 +898,13 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 	var hand_env := _build_hand_env(ask)
 
 	# The hand's condition: ask-constant, evaluated once (schema 3.1 step 4).
-	var hand_where := "hand %s condition" % (StoryletBundle.effective_game_id(ask["hand"]) if ask.has("hand") else "")
-	if not _passes(ask.get("condition"), _eval_ctx(box, null, hand_env), hand_where):
+	if not _passes(ask.get("condition"), _eval_ctx(box, null, hand_env), "hand", ask.get("hand")):
 		return {"ordered": [], "hand_env": hand_env}
 
 	# Deck gates: evaluated once per ask, in deck (id) order (schema 2.5).
 	var gate_ok := {}
 	for deck in box["decks"]:
-		gate_ok[deck["id"]] = _passes(deck.get("condition"), _eval_ctx(box, deck, hand_env), "deck %s gate" % str(deck.get("gameId", deck["id"])))
+		gate_ok[deck["id"]] = _passes(deck.get("condition"), _eval_ctx(box, deck, hand_env), "deck", deck)
 
 	var turn_now: float = _turn_counts.get(box["id"], 0.0)
 	var scored: Array = []
@@ -906,9 +932,9 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 				_verdict(trace, card, "tags")
 				continue
 			var ctx := deck_ctx
-			# The label is only read when an eval THROWS and only when tracing, so
-			# formatting it per card was waste on the path that matters.
-			if card.has("condition") and not _passes(card["condition"], ctx, ("card %s condition" % str(card.get("gameId", card["id"]))) if _tracing() else ""):
+			# The label is built only when an eval fails, so formatting it per
+			# card costs nothing on the path that matters.
+			if card.has("condition") and not _passes(card["condition"], ctx, "card", card):
 				_verdict(trace, card, "condition")
 				continue
 			var refused: String = claimed.call(card, shared)   # claims, last (schema 3.1 step 6)
@@ -1135,6 +1161,95 @@ func deal(hand_ref: String) -> Array:
 	return deal_many([hand_ref]).get(StoryletBundle.effective_game_id(found["hand"]), [])
 
 
+## Drop the cards a hand holds that are no longer available to it, as a deal
+## does before it fills, and say which went and why: [{"card", "reason"}], the
+## card by gameId. The deal's first pass, and the load's check of what it put
+## back (drop_unqualified). The hand's ask error, as a String, when there is no
+## ask to check against; the board is then left as it was.
+func _evict_unavailable(hand: Dictionary, box: Dictionary) -> Variant:
+	var ask := _ask_for_hand(hand, box)
+	if ask.has("error"):
+		return str(ask["error"])
+	var hand_env := _build_hand_env(ask)
+	var condition_ok := _passes(ask.get("condition"), _eval_ctx(box, null, hand_env), "hand", hand)
+	var gate_ok := {}
+	# ONE context per deck, kept for the card conditions below as _run_ask
+	# keeps its own: box, deck and hand_env do not vary per card, and a
+	# condition is a read-only gate (schema 3.1).
+	var deck_ctxs := {}
+	for deck in box["decks"]:
+		var deck_ctx := _eval_ctx(box, deck, hand_env)
+		deck_ctxs[deck["id"]] = deck_ctx
+		gate_ok[deck["id"]] = _passes(deck.get("condition"), deck_ctx, "deck", deck)
+	var turn_now: float = _turn_counts.get(box["id"], 0.0)
+	var survivors: Array = []
+	# The card is named by gameId (4.4). A card the build no longer has - the
+	# "vanished" reason below - has no gameId left, so it is named by the id
+	# the board carries, which is the rule a load report has always used for
+	# the same reason.
+	var evicted: Array = []
+	for card_id in _board_contents.get(hand["id"], []):
+		var reason := ""
+		if not condition_ok:
+			reason = "hand-condition"
+		else:
+			var entry = _engine._cards_by_id.get(card_id)
+			if entry == null:
+				reason = "vanished"   # edited content: dropped
+			elif entry["box"]["id"] != box["id"]:
+				# Its deck is in ANOTHER box now (a load, resume or hot swap into
+				# an edited build): gone from this hand's box, as a deleted card
+				# is (ruling D). The gate lookup below had no key for it and
+				# stopped the deal with a script error.
+				reason = "vanished"
+			elif not gate_ok[entry["deck"]["id"]]:
+				reason = "deck-gate"
+			elif _card_is_shared(entry["card"], bool(entry["deck"].get("shared", false))) and _engine.is_taken(card_id):
+				# Taken out of the world by somebody's shared one-shot (ruling C):
+				# checked where the fill checks it, after the gate and before this
+				# flow's own clock, so a card one playthrough holds leaves its hand
+				# once another has spent it, as a cooldown would evict it.
+				reason = "taken"
+			elif float(_cooldowns.get(card_id, 0.0)) > turn_now:
+				reason = "cooldown"
+			elif not _tags_match(entry["card"], hand_env["bound_tags"]):
+				reason = "tags"
+			elif entry["card"].has("condition") and not _passes(entry["card"]["condition"], deck_ctxs[entry["deck"]["id"]], "card", entry["card"]):
+				reason = "condition"
+		if reason == "":
+			survivors.append(card_id)
+		else:
+			var known = _engine._cards_by_id.get(card_id)
+			evicted.append({"card": StoryletBundle.effective_game_id(known["card"]) if known != null else card_id,
+				"reason": reason})
+	_board_contents[hand["id"]] = survivors
+	return evicted
+
+
+## @internal - after a load puts this flow's board back, drop every held card
+## that no longer qualifies, as a deal would (the hands-on review, 2026-10,
+## foundation 7: a save from before a content edit could put back a card whose
+## condition is now false, and nothing said so). Every hand, in id order, on a
+## copy of the flow's generator, so the check draws nothing and the next deal
+## is exactly what it would have been. Returns [{"hand", "card", "reason"}],
+## hand and card by gameId; emits no trace events.
+func drop_unqualified() -> Array:
+	var own := _prng
+	_prng = StoryletMulberry32.new(own.state())
+	var out: Array = []
+	var ids: Array = _engine._hands_by_id.keys()
+	ids.sort()
+	for hand_id in ids:
+		var found: Dictionary = _engine._hands_by_id[hand_id]
+		var evicted = _evict_unavailable(found["hand"], found["box"])
+		if evicted is String:
+			continue   # the next deal reports it
+		for e in evicted:
+			out.append({"hand": StoryletBundle.effective_game_id(found["hand"]), "card": e["card"], "reason": e["reason"]})
+	_prng = own
+	return out
+
+
 ## Re-deal several / all hands (schema 3.5): seeded hand-order shuffle
 ## (fairness), evict, seed the ledger from survivors, fill in order. Returns
 ## the dealt slice - the new contents of exactly the hands this call dealt,
@@ -1160,73 +1275,18 @@ func deal_many(hand_refs = null) -> Dictionary:
 	StoryletMulberry32.shuffle_in_place(dealt, _prng)
 
 	# Eviction first: drop dealt cards no longer available to their hand
-	# (minus the claims check against their own seat).
+	# (minus the claims check against their own seat). Trace events fire after
+	# the state they report has landed (a handler reading the board sees the
+	# eviction).
 	for f in dealt:
 		var hand: Dictionary = f["hand"]
 		var box: Dictionary = f["box"]
-		var ask := _ask_for_hand(hand, box)
-		if ask.has("error"):
-			push_error("StoryletFlow.deal_many: " + ask["error"])
+		var evicted = _evict_unavailable(hand, box)
+		if evicted is String:
+			push_error("StoryletFlow.deal_many: " + evicted)
 			continue
-		var hand_env := _build_hand_env(ask)
-		var condition_ok := _passes(ask.get("condition"), _eval_ctx(box, null, hand_env))
-		var gate_ok := {}
-		# ONE context per deck, kept for the card conditions below as _run_ask
-		# keeps its own: box, deck and hand_env do not vary per card, and a
-		# condition is a read-only gate (schema 3.1).
-		var deck_ctxs := {}
-		for deck in box["decks"]:
-			var deck_ctx := _eval_ctx(box, deck, hand_env)
-			deck_ctxs[deck["id"]] = deck_ctx
-			gate_ok[deck["id"]] = _passes(deck.get("condition"), deck_ctx)
-		var turn_now: float = _turn_counts.get(box["id"], 0.0)
-		var survivors: Array = []
-		# Trace events fire after the state they report has landed (a handler
-		# reading the board sees the eviction), so they are collected here and
-		# emitted once the survivors are set.
-		#
-		# The card is named by gameId (4.4). A card the build no longer has - the
-		# "vanished" reason below - has no gameId left, so it is named by the id
-		# the board carries, which is the rule a load report has always used for
-		# the same reason.
-		var evicted: Array = []
-		for card_id in _board_contents.get(hand["id"], []):
-			var reason := ""
-			if not condition_ok:
-				reason = "hand-condition"
-			else:
-				var entry = _engine._cards_by_id.get(card_id)
-				if entry == null:
-					reason = "vanished"   # edited content: dropped
-				elif entry["box"]["id"] != box["id"]:
-					# Its deck is in ANOTHER box now (a load, resume or hot swap into
-					# an edited build): gone from this hand's box, as a deleted card
-					# is (ruling D). The gate lookup below had no key for it and
-					# stopped the deal with a script error.
-					reason = "vanished"
-				elif not gate_ok[entry["deck"]["id"]]:
-					reason = "deck-gate"
-				elif _card_is_shared(entry["card"], bool(entry["deck"].get("shared", false))) and _engine.is_taken(card_id):
-					# Taken out of the world by somebody's shared one-shot (ruling C):
-					# checked where the fill checks it, after the gate and before this
-					# flow's own clock, so a card one playthrough holds leaves its hand
-					# once another has spent it, as a cooldown would evict it.
-					reason = "taken"
-				elif float(_cooldowns.get(card_id, 0.0)) > turn_now:
-					reason = "cooldown"
-				elif not _tags_match(entry["card"], hand_env["bound_tags"]):
-					reason = "tags"
-				elif entry["card"].has("condition") and not _passes(entry["card"]["condition"], deck_ctxs[entry["deck"]["id"]],
-						("card %s condition" % str(entry["card"].get("gameId", card_id))) if _tracing() else ""):
-					reason = "condition"
-			if reason == "":
-				survivors.append(card_id)
-			else:
-				var known = _engine._cards_by_id.get(card_id)
-				evicted.append({"card": StoryletBundle.effective_game_id(known["card"]) if known != null else card_id,
-					"reason": reason})
-		_board_contents[hand["id"]] = survivors
 		if _tracing():
+			var turn_now: float = _turn_counts.get(box["id"], 0.0)
 			for e in evicted:
 				_emit({"type": "evict", "hand": StoryletBundle.effective_game_id(hand), "card": e["card"], "reason": e["reason"]}, turn_now)
 
@@ -1374,7 +1434,7 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 			view["fields"] = _copy(o["fields"])
 		if o.has("extensions"):
 			view["extensions"] = _copy(o["extensions"])
-		view["available"] = _passes(o.get("condition"), ctx)
+		view["available"] = _passes(o.get("condition"), ctx, "outcome", o, entry["card"])
 		out.append(view)
 	return out
 
@@ -1429,7 +1489,7 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 
 	var hand_env := _build_hand_env(ask)
 	var ctx := _eval_ctx(entry["box"], entry["deck"], hand_env)
-	if outcome != null and not _passes(outcome.get("condition"), ctx):
+	if outcome != null and not _passes(outcome.get("condition"), ctx, "outcome", outcome, entry["card"]):
 		return 'outcome "%s" on "%s" is gated shut' % [outcome_game_id, StoryletBundle.effective_game_id(entry["card"])]
 
 	# The played card's box's clock advances (schema 3.4); computed up front
@@ -1777,6 +1837,10 @@ func set_property(path: String, value) -> String:
 		return closed_msg
 	var parts := path.split(".")
 	if parts.size() == 2 and parts[0] == "world":
+		var unfit_world := _engine.host_write_refusal(path, value)
+		if unfit_world != "":
+			push_error("StoryletFlow.set_property: " + unfit_world)
+			return unfit_world
 		if not _engine.world_can_set():
 			var msg := "@world is read-only here: the host bound no write"
 			push_error("StoryletFlow.set_property: " + msg)
@@ -1807,6 +1871,12 @@ func set_property(path: String, value) -> String:
 		var bad := 'bad property path "%s"' % path
 		push_error("StoryletFlow.set_property: " + bad)
 		return bad
+	# What the game hands in must fit what the content declared (the hands-on
+	# review, 2026-10, foundation 5), checked once the address resolves.
+	var unfit := _engine.host_write_refusal(path, value)
+	if unfit != "":
+		push_error("StoryletFlow.set_property: " + unfit)
+		return unfit
 	var own = _stores["story"] if kind == "story" else _stores[kind].get(owner_id)
 	var shared = _engine._shared["story"] if kind == "story" else _engine._shared[kind].get(owner_id)
 	if own == null and shared == null:
@@ -1912,16 +1982,31 @@ func write_durable(plan: Dictionary) -> void:
 ## @internal - this flow's blob, deep-copied: inside the engine's envelope
 ## without its properties (the registry has them), or parked whole by
 ## save_flow, properties included. Engine-side plumbing; a host parks a flow
-## with engine.save_flow.
+## with engine.save_flow. Keyed by Game ID (save version 3; see the engine's
+## _saved_card): the turns by box, the cooldowns by card, the board by hand with
+## its cards, in the order the flow holds them. Each map in JS object order, as
+## the reference's Object.fromEntries builds it, so the bytes match.
 func snapshot(with_props: bool) -> Dictionary:
 	var out := {}
 	if with_props:
 		out["props"] = _engine._partition_values(_stores)
+	var turns := {}
+	for box_id in _turn_counts:
+		turns[_engine.box_key(str(box_id))] = _turn_counts[box_id]
+	var cooldowns := {}
+	for card_id in _cooldowns:
+		cooldowns[_engine.card_key(str(card_id))] = _cooldowns[card_id]
+	var board := {}
+	for hand_id in _board_contents:
+		var cards: Array = []
+		for card_id in _board_contents[hand_id]:
+			cards.append(_engine.card_key(str(card_id)))
+		board[_engine.hand_key(str(hand_id))] = cards
 	out.merge({
-		"turns": _turn_counts.duplicate(true),
+		"turns": StoryletEngine.js_ordered(turns),
 		"prng": _prng.state(),
-		"cooldowns": _cooldowns.duplicate(true),
-		"board": _board_contents.duplicate(true),
+		"cooldowns": StoryletEngine.js_ordered(cooldowns),
+		"board": StoryletEngine.js_ordered(board),
 		"playLog": _play_log.duplicate(true),
 	})
 	return out

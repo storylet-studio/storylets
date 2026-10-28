@@ -42,6 +42,9 @@ struct FStoryletFlowImpl;
  *  GetFlow is the call it meant. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FStoryletReplacedFlow, const FString&, FlowId, int32, DealtCards);
 
+/** A content error the engine played through: what failed, where, and why. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStoryletErrorEvent, const FStoryletPlayError&, Error);
+
 /**
  * One playthrough over the engine's world: the play verbs, over this flow's
  * own PRNG, per-box clocks, cooldowns, board, claims and play history. Handed
@@ -332,6 +335,15 @@ public:
 	 *  GetFlow was the call. Survives ApplyLiveBundle. */
 	UPROPERTY(BlueprintAssignable, Category = "Storylet Engine|Debug")
 	FStoryletReplacedFlow OnReplacedFlow;
+
+	/** Fired with each condition the engine could not evaluate and counted as
+	 *  false (see FStoryletPlayError), whether or not anything traces: a host
+	 *  value of the wrong type, a resolver that throws, a division by zero.
+	 *  The deal carries on either way. With nothing bound, each is logged as a
+	 *  Warning instead, so a content bug is never silent. Survives
+	 *  ApplyLiveBundle. Patterplay's OnError, the same shape. */
+	UPROPERTY(BlueprintAssignable, Category = "Storylet Engine")
+	FStoryletErrorEvent OnError;
 
 	// --- flows (design/flows.md) ---------------------------------------------
 

@@ -192,11 +192,48 @@ namespace StoryletStudio.StoryletEngine
         /// GetFlow is the call. Parity with the JS runtime's onReplacedFlow.
         /// Zero cost when unset.</summary>
         public Action<string, int> OnReplacedFlow = null;
+        /// <summary>Told of every condition the engine could not evaluate and
+        /// counted as false (see <see cref="PlayError"/>), whether or not
+        /// anything is tracing. Unset, each goes to
+        /// <see cref="Engine.DefaultOnError"/>, so a content bug is never
+        /// silent. Parity with the JS runtime's onError and Patterplay's
+        /// OnError, the same shape.</summary>
+        public Action<PlayError> OnError = null;
 
         /// <summary>A copy, for a HotSwap replacement: the engine keeps the
         /// options it was built with, and a caller that changes its own
         /// EngineOptions afterwards changes nothing here.</summary>
         internal EngineOptions Copy() => (EngineOptions)MemberwiseClone();
+    }
+
+    /// <summary>A content error the engine played through. Content can fail at
+    /// run time in ways the compiler cannot see: a host value of the wrong
+    /// type, a resolver that throws, a division by zero. A deal never stops for
+    /// one: the condition counts as false, so the card, deck or hand is not
+    /// available, and the error is reported through
+    /// <see cref="EngineOptions.OnError"/> and as a DiagnosticEvent. The same
+    /// rule and the same shape as Patterplay's, on all four runtimes (the
+    /// hands-on review, 2026-10, foundation 5: an error used to reach only a
+    /// trace, so with tracing off a resolver typo looked like a card that never
+    /// came up).</summary>
+    public sealed class PlayError
+    {
+        /// <summary>The flow it happened in.</summary>
+        public string Flow;
+        /// <summary>What failed. A Storylets deal evaluates only conditions:
+        /// always "condition".</summary>
+        public string Kind;
+        /// <summary>Whose condition: "card &lt;gameId&gt;", "deck &lt;gameId&gt;",
+        /// "hand &lt;gameId&gt;" or "outcome &lt;card gameId&gt;/&lt;outcome gameId&gt;".</summary>
+        public string Node;
+        /// <summary>The expression's source text, when the bundle carries it;
+        /// null otherwise.</summary>
+        public string Source;
+        public string Message;
+
+        /// <summary>One line for a console: what failed, where, and why.</summary>
+        public override string ToString()
+            => $"the {Kind} on {Node} in flow '{Flow}' failed, counted as false: {Message}";
     }
 
     /// <summary>What Engine.HotSwap produced: the replacement engine, and the
@@ -254,9 +291,9 @@ namespace StoryletStudio.StoryletEngine
     /// cross builds: a value by its property ADDRESS, exactly as
     /// ListProperties() prints it and SetProperty takes it ("story.souls",
     /// "hand.the-elder.met", "value.harbour/docks.lamps"), and a spend by the
-    /// card's GAMEID. A save keys by internal id so it survives a rename; a
-    /// durable half keys by name so a person can read it, and a rename shows
-    /// up in the report instead. StoryletSave.SerializeDurable writes it as the
+    /// card's GAMEID. A save's property values key by internal id so they
+    /// survive a rename; a durable half keys by name so a person can read it,
+    /// and a rename shows up in the report instead. StoryletSave.SerializeDurable writes it as the
     /// JS reference's JSON.</summary>
     public sealed class DurableSave
     {
@@ -511,7 +548,22 @@ namespace StoryletStudio.StoryletEngine
         internal readonly Bundle _bundle;
         private readonly double _seed;
         private readonly Action<string, int> _onReplacedFlow;
+        /// <summary>The game's EngineOptions.OnError, or null to report
+        /// through DefaultOnError.</summary>
+        private readonly Action<PlayError> _onError;
         internal readonly int? _logCap;
+
+        /// <summary>Where a content error goes when the engine was built
+        /// without <see cref="EngineOptions.OnError"/>: a warning on standard
+        /// error, as Patterplay's goes; the Unity layer points it at
+        /// Debug.LogWarning when it loads, so in a Unity game the warning lands
+        /// in the Console. Read at the moment of each report, so setting it
+        /// reaches engines already built.</summary>
+        public static Action<PlayError> DefaultOnError = e => Console.Error.WriteLine("Storylet Engine: " + e);
+
+        /// <summary>Report a condition a flow played through: to the game's
+        /// OnError, or DefaultOnError.</summary>
+        internal void ReportPlayError(PlayError error) => (_onError ?? DefaultOnError)?.Invoke(error);
 
         // Lookups (bundle is immutable; built once). Shared with every flow.
         internal readonly OrderedMap<string, CardEntry> _cardsById = new OrderedMap<string, CardEntry>();
@@ -892,6 +944,139 @@ namespace StoryletStudio.StoryletEngine
             public ExprValue Get(string name) => Owner.WorldGet(name);
         }
 
+        // --- inputs the game hands over ---------------------------------------------
+
+        /// <summary>The parts of a bundle the engine reads before anything
+        /// else, each named with what it should be; empty when they are all
+        /// there.</summary>
+        internal static List<string> BundleShapeProblems(Bundle bundle)
+        {
+            var problems = new List<string>();
+            if (bundle.Content == null) problems.Add("no content");
+            if (bundle.Settings == null) problems.Add("no settings");
+            if (bundle.Story?.Properties == null) problems.Add("no story properties");
+            if (bundle.World?.Properties == null) problems.Add("no world properties");
+            if (bundle.Boxes == null) problems.Add("no boxes");
+            return problems;
+        }
+
+        /// <summary>Refuse a save envelope this runtime cannot read, by what is
+        /// wrong with it, before anything reads it (the hands-on review,
+        /// 2026-10, foundation 5).</summary>
+        private static void RefuseUnreadableSave(SaveEnvelope envelope)
+        {
+            if (envelope == null) throw new StoryletError("not a Storylets save: expected an object, got null");
+            var schema = envelope.Schema;
+            if (schema != Model.SAVE_SCHEMA && schema != Model.SAVE_SCHEMA_V2 && schema != Model.SAVE_SCHEMA_V1)
+            {
+                throw new StoryletError($"unsupported save schema: {schema ?? "undefined"} "
+                    + $"(this runtime reads {Model.SAVE_SCHEMA_V1}, {Model.SAVE_SCHEMA_V2} and {Model.SAVE_SCHEMA})");
+            }
+            if (envelope.Content == null) throw new StoryletError("not a complete Storylets save: no content");
+        }
+
+        /// <summary>What a declared property takes, in words, for a refused
+        /// host write.</summary>
+        private static string Takes(PropertyDecl decl)
+        {
+            string Quoted(IReadOnlyList<string> xs) =>
+                xs == null ? "" : string.Join(", ", xs.Select(x => ExprValue.JsonQuote(x)));
+            switch (decl.Type)
+            {
+                case PropertyTypes.Number: return "a number";
+                case PropertyTypes.Boolean: return "true or false";
+                case PropertyTypes.Enum: return $"one of {Quoted(decl.Values)}";
+                case PropertyTypes.Flags:
+                    return decl.Values != null && decl.Values.Count > 0 ? $"a list of flags from {Quoted(decl.Values)}" : "a list of flags";
+                case PropertyTypes.Quality: return $"one of its stages {Quoted(decl.Stages)}";
+                default: return "text";
+            }
+        }
+
+        private static PropertyDecl DeclNamed(List<PropertyDecl> decls, string name)
+        {
+            if (decls == null) return null;
+            foreach (var d in decls) if (d.Name == name) return d;
+            return null;
+        }
+
+        /// <summary>Refuse a host write that does not fit what the content
+        /// declared (the hands-on review, 2026-10, foundation 5): a string for
+        /// a number, a value an enum or a quality does not list, a flag a flags
+        /// property does not, or a @world name the content never declared. The
+        /// rule is the kernel's ValueFit.Fits, the one a load walks saved
+        /// values with, so a value the game may set is exactly one a save may
+        /// carry. Another engine's scope (`patter.x`) is that engine's to
+        /// check. <paramref name="ownerId"/> is the owner segment already
+        /// resolved to its internal id, for a three-part path.</summary>
+        internal void CheckHostWrite(string path, string[] parts, string ownerId, ExprValue value)
+        {
+            PropertyDecl decl = null;
+            if (parts.Length == 2 && parts[0] == "world")
+            {
+                var name = parts[1];
+                var decls = _bundle.World.Properties;
+                decl = DeclNamed(decls, name)
+                    ?? decls.Find(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (decl == null) throw new StoryletError($"no property at \"{path}\": the content declares no @world.{name}");
+            }
+            else if (parts.Length == 2 && parts[0] == "story")
+            {
+                decl = DeclNamed(_sharedDecls.Story, parts[1]) ?? DeclNamed(_flowDecls.Story, parts[1]);
+            }
+            else if (parts.Length == 3 && IsOwnedKind(parts[0]) && ownerId != null)
+            {
+                decl = DeclNamed(_sharedDecls.Kind(parts[0]).GetOrDefault(ownerId), parts[2])
+                    ?? DeclNamed(_flowDecls.Kind(parts[0]).GetOrDefault(ownerId), parts[2]);
+            }
+            // An enum whose own default is "" (none chosen, what an editor
+            // writes for "(none)") takes "" back, so a game can put its default
+            // back.
+            var noneChosen = decl != null && decl.Type == PropertyTypes.Enum
+                && decl.Default != null && decl.Default.IsString && decl.Default.AsString == "";
+            if (decl != null && !ValueFit.Fits(decl, value, noneChosen))
+            {
+                throw new StoryletError($"\"{path}\" takes {Takes(decl)}; {(value == null ? "null" : value.ToJsonString())} doesn't fit");
+            }
+        }
+
+        // --- save keys --------------------------------------------------------------
+        //
+        // A save names cards, hands and boxes by GAME ID from version 3 (the
+        // hands-on review, 2026-10, foundation 7), as its play log always did: a
+        // card deleted and made again under the same Game ID is the same card to
+        // a game, so it keeps its cooldown and its place as well as its play
+        // count. Earlier saves name them by internal id, so a saved key is read
+        // as a Game ID first and an internal id second; the two never collide,
+        // ids being generated. Internal state stays keyed by internal id.
+
+        internal CardEntry SavedCard(string key) => _cardsByGameId.GetOrDefault(key) ?? _cardsById.GetOrDefault(key);
+        internal HandInBox SavedHand(string key) => _handsByGameId.GetOrDefault(key) ?? _handsById.GetOrDefault(key);
+        internal Box SavedBox(string key) => _boxesByGameId.GetOrDefault(key) ?? _boxesById.GetOrDefault(key);
+
+        /// <summary>The Game ID a save names a card by; the id itself for one
+        /// the build no longer has, which is all there is to name it
+        /// by.</summary>
+        internal string CardKey(string id)
+        {
+            var entry = _cardsById.GetOrDefault(id);
+            return entry != null ? Model.EffectiveGameId(entry.Card) : id;
+        }
+
+        /// <summary>The Game ID a save names a hand by, or the id itself.</summary>
+        internal string HandKey(string id)
+        {
+            var found = _handsById.GetOrDefault(id);
+            return found != null ? Model.EffectiveGameId(found.Hand) : id;
+        }
+
+        /// <summary>The Game ID a save names a box by, or the id itself.</summary>
+        internal string BoxKey(string id)
+        {
+            var box = _boxesById.GetOrDefault(id);
+            return box != null ? Model.EffectiveGameId(box) : id;
+        }
+
         /// <summary>
         /// Refuse, at construction, a bundle this engine cannot read faithfully
         /// (design/project-map-contract.md 3.8). Throws one StoryletError naming
@@ -909,6 +1094,11 @@ namespace StoryletStudio.StoryletEngine
         /// </summary>
         private static void RefuseUnreadableBundle(Bundle bundle)
         {
+            // No bundle at all: said plainly, rather than as whichever part the
+            // engine reached for first (the hands-on review, 2026-10,
+            // foundation 5). The JSON loader says the same of a bundle file
+            // that is not an object.
+            if (bundle == null) throw new StoryletError("not a Storylets bundle: expected an object, got null");
             // The schema tag (D4). Checked alone and first: a bundle of a schema
             // this runtime does not know may not have any of the shape the rest
             // reads.
@@ -918,6 +1108,11 @@ namespace StoryletStudio.StoryletEngine
                 throw new StoryletError($"unsupported bundle schema: {schema ?? "undefined"} "
                     + $"(this runtime reads {string.Join(" and ", Model.BUNDLE_SCHEMAS)})");
             }
+            // The parts every bundle of a known schema has, by name: a bundle
+            // missing one is cut short or hand-built, and would fail later as a
+            // NullReferenceException. The JSON loader leaves a missing part null.
+            var missing = BundleShapeProblems(bundle);
+            if (missing.Count > 0) throw new StoryletError("not a complete Storylets bundle: " + string.Join("; ", missing));
             var problems = new List<string>();
             var map = bundle.Map?.Group;
             var mapName = map != null ? Model.EffectiveGameId(map) : null;
@@ -1020,6 +1215,7 @@ namespace StoryletStudio.StoryletEngine
             _bundle = bundle;
             _seed = opts.Seed;
             _onReplacedFlow = opts.OnReplacedFlow;
+            _onError = opts.OnError;
             if (opts.Log) _logCap = opts.LogCap;
             _hostWorld = opts.World;
             _registry = opts.Registry ?? new ScopeRegistry();
@@ -1463,7 +1659,8 @@ namespace StoryletStudio.StoryletEngine
 
         private List<string> SpentIds()
         {
-            var ids = new List<string>(_spent);
+            var ids = new List<string>();
+            foreach (var id in _spent) ids.Add(CardKey(id));
             ids.Sort(StringComparer.Ordinal);
             return ids;
         }
@@ -1585,6 +1782,7 @@ namespace StoryletStudio.StoryletEngine
             var parts = path.Split('.');
             if (parts.Length == 2 && parts[0] == "world")
             {
+                CheckHostWrite(path, parts, null, value);
                 if (!WorldCanSet) throw new StoryletError("@world is read-only here: the host bound no write");
                 WorldSet(parts[1], value, host: true);
                 return;
@@ -1603,11 +1801,13 @@ namespace StoryletStudio.StoryletEngine
             PropertyBag bag;
             if (parts.Length == 2)
             {
+                CheckHostWrite(path, parts, null, value);
                 bag = _shared.Story;
             }
             else
             {
                 TryResolveOwner(parts[0], parts[1], out var id, out _);
+                CheckHostWrite(path, parts, id, value);
                 bag = KindOf(_shared, parts[0]).GetOrDefault(id);
             }
             // A HOST write, in any scope: silent under the firing rule, visible to the
@@ -2127,11 +2327,33 @@ namespace StoryletStudio.StoryletEngine
         /// restore, without doing any of it (design/engine-server.md 4.9). Pure:
         /// nothing on this engine moves. A project mismatch is refused here
         /// exactly as LoadGame refuses it - it is the one thing neither call
-        /// will tolerate.</summary>
+        /// will tolerate. When the envelope carries the property values, the
+        /// answer comes from a load into a scratch engine of its own, so it
+        /// names the held cards the load would drop too.</summary>
         public LoadReport PreviewLoad(SaveEnvelope envelope)
         {
+            RefuseUnreadableSave(envelope);
             AssertSameProject(envelope);
-            return PlanLoad(envelope).Report;
+            var plan = PlanLoad(envelope);
+            if (plan.Sections == null) return plan.Report;
+            // The held cards are checked against the values the envelope
+            // carries, which only a load puts in place: so the load runs on a
+            // scratch engine of its own, with its own registry, and this one is
+            // left as it was.
+            var scratchOptions = new EngineOptions
+            {
+                Seed = _creationOptions.Seed,
+                World = _creationOptions.World,
+                OnError = _ => { },
+            };
+            try
+            {
+                return new Engine(_bundle, scratchOptions).LoadGame(envelope);
+            }
+            catch (Exception)
+            {
+                return plan.Report;
+            }
         }
 
         /// <summary>What OpenFlow(id, { Restore = saved }) would do to a flow of
@@ -2149,7 +2371,7 @@ namespace StoryletStudio.StoryletEngine
         /// its blob. Handles held from before the load are closed and inert
         /// (Patter's rule); take fresh ones from GetFlow()/Flows().
         ///
-        /// Takes storylets/save@2 and storylets/save@1 envelopes. Property
+        /// Takes storylets/save@3, save@2 and save@1 envelopes. Property
         /// values come from the registry. An envelope that carries them (a
         /// standalone engine's, or a version 1 envelope) has them walked,
         /// cleaned, and moved into the registry here, over fresh defaults.
@@ -2159,12 +2381,18 @@ namespace StoryletStudio.StoryletEngine
         /// only what this envelope holds; the registry's own load rule applies
         /// to the values.
         ///
+        /// When the envelope carries the values, the load then checks every
+        /// held card as a deal would and drops what no longer qualifies, each in
+        /// the report's Evicted with the deal's reason. No trace events, and no
+        /// draws: the next deal is what it would have been.
+        ///
         /// Returns the report PreviewLoad would have given for this envelope:
         /// the drift tolerance that makes a load forgiving is what hides its
         /// cost, so the cost comes back with the load whether or not anybody
         /// looked first.</summary>
         public LoadReport LoadGame(SaveEnvelope envelope)
         {
+            RefuseUnreadableSave(envelope);
             AssertSameProject(envelope);
             AssertExternalScopes();
             var plan = PlanLoad(envelope);
@@ -2186,7 +2414,28 @@ namespace StoryletStudio.StoryletEngine
             }
             foreach (var id in plan.Spent) _spent.Add(id);
             foreach (var pair in plan.Flows) Open(pair.Key, new OpenFlowOptions(), true).Restore(pair.Value);
-            return plan.Report;
+            if (plan.Sections == null) return plan.Report;
+            // With the values in place, every held card is checked as a deal
+            // checks it, and what no longer qualifies goes, in the report (the
+            // hands-on review, 2026-10, foundation 7). A game that loads its own
+            // registry has no values here yet: its next deal does the same.
+            var report = plan.Report;
+            var dropped = false;
+            foreach (var pair in plan.Flows)
+            {
+                var flow = _flows.GetOrDefault(pair.Key);
+                if (flow == null) continue;
+                foreach (var e in flow.DropUnqualified())
+                {
+                    e.Flow = pair.Key;
+                    report.Evicted.Add(e);
+                    dropped = true;
+                }
+            }
+            if (!dropped) return report;
+            SortEvictions(report.Evicted);
+            report.Exact = false;
+            return report;
         }
 
         private void AssertSameProject(SaveEnvelope envelope)
@@ -2414,7 +2663,7 @@ namespace StoryletStudio.StoryletEngine
         private LoadPlan PlanLoad(SaveEnvelope envelope)
         {
             var schema = envelope.Schema;
-            if (schema != Model.SAVE_SCHEMA && schema != Model.SAVE_SCHEMA_V1)
+            if (schema != Model.SAVE_SCHEMA && schema != Model.SAVE_SCHEMA_V2 && schema != Model.SAVE_SCHEMA_V1)
             {
                 throw new StoryletError($"unsupported save schema: {schema ?? "undefined"}");
             }
@@ -2439,10 +2688,11 @@ namespace StoryletStudio.StoryletEngine
                 moved = PartitionsFromSections(envelope.Registry, flowIds);
             }
             var shared = moved != null ? WalkPartition(_sharedDecls, moved.Shared, null, draft) : null;
-            foreach (var cardId in envelope.Shared?.Spent ?? new List<string>())
+            foreach (var key in envelope.Shared?.Spent ?? new List<string>())
             {
-                if (_cardsById.ContainsKey(cardId)) plan.Spent.Add(cardId);
-                else draft.DroppedSpent.Add(cardId);
+                var entry = SavedCard(key);
+                if (entry != null) plan.Spent.Add(entry.Card.Id);
+                else draft.DroppedSpent.Add(key);
             }
             OrderedMap<string, OrderedMap<string, ExprValue>> sections = null;
             if (moved != null)
@@ -2504,35 +2754,38 @@ namespace StoryletStudio.StoryletEngine
             // A flow blob without properties (a version 2 envelope's: the
             // registry has them) has nothing to walk.
             clean.Props = saved.Props != null ? WalkPartition(_flowDecls, saved.Props, id, draft) : null;
-            foreach (var pair in saved.Turns) clean.Turns.Set(pair.Key, pair.Value);
             foreach (var record in saved.PlayLog)
             {
                 clean.PlayLog.Add(new PlayRecord { Card = record.Card, Outcome = record.Outcome, Turn = record.Turn });
             }
+            // Every key the save carries resolves to the build's internal id
+            // (see SavedCard); one the build no longer has is named by the key
+            // itself.
             foreach (var pair in saved.Cooldowns)
             {
-                if (_cardsById.ContainsKey(pair.Key)) clean.Cooldowns.Set(pair.Key, pair.Value);
+                var entry = SavedCard(pair.Key);
+                if (entry != null) clean.Cooldowns.Set(entry.Card.Id, pair.Value);
                 else draft.DroppedCooldowns.Add(new LoadCooldown { Flow = id, Card = pair.Key });
             }
-            // A deleted entity has no gameId left, so it is named by the id the
+            // A deleted entity has no gameId left, so it is named by the key the
             // save carries; everything the build still knows is named by its
             // gameId.
-            Func<string, string> cardName = cardId =>
+            Func<string, string> cardName = key =>
             {
-                var known = _cardsById.GetOrDefault(cardId);
-                return known != null ? Model.EffectiveGameId(known.Card) : cardId;
+                var known = SavedCard(key);
+                return known != null ? Model.EffectiveGameId(known.Card) : key;
             };
             var restored = new Dictionary<string, int>();
             foreach (var pair in saved.Board)
             {
-                var known = _handsById.GetOrDefault(pair.Key);
+                var known = SavedHand(pair.Key);
                 if (known == null)
                 {
-                    foreach (var cardId in pair.Value)
+                    foreach (var key in pair.Value)
                     {
                         draft.Evicted.Add(new LoadEviction
                         {
-                            Flow = id, Hand = pair.Key, Card = cardName(cardId),
+                            Flow = id, Hand = pair.Key, Card = cardName(key),
                             Reason = EvictionReasons.HandVanished,
                         });
                     }
@@ -2540,17 +2793,18 @@ namespace StoryletStudio.StoryletEngine
                 }
                 var hand = Model.EffectiveGameId(known.Hand);
                 var kept = new List<string>();
-                foreach (var cardId in pair.Value)
+                foreach (var key in pair.Value)
                 {
-                    var entry = _cardsById.GetOrDefault(cardId);
+                    var entry = SavedCard(key);
                     if (entry == null)
                     {
                         draft.Evicted.Add(new LoadEviction
                         {
-                            Flow = id, Hand = hand, Card = cardId, Reason = EvictionReasons.Vanished,
+                            Flow = id, Hand = hand, Card = key, Reason = EvictionReasons.Vanished,
                         });
                         continue;
                     }
+                    var cardId = entry.Card.Id;
                     if (otherClaims != null && Flow.CardIsShared(entry.Card, entry.Deck.Shared ?? false))
                     {
                         otherClaims.TryGetValue(cardId, out var elsewhere);
@@ -2568,9 +2822,24 @@ namespace StoryletStudio.StoryletEngine
                     }
                     kept.Add(cardId);
                 }
-                clean.Board.Set(pair.Key, kept);
+                clean.Board.Set(known.Hand.Id, kept);
+            }
+            foreach (var pair in saved.Turns)
+            {
+                var box = SavedBox(pair.Key);
+                if (box != null) clean.Turns.Set(box.Id, pair.Value);
             }
             return clean;
+        }
+
+        /// <summary>A report's evictions in their one order: flow, hand, card,
+        /// reason. FinishReport's, and LoadGame's again once its check of the
+        /// held cards has added to them.</summary>
+        private static void SortEvictions(List<LoadEviction> evicted)
+        {
+            evicted.Sort((a, b) => string.CompareOrdinal(
+                string.Join(SortSep, a.Flow, a.Hand, a.Card, a.Reason),
+                string.Join(SortSep, b.Flow, b.Hand, b.Card, b.Reason)));
         }
 
         /// <summary>Order the draft and answer the identity questions. `saved` is
@@ -2579,9 +2848,7 @@ namespace StoryletStudio.StoryletEngine
         /// reported.</summary>
         private static LoadReport FinishReport(BundleContent bundle, BundleContent saved, List<string> flows, ReportDraft draft)
         {
-            draft.Evicted.Sort((a, b) => string.CompareOrdinal(
-                string.Join(SortSep, a.Flow, a.Hand, a.Card, a.Reason),
-                string.Join(SortSep, b.Flow, b.Hand, b.Card, b.Reason)));
+            SortEvictions(draft.Evicted);
             draft.DroppedCooldowns.Sort((a, b) => string.CompareOrdinal(
                 string.Join(SortSep, a.Flow, a.Card), string.Join(SortSep, b.Flow, b.Card)));
             draft.DroppedSpent.Sort(StringComparer.Ordinal);

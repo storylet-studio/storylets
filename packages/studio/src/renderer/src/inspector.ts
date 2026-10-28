@@ -91,6 +91,7 @@ export interface InspectorHost {
   /** A quality's stage renamed: queued ahead of the list's own save, so every
    *  value and literal naming it is carried in the same edit (ops `stages.ts`). */
   renameStage(target: StageTargetDto, from: string, to: string): void;
+  renameProperty(target: StageTargetDto, from: string, to: string): void;
   /** How many gates order against a quality's ladder, for a reorder's note. */
   stageGates(target: StageTargetDto): Promise<number>;
   /** Make this tag group a map, or stop. Traced outlines are kept either way. */
@@ -896,6 +897,7 @@ function stagesOf(h: InspectorHost, make: (name: string) => StageTargetDto): Non
     target: (decl) => (decl.name.trim() === "" ? undefined : make(decl.name)),
     rename: (target, from, to) => h.renameStage(target, from, to),
     gates: (target) => h.stageGates(target),
+    renameProperty: (target, from, to) => h.renameProperty(target, from, to),
   };
 }
 

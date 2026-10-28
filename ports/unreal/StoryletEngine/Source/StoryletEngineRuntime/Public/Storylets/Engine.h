@@ -67,6 +67,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -94,6 +95,32 @@ namespace storylets
     {
         std::function<std::optional<StoryletValue>(const std::string&)> get;
         std::function<void(const std::string&, const StoryletValue&)> set;
+    };
+
+    /**
+     * A content error the engine played through. Content can fail at run time
+     * in ways the compiler cannot see: a host value of the wrong type, a
+     * resolver that throws, a division by zero. A deal never stops for one: the
+     * condition counts as false, so the card, deck or hand is not available,
+     * and the error is reported through EngineOptions::onError and as a
+     * `diagnostic` trace event. The same rule and the same shape as
+     * Patterplay's, on all four runtimes (the hands-on review, 2026-10,
+     * foundation 5: an error used to reach only a trace, so with tracing off a
+     * resolver typo looked like a card that never came up).
+     */
+    struct PlayError
+    {
+        /** The flow it happened in. */
+        std::string flow;
+        /** What failed. A Storylets deal evaluates only conditions. */
+        std::string kind = "condition";
+        /** Whose condition: `card <gameId>`, `deck <gameId>`, `hand <gameId>`
+         *  or `outcome <card gameId>/<outcome gameId>`. */
+        std::string node;
+        /** The expression's source text, when the bundle carries it; empty
+         *  when it does not. */
+        std::string source;
+        std::string message;
     };
 
     struct EngineOptions
@@ -132,6 +159,12 @@ namespace storylets
          *  after loadGame and discards the restored hand - getFlow is the call.
          *  Parity with the JS runtime's onReplacedFlow. Zero cost when unset. */
         std::function<void(const std::string&, int)> onReplacedFlow;
+        /** Told of every condition the engine could not evaluate and counted as
+         *  false (see PlayError), whether or not anything is tracing. Unset: a
+         *  warning on std::cerr. The UE wrapper always sets it (the OnError
+         *  event, or a Warning in the log). Patterplay's onError, the same
+         *  shape; parity with the JS runtime's. */
+        std::function<void(const PlayError&)> onError;
     };
 
     /** The schema tag every durable half carries, so the shape can change later
@@ -148,9 +181,9 @@ namespace storylets
      * cross builds: a value by its property ADDRESS, exactly as
      * listProperties() prints it and setProperty takes it (`story.souls`,
      * `hand.the-elder.met`, `value.harbour/docks.lamps`), and a spend by the
-     * card's GAMEID. A save keys by internal id so it survives a rename; a
-     * durable half keys by name so a person can read it, and a rename shows up
-     * in the report instead. serializeDurable / deserializeDurable
+     * card's GAMEID. A save keys its property values by internal id so they
+     * survive a rename; a durable half keys by name so a person can read it,
+     * and a rename shows up in the report instead. serializeDurable / deserializeDurable
      * (Storylets/Save.h) are its string boundary.
      */
     struct DurableSave
@@ -703,6 +736,13 @@ namespace storylets
          */
         inline void RefuseUnreadableBundle(const Bundle& bundle)
         {
+            // Not an object at all (a bundle file read as something else): said
+            // plainly, rather than as whichever property the engine reached for
+            // first (the hands-on review, 2026-10, foundation 5).
+            if (!bundle.notAnObject.empty())
+            {
+                throw StoryletError("not a Storylets bundle: expected an object, got " + bundle.notAnObject);
+            }
             // The schema tag (D4). Checked alone and first: a bundle of a schema
             // this runtime does not know may not have any of the shape the rest
             // reads.
@@ -711,6 +751,19 @@ namespace storylets
                 throw StoryletError("unsupported bundle schema: "
                     + (bundle.schema.empty() ? std::string("(none)") : bundle.schema)
                     + " (this runtime reads " + BUNDLE_SCHEMA_V0 + " and " + BUNDLE_SCHEMA + ")");
+            }
+            // The parts every bundle of a known schema has, by name: a bundle
+            // missing one is cut short or hand-built, and would otherwise play
+            // as an empty story.
+            if (!bundle.missingParts.empty())
+            {
+                std::string message = "not a complete Storylets bundle: ";
+                for (size_t i = 0; i < bundle.missingParts.size(); ++i)
+                {
+                    if (i > 0) message += "; ";
+                    message += bundle.missingParts[i];
+                }
+                throw StoryletError(message);
             }
             std::vector<std::string> problems;
             const TagGroup* map = bundle.map.has_value() ? &bundle.map->group : nullptr;
@@ -1357,8 +1410,9 @@ namespace storylets
         }
 
         /** The whole engine's NON-property state, one envelope
-         *  (storylets/save@2): the spent cards once, then every live flow
-         *  (board, clocks, cooldowns, PRNG, play log) keyed by its id. The
+         *  (storylets/save@3): the spent cards once, then every live flow
+         *  (board, clocks, cooldowns, PRNG, play log) keyed by its id, each
+         *  card, hand and box in it named by its Game ID. The
          *  property values are the registry's: a standalone engine (one that
          *  made its own registry) carries them here under `registry`,
          *  self-backed @world included; a game that passed a registry saves it
@@ -1389,8 +1443,9 @@ namespace storylets
 
         /** Restore: shared state once, then every flow REBUILT from its
          *  blob. Handles held from before the load are closed and inert;
-         *  take fresh ones from getFlow()/flows(). Takes storylets/save@2 and
-         *  storylets/save@1 alike.
+         *  take fresh ones from getFlow()/flows(). Takes storylets/save@3,
+         *  @2 and @1 alike: every saved key is read as a Game ID first and an
+         *  internal id second, so a save from before version 3 still loads.
          *
          *  Property values come from the registry. An envelope that carries
          *  them (a standalone engine's, or a version 1 envelope) has them
@@ -1933,6 +1988,8 @@ namespace storylets
         EngineOptions creationOptions_;
         double seed_ = 0;
         std::function<void(const std::string&, int)> onReplacedFlow_;
+        /** The game's onError (EngineOptions), or the std::cerr warning. */
+        std::function<void(const PlayError&)> onError_;
         std::optional<int> logCap_;
         std::optional<WorldResolver> hostWorld_;
         /** The game's one registry (or the engine's own, when it is standalone). */
@@ -1961,7 +2018,141 @@ namespace storylets
             OrderedMap<std::string, FlowSave> flows;
         };
         void assertSameProject(const SaveEnvelope& envelope) const;
+        /** Refuse an envelope of a save schema this runtime does not read,
+         *  before anything reads it (the reference's refuseUnreadableSave; the
+         *  rest of its checks, an envelope that is not an object or has no
+         *  content, are the JSON reader's, savedetail::RefuseUnreadableSave,
+         *  since a SaveEnvelope cannot be either). */
+        static void refuseUnreadableSave(const SaveEnvelope& envelope)
+        {
+            if (!IsReadableSaveSchema(envelope.schema)) throw StoryletError(UnsupportedSaveSchemaMessage(envelope.schema));
+        }
+        /**
+         * Refuse a host write that does not fit what the content declared (the
+         * hands-on review, 2026-10, foundation 5): a string for a number, a
+         * value an enum or a quality does not list, a flag a flags property
+         * does not, or a @world name the content never declared. The rule is
+         * the kernel's ValueFits, the one a load walks saved values with, so a
+         * value the game may set is exactly one a save may carry. Another
+         * engine's scope (`patter.x`) is that engine's to check. `ownerId` is
+         * the resolved owner of an owned-scope path, empty otherwise.
+         */
+        void checkHostWrite(const std::vector<std::string>& parts, const std::string& path,
+            const StoryletValue& value, const std::string& ownerId) const
+        {
+            auto byName = [](const std::vector<PropertyDecl>* decls, const std::string& name) -> const PropertyDecl*
+            {
+                if (!decls) return nullptr;
+                for (const PropertyDecl& d : *decls) if (d.name == name) return &d;
+                return nullptr;
+            };
+            const PropertyDecl* decl = nullptr;
+            if (parts.size() == 2 && parts[0] == "world")
+            {
+                const std::string& name = parts[1];
+                decl = byName(&bundle_->world.properties, name);
+                if (!decl)
+                {
+                    const std::string lower = wildwinter::expr::LowercaseName(name);
+                    for (const PropertyDecl& d : bundle_->world.properties)
+                    {
+                        if (wildwinter::expr::LowercaseName(d.name) == lower) { decl = &d; break; }
+                    }
+                }
+                if (!decl) throw StoryletError("no property at \"" + path + "\": the content declares no @world." + name);
+            }
+            else if (parts.size() == 2 && parts[0] == "story")
+            {
+                decl = byName(&sharedDecls_.story, parts[1]);
+                if (!decl) decl = byName(&flowDecls_.story, parts[1]);
+            }
+            else if (parts.size() == 3 && detail::IsOwnedScope(parts[0]))
+            {
+                decl = byName(detail::KindOf(sharedDecls_, parts[0]).get(ownerId), parts[2]);
+                if (!decl) decl = byName(detail::KindOf(flowDecls_, parts[0]).get(ownerId), parts[2]);
+            }
+            // An enum whose own default is "" (none chosen) takes "" back from
+            // the game, so a game can write its default back; any other enum
+            // refuses it.
+            const bool noneChosen = decl && decl->type == "enum" && decl->defaultValue.has_value()
+                && decl->defaultValue->isString() && decl->defaultValue->asString().empty();
+            if (decl && !wildwinter::expr::ValueFits(*decl, value, noneChosen))
+            {
+                throw StoryletError("\"" + path + "\" takes " + takes(*decl) + "; " + value.toJsonString() + " doesn't fit");
+            }
+        }
+        /** What a declared property takes, in words, for a refused host write. */
+        static std::string takes(const PropertyDecl& decl)
+        {
+            auto quoted = [](const std::optional<std::vector<std::string>>& xs)
+            {
+                std::string out;
+                if (!xs) return out;
+                for (size_t i = 0; i < xs->size(); ++i)
+                {
+                    if (i > 0) out += ", ";
+                    out += StoryletValue::JsonQuote((*xs)[i]);
+                }
+                return out;
+            };
+            if (decl.type == "number") return "a number";
+            if (decl.type == "boolean") return "true or false";
+            if (decl.type == "enum") return "one of " + quoted(decl.values);
+            if (decl.type == "flags")
+            {
+                return decl.values.has_value() && !decl.values->empty() ? "a list of flags from " + quoted(decl.values) : "a list of flags";
+            }
+            if (decl.type == "quality") return "one of its stages " + quoted(decl.stages);
+            return "text";
+        }
         LoadPlan planLoad(const SaveEnvelope& envelope) const;
+
+        // --- save keys ---------------------------------------------------------
+        //
+        // A save names cards, hands and boxes by GAME ID from version 3 (the
+        // hands-on review, 2026-10, foundation 7), as its play log always did:
+        // a card deleted and made again under the same Game ID is the same card
+        // to a game, so it keeps its cooldown and its place as well as its play
+        // count. Earlier saves name them by internal id, so a saved key is read
+        // as a Game ID first and an internal id second; the two never collide,
+        // ids being generated.
+
+        const detail::CardEntry* savedCard(const std::string& key) const
+        {
+            const detail::CardEntry* entry = cardsByGameId_.get(key);
+            return entry ? entry : cardsById_.get(key);
+        }
+        const detail::HandInBox* savedHand(const std::string& key) const
+        {
+            const detail::HandInBox* found = handsByGameId_.get(key);
+            return found ? found : handsById_.get(key);
+        }
+        const Box* savedBox(const std::string& key) const
+        {
+            const Box* const* box = boxesByGameId_.get(key);
+            if (!box) box = boxesById_.get(key);
+            return box ? *box : nullptr;
+        }
+        /** The Game ID a save names a card by; the id itself for one the build
+         *  no longer has, which is all there is to name it by. */
+        std::string cardKey(const std::string& id) const
+        {
+            const detail::CardEntry* entry = cardsById_.get(id);
+            return entry ? EffectiveGameId(*entry->card) : id;
+        }
+        /** cardKey for a hand. */
+        std::string handKey(const std::string& id) const
+        {
+            const detail::HandInBox* found = handsById_.get(id);
+            return found ? EffectiveGameId(*found->hand) : id;
+        }
+        /** cardKey for a box. */
+        std::string boxKey(const std::string& id) const
+        {
+            const Box* const* box = boxesById_.get(id);
+            return box ? EffectiveGameId(**box) : id;
+        }
+
         /** One flow's walk. `otherClaims` is the rest of the world's shared
          *  ledger and is present only for a SINGLE-flow restore into a live
          *  engine: a whole-envelope load rebuilds every flow from one consistent
@@ -2019,6 +2210,8 @@ namespace storylets
         std::unordered_set<std::string> spent_;
         std::vector<EngineLogEntry> engineLog_;
         int64_t engineSeq_ = 0;
+        /** The spent cards as a save names them: by Game ID, sorted (save
+         *  version 3). */
         std::vector<std::string> spentIds() const;
         std::vector<EngineTraceHandler> engineTraceHandlers_;
         detail::TraceIdentities engineTraceIdentities_;
@@ -2318,87 +2511,17 @@ namespace storylets
             ShuffleInPlace(dealt, prng_);
 
             // Eviction first: drop dealt cards no longer available to their
-            // hand (minus the claims check against their own seat).
+            // hand (minus the claims check against their own seat). Trace
+            // events fire after the state they report has landed (a handler
+            // reading the board sees the eviction).
             for (const auto& handInBox : dealt)
             {
                 const Hand& hand = *handInBox.hand;
                 const Box& box = *handInBox.box;
-                AskDescriptor ask = askForHand(hand, box);
-                HandEnv handEnv = buildHandEnv(ask);
-                EvalContext condCtx = evalCtx(box, nullptr, handEnv);
-                bool conditionOk = passes(ask.condition, condCtx);
-                // ONE context per deck, built for its gate and reused for every
-                // card condition in it: box, deck and handEnv do not vary, and a
-                // condition is a read-only gate (runAsk does the same). Keyed by
-                // deck id, so a seated card whose deck is not in this box finds
-                // no gate and is refused as before.
-                std::unordered_map<std::string, bool> gateOk;
-                std::unordered_map<std::string, EvalContext> deckCtx;
-                for (const auto& deck : box.decks)
-                {
-                    EvalContext& ctx = deckCtx.emplace(deck.id, evalCtx(box, &deck, handEnv)).first->second;
-                    gateOk[deck.id] = passes(deck.condition, ctx);
-                }
-                double boxTurn = turnCounts_.getOr(box.id, 0);
-                // Trace events fire after the state they report has landed (a
-                // handler reading the board sees the eviction), so they are
-                // collected here and emitted once the survivors are set.
-                // The card is named by gameId (4.4). A card the build no longer
-                // has - the "vanished" branch below - has no gameId left, so it
-                // is named by the id the board carries, which is the rule a load
-                // report has always used for the same reason.
-                std::vector<std::pair<std::string, std::string>> evicted;
-                auto evict = [&](const std::string& cardId, const std::string& reason)
-                {
-                    const CardEntry* known = engine_->cardsById_.get(cardId);
-                    evicted.emplace_back(known ? EffectiveGameId(*known->card) : cardId, reason);
-                    return false;
-                };
-                // A COPY: a condition can emit a diagnostic, and a trace handler
-                // re-entering the flow can replace this hand's vector, which a
-                // pointer into the board would then read freed.
-                const std::vector<std::string> contents = boardContents_.getOr(hand.id, {});
-                std::vector<std::string> survivors;
-                for (const auto& cardId : contents)
-                {
-                    bool keep = [&]()
-                    {
-                        if (!conditionOk) return evict(cardId, "hand-condition");
-                        const CardEntry* entry = engine_->cardsById_.get(cardId);
-                        if (!entry) return evict(cardId, "vanished");   // edited content: dropped
-                        // Its deck is in ANOTHER box now (a load, resume or hot swap
-                        // into an edited build): gone from this hand's box, as a
-                        // deleted card is (ruling D), and asked before the gate,
-                        // which has no entry for a deck of another box.
-                        if (entry->box->id != box.id) return evict(cardId, "vanished");
-                        if (!gateOk[entry->deck->id]) return evict(cardId, VerdictWire(TraceVerdict::DeckGate));
-                        // Taken out of the world by somebody's shared one-shot
-                        // (ruling C): checked where the fill checks it, after the
-                        // gate and before this flow's own clock, so a card one
-                        // playthrough holds goes once another has spent it, as a
-                        // cooldown would evict it.
-                        const bool deckShared = entry->deck->shared.has_value() && *entry->deck->shared;
-                        if (cardIsShared(*entry->card, deckShared) && engine_->isTaken(cardId))
-                        {
-                            return evict(cardId, VerdictWire(TraceVerdict::Taken));
-                        }
-                        if (cooldowns_.getOr(cardId, 0) > boxTurn) return evict(cardId, VerdictWire(TraceVerdict::Cooldown));
-                        if (!tagsMatch(*entry->card, handEnv.boundTags)) return evict(cardId, VerdictWire(TraceVerdict::Tags));
-                        // No condition passes outright, so no context and no
-                        // label; the label is only read by a diagnostic, which
-                        // only fires when something traces.
-                        if (entry->card->condition && !passes(entry->card->condition, deckCtx.at(entry->deck->id),
-                            tracing() ? "card " + entry->card->gameId + " condition" : std::string()))
-                        {
-                            return evict(cardId, VerdictWire(TraceVerdict::Condition));
-                        }
-                        return true;
-                    }();
-                    if (keep) survivors.push_back(cardId);
-                }
-                boardContents_.set(hand.id, std::move(survivors));
+                const std::vector<std::pair<std::string, std::string>> evicted = evictUnavailable(hand, box);
                 if (tracing())
                 {
+                    const double boxTurn = turnCounts_.getOr(box.id, 0);
                     for (const auto& e : evicted)
                     {
                         TraceEvent evt;
@@ -2550,7 +2673,8 @@ namespace storylets
                 v.gameId = EffectiveGameId(o);
                 v.title = o.title;
                 v.purpose = o.purpose;
-                v.available = passes(o.condition, ctx);
+                v.available = passes(o.condition, ctx,
+                    [&] { return "outcome " + EffectiveGameId(*resolved.entry.card) + "/" + EffectiveGameId(o); });
                 v.fields = o.fields;
                 v.extensions = o.extensions;
                 views.push_back(std::move(v));
@@ -2614,7 +2738,8 @@ namespace storylets
 
             HandEnv handEnv = buildHandEnv(resolved.ask);
             EvalContext ctx = evalCtx(*entry.box, entry.deck, handEnv);
-            if (outcome && !passes(outcome->condition, ctx))
+            if (outcome && !passes(outcome->condition, ctx,
+                [&] { return "outcome " + EffectiveGameId(*entry.card) + "/" + outcomeGameId; }))
             {
                 throw StoryletError("outcome \"" + outcomeGameId + "\" on \""
                     + EffectiveGameId(*entry.card) + "\" is gated shut");
@@ -3148,7 +3273,10 @@ namespace storylets
             return kernelCall([&] { return Evaluate(expr->ast, ctx, StoryletsDialect()); });
         }
 
-        bool passes(const ExpressionPtr& expr, EvalContext& ctx, const std::string& where = "condition")
+        /** `node` names whose condition it is (`card <gameId>`, ...): a
+         *  callable, so the label is built only when an evaluation fails. */
+        template <typename NodeLabel>
+        bool passes(const ExpressionPtr& expr, EvalContext& ctx, NodeLabel&& node)
         {
             if (!expr) return true;
             try
@@ -3158,13 +3286,22 @@ namespace storylets
             catch (const std::exception& e)
             {
                 // An eval error is never a silent pass: the card/deck is
-                // unavailable (schema 3.1), and the trace surfaces the diagnostic.
+                // unavailable (schema 3.1), and the game hears of it through
+                // onError, tracing or not; the trace carries it too.
+                const std::string message = e.what();
+                const std::string at = node();
+                PlayError error;
+                error.flow = id_;
+                error.node = at;
+                error.source = expr->src;
+                error.message = message;
+                engine_->onError_(error);
                 if (tracing())
                 {
                     TraceEvent evt;
                     evt.kind = TraceEvent::Kind::Diagnostic;
-                    evt.where = where;
-                    evt.message = e.what();
+                    evt.where = at.rfind("deck ", 0) == 0 ? at + " gate" : at + " condition";
+                    evt.message = message;
                     emit(std::move(evt));
                 }
                 return false;
@@ -3626,10 +3763,10 @@ namespace storylets
             };
 
             // The hand's condition: ask-constant, evaluated once (schema 3.1 step 4).
-            std::string handWhere = "hand " + (ask.hand ? EffectiveGameId(*ask.hand) : std::string()) + " condition";
             {
                 EvalContext ctx = evalCtx(box, nullptr, handEnv);
-                if (!passes(ask.condition, ctx, handWhere))
+                if (!passes(ask.condition, ctx,
+                    [&] { return "hand " + (ask.hand ? EffectiveGameId(*ask.hand) : std::string()); }))
                 {
                     return result;
                 }
@@ -3649,7 +3786,7 @@ namespace storylets
             for (const auto& deck : box.decks)
             {
                 deckCtxs.push_back(evalCtx(box, &deck, handEnv));
-                gateOk.push_back(passes(deck.condition, deckCtxs.back(), "deck " + deck.gameId + " gate") ? 1 : 0);
+                gateOk.push_back(passes(deck.condition, deckCtxs.back(), [&] { return "deck " + deck.gameId; }) ? 1 : 0);
                 cardCount += deck.cards.size();
             }
 
@@ -3690,11 +3827,10 @@ namespace storylets
                         continue;
                     }
                     EvalContext& ctx = deckCtx;
-                    // The label is only read when an eval THROWS and only when
-                    // tracing, and each build here was a std::string concatenation
-                    // per card - a heap allocation on the path that matters.
-                    if (card.condition && !passes(card.condition, ctx,
-                        tracing() ? "card " + card.gameId + " condition" : std::string()))
+                    // The label is built only when an eval THROWS: each build
+                    // is a std::string concatenation, a heap allocation per
+                    // card on the path that matters.
+                    if (card.condition && !passes(card.condition, ctx, [&] { return "card " + card.gameId; }))
                     {
                         verdict(card, TraceVerdict::Condition);
                         continue;
@@ -4273,6 +4409,7 @@ namespace storylets
             std::vector<std::string> parts = splitPath(path);
             if (parts.size() == 2 && parts[0] == "world")
             {
+                engine_->checkHostWrite(parts, path, value, std::string());
                 if (!engine_->worldCanSet())
                 {
                     throw StoryletError("@world is read-only here: the host bound no write");
@@ -4290,6 +4427,7 @@ namespace storylets
             PropertyBag* own = nullptr;
             PropertyBag* shared = nullptr;
             std::string name;
+            std::string id;
             if (parts.size() == 2 && parts[0] == "story")
             {
                 own = stores_.story.get();
@@ -4298,7 +4436,7 @@ namespace storylets
             }
             else if (parts.size() == 3 && detail::IsOwnedScope(parts[0]))
             {
-                const std::string id = ownerId(parts[0], parts[1], parts[2]);
+                id = ownerId(parts[0], parts[1], parts[2]);
                 own = const_cast<PropertyBag*>(bagOf(detail::KindOf(stores_, parts[0]), id));
                 shared = const_cast<PropertyBag*>(bagOf(detail::KindOf(engine_->shared_, parts[0]), id));
                 if (!own && !shared) throw StoryletError("no " + parts[0] + " store \"" + parts[1] + "\"");
@@ -4312,6 +4450,7 @@ namespace storylets
                 : shared && shared->get(name).has_value() ? shared
                 : nullptr;
             if (!bag) throw StoryletError("no property at \"" + path + "\"");
+            engine_->checkHostWrite(parts, path, value, id);
             // A HOST write: silent under the firing rule (no subscriber feedback
             // loop), visible to the audit hook, and flagged host so a
             // `writable: false` does not refuse the game its own value.
@@ -4360,7 +4499,10 @@ namespace storylets
          *  properties (the registry has them), or parked whole by saveFlow
          *  (StoryletValue is a value type, so a container-deep copy is the TS
          *  structuredClone). Engine-side plumbing; a host parks a flow with
-         *  Engine::saveFlow. */
+         *  Engine::saveFlow. Keyed by Game ID (save version 3; see
+         *  Engine::savedCard): the turns by box, the cooldowns by card, the
+         *  board by hand with its cards, in the order the flow holds them, each
+         *  map in JS object order (ruling E), as the reference's bytes are. */
         FlowSave snapshot(bool withProps) const
         {
             FlowSave save;
@@ -4375,9 +4517,23 @@ namespace storylets
                 for (const auto& pair : stores_.value) props.value.set(pair.first, pair.second->save());
                 save.props = std::move(props);
             }
-            for (const auto& pair : turnCounts_) save.turns.set(pair.first, pair.second);
-            for (const auto& pair : cooldowns_) save.cooldowns.set(pair.first, pair.second);
-            for (const auto& pair : boardContents_) save.board.set(pair.first, pair.second);
+            for (const auto& pair : turnCounts_) save.turns.set(engine_->boxKey(pair.first), pair.second);
+            save.turns = detail::InJsOrder(std::move(save.turns));
+            // The reference's cooldowns are an object already, so it walks
+            // them in JS order before it re-keys them.
+            for (const auto& id : detail::JsKeyOrder(cooldowns_.keys()))
+            {
+                save.cooldowns.set(engine_->cardKey(id), *cooldowns_.get(id));
+            }
+            save.cooldowns = detail::InJsOrder(std::move(save.cooldowns));
+            for (const auto& pair : boardContents_)
+            {
+                std::vector<std::string> cards;
+                cards.reserve(pair.second.size());
+                for (const auto& id : pair.second) cards.push_back(engine_->cardKey(id));
+                save.board.set(engine_->handKey(pair.first), std::move(cards));
+            }
+            save.board = detail::InJsOrder(std::move(save.board));
             save.playLog = playLog_;
             return save;
         }
@@ -4425,12 +4581,126 @@ namespace storylets
                 if (!boardContents_.contains(handId)) boardContents_.set(handId, {});
             }
         }
+
+        /** Drop the cards a hand holds that are no longer available to it, as
+         *  a deal does before it fills, and say which went and why (card
+         *  gameId, reason): the deal's first pass, and the load's check of
+         *  what it put back (dropUnqualified). */
+        std::vector<std::pair<std::string, std::string>> evictUnavailable(const Hand& hand, const Box& box)
+        {
+            AskDescriptor ask = askForHand(hand, box);
+            HandEnv handEnv = buildHandEnv(ask);
+            EvalContext condCtx = evalCtx(box, nullptr, handEnv);
+            bool conditionOk = passes(ask.condition, condCtx, [&] { return "hand " + EffectiveGameId(hand); });
+            // ONE context per deck, built for its gate and reused for every
+            // card condition in it: box, deck and handEnv do not vary, and a
+            // condition is a read-only gate (runAsk does the same). Keyed by
+            // deck id, so a seated card whose deck is not in this box finds
+            // no gate and is refused as before.
+            std::unordered_map<std::string, bool> gateOk;
+            std::unordered_map<std::string, EvalContext> deckCtx;
+            for (const auto& deck : box.decks)
+            {
+                EvalContext& ctx = deckCtx.emplace(deck.id, evalCtx(box, &deck, handEnv)).first->second;
+                gateOk[deck.id] = passes(deck.condition, ctx, [&] { return "deck " + deck.gameId; });
+            }
+            double boxTurn = turnCounts_.getOr(box.id, 0);
+            // The card is named by gameId (4.4). A card the build no longer
+            // has - the "vanished" branch below - has no gameId left, so it
+            // is named by the id the board carries, which is the rule a load
+            // report has always used for the same reason.
+            std::vector<std::pair<std::string, std::string>> evicted;
+            auto evict = [&](const std::string& cardId, const std::string& reason)
+            {
+                const CardEntry* known = engine_->cardsById_.get(cardId);
+                evicted.emplace_back(known ? EffectiveGameId(*known->card) : cardId, reason);
+                return false;
+            };
+            // A COPY: a condition can emit a diagnostic, and a trace handler
+            // re-entering the flow can replace this hand's vector, which a
+            // pointer into the board would then read freed.
+            const std::vector<std::string> contents = boardContents_.getOr(hand.id, {});
+            std::vector<std::string> survivors;
+            for (const auto& cardId : contents)
+            {
+                bool keep = [&]()
+                {
+                    if (!conditionOk) return evict(cardId, "hand-condition");
+                    const CardEntry* entry = engine_->cardsById_.get(cardId);
+                    if (!entry) return evict(cardId, "vanished");   // edited content: dropped
+                    // Its deck is in ANOTHER box now (a load, resume or hot swap
+                    // into an edited build): gone from this hand's box, as a
+                    // deleted card is (ruling D), and asked before the gate,
+                    // which has no entry for a deck of another box.
+                    if (entry->box->id != box.id) return evict(cardId, "vanished");
+                    if (!gateOk[entry->deck->id]) return evict(cardId, VerdictWire(TraceVerdict::DeckGate));
+                    // Taken out of the world by somebody's shared one-shot
+                    // (ruling C): checked where the fill checks it, after the
+                    // gate and before this flow's own clock, so a card one
+                    // playthrough holds goes once another has spent it, as a
+                    // cooldown would evict it.
+                    const bool deckShared = entry->deck->shared.has_value() && *entry->deck->shared;
+                    if (cardIsShared(*entry->card, deckShared) && engine_->isTaken(cardId))
+                    {
+                        return evict(cardId, VerdictWire(TraceVerdict::Taken));
+                    }
+                    if (cooldowns_.getOr(cardId, 0) > boxTurn) return evict(cardId, VerdictWire(TraceVerdict::Cooldown));
+                    if (!tagsMatch(*entry->card, handEnv.boundTags)) return evict(cardId, VerdictWire(TraceVerdict::Tags));
+                    // No condition passes outright, so no context; the
+                    // label is built only when an evaluation fails.
+                    if (entry->card->condition && !passes(entry->card->condition, deckCtx.at(entry->deck->id),
+                        [&] { return "card " + entry->card->gameId; }))
+                    {
+                        return evict(cardId, VerdictWire(TraceVerdict::Condition));
+                    }
+                    return true;
+                }();
+                if (keep) survivors.push_back(cardId);
+            }
+            boardContents_.set(hand.id, std::move(survivors));
+            return evicted;
+        }
+
+        /** Internal: after a load puts this flow's board back, drop every held
+         *  card that no longer qualifies, as a deal would (the hands-on review,
+         *  2026-10, foundation 7: a save from before a content edit could put
+         *  back a card whose condition is now false, and nothing said so).
+         *  Every hand, in id order, on a copy of the flow's generator, so the
+         *  check draws nothing and the next deal is exactly what it would have
+         *  been. Each entry is {hand gameId, card gameId, reason}. */
+        std::vector<LoadEviction> dropUnqualified()
+        {
+            struct RestorePrng
+            {
+                Mulberry32& prng;
+                const Mulberry32 saved;
+                ~RestorePrng() { prng = saved; }
+            } restore{prng_, prng_};
+            std::vector<std::string> handIds = engine_->handsById_.keys();
+            std::sort(handIds.begin(), handIds.end());
+            std::vector<LoadEviction> out;
+            for (const auto& handId : handIds)
+            {
+                const detail::HandInBox& handInBox = *engine_->handsById_.get(handId);
+                for (auto& e : evictUnavailable(*handInBox.hand, *handInBox.box))
+                {
+                    out.push_back(LoadEviction{id_, EffectiveGameId(*handInBox.hand), std::move(e.first), std::move(e.second)});
+                }
+            }
+            return out;
+        }
     };
 
     // --- Engine methods that need the complete Flow ------------------------------
 
     inline Engine::Engine(BundlePtr bundle, const EngineOptions& opts)
-        : bundle_(std::move(bundle)), creationOptions_(opts), seed_(opts.seed), onReplacedFlow_(opts.onReplacedFlow)
+        : bundle_(std::move(bundle)), creationOptions_(opts), seed_(opts.seed), onReplacedFlow_(opts.onReplacedFlow),
+          onError_(opts.onError ? opts.onError : [](const PlayError& e)
+          {
+              const std::string line = "Storylet Engine: the condition on " + e.node + " in flow '" + e.flow
+                  + "' failed, counted as false: " + e.message + "\n";
+              std::fputs(line.c_str(), stderr);
+          })
     {
         // First, before anything is indexed or registered: a bundle this engine
         // cannot read faithfully is refused whole (design/project-map-contract.md
@@ -4676,7 +4946,9 @@ namespace storylets
 
     inline std::vector<std::string> Engine::spentIds() const
     {
-        std::vector<std::string> ids(spent_.begin(), spent_.end());
+        std::vector<std::string> ids;
+        ids.reserve(spent_.size());
+        for (const auto& id : spent_) ids.push_back(cardKey(id));
         std::sort(ids.begin(), ids.end());
         return ids;
     }
@@ -4783,6 +5055,7 @@ namespace storylets
         const std::vector<std::string> parts = Flow::splitPath(path);
         if (parts.size() == 2 && parts[0] == "world")
         {
+            checkHostWrite(parts, path, value, std::string());
             if (!worldCanSet()) throw StoryletError("@world is read-only here: the host bound no write");
             worldSet(parts[1], value, /*host=*/true);
             return;
@@ -4802,6 +5075,7 @@ namespace storylets
         // Reuse the read-side routing: a per-flow or unknown ref throws the
         // same message before anything is written.
         readShared(path, parts, owned);
+        checkHostWrite(parts, path, value, owned.has_value() ? owned->id : std::string());
         PropertyBag* bag = shared_.story.get();
         if (owned.has_value())
         {
@@ -4920,8 +5194,26 @@ namespace storylets
 
     inline LoadReport Engine::previewLoad(const SaveEnvelope& envelope) const
     {
+        refuseUnreadableSave(envelope);
         assertSameProject(envelope);
-        return planLoad(envelope).report;
+        LoadPlan plan = planLoad(envelope);
+        if (!plan.sections.has_value()) return std::move(plan.report);
+        // The held cards are checked against the values the envelope carries,
+        // which only a load puts in place: so the load runs on a scratch engine
+        // of its own, with its own registry, and this one is left as it was.
+        EngineOptions opts;
+        opts.seed = creationOptions_.seed;
+        opts.world = creationOptions_.world;
+        opts.onError = [](const PlayError&) {};
+        try
+        {
+            Engine scratch(bundle_, opts);
+            return scratch.loadGame(envelope);
+        }
+        catch (...)
+        {
+            return std::move(plan.report);
+        }
     }
 
     inline LoadReport Engine::previewFlowRestore(const std::string& id, const FlowSave& saved) const
@@ -4934,6 +5226,7 @@ namespace storylets
 
     inline LoadReport Engine::loadGame(const SaveEnvelope& envelope)
     {
+        refuseUnreadableSave(envelope);
         assertSameProject(envelope);
         assertExternalScopes();
         LoadPlan plan = planLoad(envelope);
@@ -4958,7 +5251,28 @@ namespace storylets
         {
             open(pair.first, OpenFlowOptions(), /*claim=*/true)->restore(pair.second);
         }
-        return plan.report;
+        if (!plan.sections.has_value()) return std::move(plan.report);
+        // With the values in place, every held card is checked as a deal
+        // checks it, and what no longer qualifies goes, in the report (the
+        // hands-on review, 2026-10, foundation 7). A game that loads its own
+        // registry has no values here yet: its next deal does the same.
+        std::vector<LoadEviction> dropped;
+        for (const auto& pair : plan.flows)
+        {
+            const FlowPtr* flow = flows_.get(pair.first);
+            if (!flow) continue;
+            for (auto& e : (*flow)->dropUnqualified()) dropped.push_back(std::move(e));
+        }
+        if (dropped.empty()) return std::move(plan.report);
+        LoadReport report = std::move(plan.report);
+        report.exact = false;
+        for (auto& e : dropped) report.evicted.push_back(std::move(e));
+        std::sort(report.evicted.begin(), report.evicted.end(),
+            [](const LoadEviction& a, const LoadEviction& b)
+            {
+                return detail::JoinKey({a.flow, a.hand, a.card, a.reason}) < detail::JoinKey({b.flow, b.hand, b.card, b.reason});
+            });
+        return report;
     }
 
     inline std::vector<detail::DurableProp> Engine::durableProps(const detail::FlowDecls& decls) const
@@ -5213,10 +5527,7 @@ namespace storylets
 
     inline Engine::LoadPlan Engine::planLoad(const SaveEnvelope& envelope) const
     {
-        if (envelope.schema != SAVE_SCHEMA && envelope.schema != SAVE_SCHEMA_V1)
-        {
-            throw StoryletError("unsupported save schema: " + envelope.schema);
-        }
+        refuseUnreadableSave(envelope);
         detail::ReportDraft draft;
         LoadPlan plan;
         // Where the property values are, if this envelope has them: a version 1
@@ -5240,10 +5551,11 @@ namespace storylets
         }
         std::optional<PropsPartition> shared;
         if (moved.has_value()) shared = walkPartition(sharedDecls_, &moved->shared, std::string(), draft);
-        for (const auto& cardId : envelope.shared.spent)
+        for (const auto& key : envelope.shared.spent)
         {
-            if (cardsById_.contains(cardId)) plan.spent.push_back(cardId);
-            else draft.droppedSpent.push_back(cardId);
+            const detail::CardEntry* entry = savedCard(key);
+            if (entry) plan.spent.push_back(entry->card->id);
+            else draft.droppedSpent.push_back(key);
         }
         if (moved.has_value())
         {
@@ -5290,43 +5602,46 @@ namespace storylets
         // A flow blob without properties (a version 2 envelope's: the registry
         // has them) has nothing to walk.
         if (saved.props.has_value()) clean.props = walkPartition(flowDecls_, &*saved.props, id, draft);
-        clean.turns = saved.turns;
         clean.prng = saved.prng;
         clean.playLog = saved.playLog;
+        // Every key the save carries resolves to the build's internal id (see
+        // savedCard); one the build no longer has is named by the key itself.
         for (const auto& pair : saved.cooldowns)
         {
-            if (cardsById_.contains(pair.first)) clean.cooldowns.set(pair.first, pair.second);
+            const detail::CardEntry* entry = savedCard(pair.first);
+            if (entry) clean.cooldowns.set(entry->card->id, pair.second);
             else draft.droppedCooldowns.push_back(LoadCooldown{id, pair.first});
         }
-        // A deleted entity has no gameId left, so it is named by the id the save
-        // carries; everything the build still knows is named by its gameId.
-        auto cardName = [this](const std::string& cardId) -> std::string
+        // A deleted entity has no gameId left, so it is named by the key the
+        // save carries; everything the build still knows is named by its gameId.
+        auto cardName = [this](const std::string& key) -> std::string
         {
-            const detail::CardEntry* entry = cardsById_.get(cardId);
-            return entry ? EffectiveGameId(*entry->card) : cardId;
+            const detail::CardEntry* entry = savedCard(key);
+            return entry ? EffectiveGameId(*entry->card) : key;
         };
         std::unordered_map<std::string, int> restored;
         for (const auto& pair : saved.board)
         {
-            const detail::HandInBox* known = handsById_.get(pair.first);
+            const detail::HandInBox* known = savedHand(pair.first);
             if (!known)
             {
-                for (const auto& cardId : pair.second)
+                for (const auto& key : pair.second)
                 {
-                    draft.evicted.push_back(LoadEviction{id, pair.first, cardName(cardId), "hand-vanished"});
+                    draft.evicted.push_back(LoadEviction{id, pair.first, cardName(key), "hand-vanished"});
                 }
                 continue;
             }
             const std::string hand = EffectiveGameId(*known->hand);
             std::vector<std::string> kept;
-            for (const auto& cardId : pair.second)
+            for (const auto& key : pair.second)
             {
-                const detail::CardEntry* entry = cardsById_.get(cardId);
+                const detail::CardEntry* entry = savedCard(key);
                 if (!entry)
                 {
-                    draft.evicted.push_back(LoadEviction{id, hand, cardId, "vanished"});
+                    draft.evicted.push_back(LoadEviction{id, hand, key, "vanished"});
                     continue;
                 }
+                const std::string& cardId = entry->card->id;
                 if (otherClaims
                     && Flow::cardIsShared(*entry->card, entry->deck->shared.has_value() && *entry->deck->shared))
                 {
@@ -5342,7 +5657,11 @@ namespace storylets
                 }
                 kept.push_back(cardId);
             }
-            clean.board.set(pair.first, std::move(kept));
+            clean.board.set(known->hand->id, std::move(kept));
+        }
+        for (const auto& pair : saved.turns)
+        {
+            if (const Box* box = savedBox(pair.first)) clean.turns.set(box->id, pair.second);
         }
         return clean;
     }

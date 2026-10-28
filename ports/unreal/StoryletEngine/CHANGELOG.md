@@ -2,6 +2,50 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`OnError` on the engine.** A condition the engine can't evaluate (a host value of the wrong type,
+  a resolver that throws, a division by zero) still counts as false, and now the game hears of it
+  whether or not anything is tracing: `UStoryletEngine::OnError` fires with an `FStoryletPlayError`
+  (flow, kind, node such as `card broken`, source and message). With nothing bound, each is logged as
+  a Warning. In the engine-free core: `EngineOptions::onError` and `PlayError`, Patterplay's shape;
+  unset, the core writes the warning to `stderr`.
+
+### Changed
+
+- **Saves name cards by Game ID.** A save is now `storylets/save@3`: a flow's turns, cooldowns and
+  board, and the cards a shared `redraw: never` has spent, name boxes, cards and hands by Game ID, as
+  the play log always did. A card deleted and made again under the same Game ID keeps its place, its
+  cooldown and its play count. Old saves still load: `storylets/save@1` and `@2`, and flows parked
+  before, read each key as a Game ID first and an internal id second. A load report names a vanished
+  card or hand by the key the save carries, so by its Game ID from now on.
+- **A load drops a held card that no longer qualifies.** When the save carries the property values (a
+  standalone engine's, or a version 1 save), `loadGame` checks every card it put back on a board as a
+  deal would, once the values are in place, and drops what no longer qualifies: a card whose condition
+  is now false after a content edit, say, or whose deck moved to another box. Each one is in the
+  report's `evicted` with the deal's reason (`hand-condition`, `vanished`, `deck-gate`, `taken`,
+  `cooldown`, `tags` or `condition`), and the report is not `exact`; the Blueprint load report
+  (`LoadStateFromJsonWithReport`, `PreviewLoadFromJson`) carries the same. The check draws nothing, so
+  the next deal is what it would have been, and emits no trace events. `previewLoad` gives the same
+  answer without touching the engine. A game that loads its own registry has no values at the load,
+  so its next deal does the same. The conformance corpus (version 20) checks it in every runtime.
+- **The Hamlet demo reads its hand, and a refused load leaves it as it was.** The hand on screen is
+  read from the board rather than dealt: arriving, finishing a card and waiting already deal, so a
+  redraw changes nothing and a save holds the hand that was showing. A load puts the saved `@world`
+  in first, since the load now checks the hand against it, and puts the old world back if the
+  storylets half is refused.
+
+### Fixed
+
+- **A host write that doesn't fit its declaration is refused.** `SetProperty` on an engine or a flow
+  refuses a string for a number, a value an enum or quality doesn't list, a flag a flags property
+  doesn't, or an undeclared `@world` name, saying what the property takes, and leaves the value
+  alone. An enum whose own default is "" takes "" back. Another engine's scope is that engine's to check.
+- **A bundle or a save that isn't one is refused by name.** A bundle that isn't a JSON object, or one
+  missing its content, settings, story or world properties or boxes, is refused naming what's wrong,
+  rather than playing as an empty story. A save envelope that isn't an object, has a schema this
+  runtime doesn't read, or has no content is refused the same way, before anything is read.
+
 ## [0.14.0] - 2026-10-21
 
 ### Removed

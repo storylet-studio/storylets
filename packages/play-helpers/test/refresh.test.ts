@@ -58,7 +58,10 @@ describe("applyLiveBundle", () => {
     // The load's report comes back with the engine: what the edit cost the run.
     expect(r.report.exact).toBe(false);
     expect(r.report.hash).toEqual({ saved: oldEngine.saveGame().content.hash, bundle: "edited1" });
-    expect(r.report.evicted.map((e) => [e.hand, e.reason])).toEqual([["the-inn", "vanished"]]);
+    // The deleted card, and the card the edit reconditioned: the load checks
+    // what it puts back as a deal would (the hands-on review, 2026-10,
+    // foundation 7).
+    expect(r.report.evicted.map((e) => [e.hand, e.reason])).toEqual([["the-inn", "vanished"], ["the-mystic-tree", "condition"]]);
     expect(r.report.defaultedProperties.map((p) => p.path)).toContain("story.mood");
 
     // loadGame rebuilt every flow: re-take the handle by name.
@@ -69,18 +72,15 @@ describe("applyLiveBundle", () => {
     // The new property at its default.
     expect(flow.getProperty("story.mood")).toBe(3);
     expect(() => old.getProperty("story.mood")).toThrow();
-    // Same hands, minus the deleted card (load drops it); the recondititioned
-    // card stays until its hand is next dealt.
+    // Same hands, minus the deleted card and the one that needs night now:
+    // the load dropped both.
     const after = flow.board();
     expect(after["the-inn"]).toEqual([]);
     expect(after["the-forge"]!.map((c) => c.gameId)).toEqual(before["the-forge"]!.map((c) => c.gameId));
-    expect(after["the-mystic-tree"]!.map((c) => c.gameId)).toEqual(["wind-in-the-leaves"]);
+    expect(after["the-mystic-tree"]).toEqual([]);
     // The played card's cooldown came across: it does not come back.
-    const log: unknown[] = [];
-    flow.subscribeTrace((e) => log.push(e));
     flow.dealMany();
-    expect(flow.board()["the-mystic-tree"]).toEqual([]); // evicted: needs night now
-    expect(log).toContainEqual({ type: "evict", hand: "the-mystic-tree", card: "wind-in-the-leaves", reason: "condition" });
+    expect(flow.board()["the-mystic-tree"]!.map((c) => c.gameId)).not.toContain("wind-in-the-leaves");
     expect(Object.values(flow.board()).flat().map((c) => c.gameId)).not.toContain("arrive-at-the-gate");
   });
 

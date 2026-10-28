@@ -12,9 +12,9 @@ import type { EvalContext, ScalarValue } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
 import { Engine, Flow, effectiveFields, extensionDecls, extensionsOf, fieldDecls, makePrng } from "@storylet-studio/runtime";
-import type { DurableSave } from "@storylet-studio/runtime";
+import type { DurableSave, PlayError } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
-import type { Bundle, FlowSave, LoadProperty, LoadReport } from "@storylet-studio/model";
+import type { Bundle, FlowSave, LoadProperty, LoadReport, SaveEnvelope } from "@storylet-studio/model";
 import type {
   DurableExpect, ExpressionCase, LoadCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector,
 } from "./types.js";
@@ -97,7 +97,7 @@ const outcomeMap = (session: Flow, cardId: string, keys: string[], from: string)
  *  twice is free (schema 3.5). Returns failures; empty = pass. */
 export function runPeekCase(c: PeekCase): string[] {
   const failures: string[] = [];
-  const session = new Engine(c.bundle, { seed: c.seed ?? 0 }).openFlow("main");
+  const session = new Engine(c.bundle, { seed: c.seed ?? 0, onError: () => {} }).openFlow("main");
   if (c.setup) applyState(session, c.setup);
   const first = session.peek(c.box, c.criteria ?? {}, c.n).cards.map((card) => card.id);
   if (!same(first, c.expect)) {
@@ -207,7 +207,10 @@ const checkReport = (
 export function runScriptedCase(c: ScriptedCase): string[] {
   const failures: string[] = [];
   const seed = c.seed ?? 0;
-  let engine = new Engine(c.bundle, { seed });
+  // What the engine reported to its onError (corpus 18), as `node`s.
+  let playErrorSink: string[] = [];
+  const onError = (e: PlayError): void => { playErrorSink.push(e.node); };
+  let engine = new Engine(c.bundle, { seed, onError });
   // The bundle the engine runs now: a kept durable half must carry its content.
   let running = c.bundle;
   let handles = new Map<string, Flow>();
@@ -269,6 +272,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   const collect = (run: () => void): Map<string, string> => {
     verdictSink = new Map();
     diagnosticSink = [];
+    playErrorSink = [];
     traceSink = [];
     run();
     return verdictSink;
@@ -387,6 +391,10 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         checkVerdicts(at, op.expectVerdicts, verdicts);
         checkDiagnostic(at, op.expectDiagnostic, diagnosticSink);
         checkTrace(at, op.expectTrace, traceSink);
+        if (op.expectPlayErrors !== undefined) {
+          const reported = [...new Set(playErrorSink)].sort();
+          if (!same(reported, op.expectPlayErrors)) failures.push(`${at}: onError expected ${show(op.expectPlayErrors)}, got ${show(reported)}`);
+        }
         const names = handGameIds(c.bundle);
         for (const [handId, expected] of Object.entries(op.expectBoard ?? {})) {
           const board = session.board();
@@ -529,6 +537,17 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
         break;
       }
+      case "loadEnvelope": {
+        let error: string | undefined;
+        try {
+          new Engine(c.bundle, { seed, onError }).loadGame(op.envelope as SaveEnvelope);
+        } catch (e) {
+          error = String(e);
+        }
+        if (error === undefined) failures.push(`${at}: expected the envelope to be refused, it was loaded`);
+        else for (const want of op.expectRefused) if (!error.includes(want)) failures.push(`${at}: expected the refusal to name "${want}", got ${show(error)}`);
+        break;
+      }
       case "scribble": {
         const flow = flowOf(op.flow);
         const names = handGameIds(c.bundle);
@@ -577,7 +596,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         // case's EDITED bundle: the drifted-content contract. loadGame
         // rebuilds every flow, so the script's handles are re-taken.
         const envelope = engine.saveGame();
-        const target = new Engine(op.into === "B" ? c.bundleB! : c.bundle, { seed });
+        const target = new Engine(op.into === "B" ? c.bundleB! : c.bundle, { seed, onError });
         if (op.previewOnly) {
           // The purity claim, checked rather than asserted: the engine that
           // was asked what a load would cost writes the same envelope after
@@ -669,7 +688,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         // The world restarts: a fresh engine, no flow, no handle. What crosses
         // is what the script kept, and only through the durable verbs.
         running = op.into === "B" ? c.bundleB! : c.bundle;
-        engine = new Engine(running, { seed });
+        engine = new Engine(running, { seed, onError });
         handles = new Map();
         if (memory === undefined) break;
         let report: LoadReport | undefined;
@@ -722,7 +741,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         break;
       }
       case "reset":
-        engine = new Engine(c.bundle, { seed });
+        engine = new Engine(c.bundle, { seed, onError });
         running = c.bundle;
         handles = new Map();
         break;
@@ -742,7 +761,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
 export function runLoadCase(c: LoadCase): string[] {
   let error: string | undefined;
   try {
-    new Engine(c.bundle, { seed: 0 });
+    new Engine(c.bundle as Bundle, { seed: 0 });
   } catch (e) {
     error = String(e);
   }

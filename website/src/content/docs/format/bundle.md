@@ -159,11 +159,17 @@ changed, because the bytes are part of the contract.
 
 ## The save envelope
 
-A running engine snapshots to a `storylets/save@2` envelope, which holds what is not a
+A running engine snapshots to a `storylets/save@3` envelope, which holds what is not a
 property: what a shared one-shot spent, then every flow's own blob, keyed by the flow's name.
-Boards, cooldowns and spent cards are keyed by immutable id, so renaming things in the project
-doesn't break a save. The play log is the exception: it records cards and outcomes by gameId,
-the names the play-history functions take.
+Boards, cooldowns, box clocks and spent cards are keyed by **Game ID**, as the play log is, so a
+card deleted and made again under the same Game ID keeps its place, its cooldown and its play
+count. Publishing pins Game IDs, so renaming a card after that doesn't break a save. A
+`storylets/save@2` envelope, keyed by internal id, still loads: every key is read as a Game ID
+first and an internal id second.
+
+When a save carries its property values, a load checks every card it puts back in a hand as a
+deal would, and drops what no longer qualifies (a content edit can make a held card's condition
+false). The load report lists each one in `evicted`, with the reason.
 
 Property values live in the game's **registry** (a `ScopeRegistry`, one per game, see
 [Running it with Patter](/play/with-patter/#one-registry)). An engine built without one makes
@@ -180,7 +186,7 @@ durable, so that does ride the shared half.
 
 ```json5
 {
-  schema: "storylets/save@2",
+  schema: "storylets/save@3",
   content: { project: "proj_salt", version: "0.3.0", hash: "a91c..." },
   registry: {                          // only when the engine made its own registry
     story: { reputation: -1 },         // the shared-flagged properties
@@ -191,14 +197,14 @@ durable, so that does ride the shared half.
     "storylets/flow/main/value/v_docks": { danger: 3 },  // tag state
   },
   shared: {
-    spent: ["c_pixie"],                // shared one-shots taken out of the world
+    spent: ["pixie"],                  // shared one-shots taken out of the world, by Game ID
   },
   flows: {
     "main": {
-      turns: { "b_enc": 12 },          // per-box turn counters, per flow
+      turns: { "encounters": 12 },     // per-box turn counters, per flow, by box Game ID
       prng: 1199730143,                // mulberry32 state, uint32, per flow
-      cooldowns: { "c_ambush": 15 },   // absolute next-eligible turn of that card's box
-      board: { "h_board": ["c_rat_job"] },   // hand contents, in dealt order
+      cooldowns: { "ambush": 15 },     // absolute next-eligible turn of that card's box
+      board: { "board": ["rat-job"] },   // hand contents by Game ID, in dealt order
       playLog: [ { card: "rat-job", outcome: "accepted", turn: 11 } ],
     },
   },

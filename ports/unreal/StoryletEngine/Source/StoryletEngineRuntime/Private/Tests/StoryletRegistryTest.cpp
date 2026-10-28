@@ -133,7 +133,7 @@ bool FStoryletRegistryTest::RunTest(const FString& Parameters)
 
 	// A save leaves the values to the game, which saves the registry once.
 	const FString Saved = UStoryletSave::SaveStateToJson(Engine);
-	TestTrue(TEXT("the envelope is version 2"), Saved.Contains(TEXT("storylets/save@2")));
+	TestTrue(TEXT("the envelope is version 3"), Saved.Contains(TEXT("storylets/save@3")));
 	TestFalse(TEXT("and carries no registry"), Saved.Contains(TEXT("\"registry\"")));
 
 	// A second engine wanting the same token is refused, naming the first.

@@ -1536,6 +1536,9 @@ export interface CoverageInfo {
   hasProject: boolean;
   name: string;
   driverCount: number;
+  /** How many @world properties the project declares: none, and coverage has
+   *  nothing a driver could feed, so the note about drivers keeps quiet. */
+  worldCount?: number;
   pinned: boolean;
   last?: CoverageReport;
   /** When `last` ran: present exactly when `last` is. */
@@ -1871,6 +1874,8 @@ export interface StudioApi {
    *  (field values, tag starting values, condition and change literals), in
    *  one undoable edit with the declaration itself. */
   renameStage(target: StageTargetDto, from: string, to: string): Promise<OpenResult | { error: string }>;
+  /** Rename a property (`target` by its old name, `from`) and carry every reference to it, one undo step. */
+  renameProperty(target: StageTargetDto, from: string, to: string): Promise<OpenResult | { error: string }>;
   /** How many gates order against a quality's ladder (`>=` and the rest):
    *  what reordering its stages changes the meaning of. */
   stageGates(target: StageTargetDto): Promise<number>;
@@ -1927,6 +1932,8 @@ export interface StudioApi {
   deleteCardsAcross(groups: { deckId: string; cardIds: string[] }[]): Promise<OpenResult | { error: string }>;
   /** Reorder: move a card before/after a target card in its deck. */
   moveCard(deckId: string, cardId: string, targetId: string, before: boolean): Promise<OpenResult | { error: string }>;
+  /** Move a card to another deck of its own box, as one undo step (it keeps its id and Game ID). */
+  moveCardToDeck(deckId: string, cardId: string, toDeckId: string): Promise<OpenResult | { error: string }>;
   /** The expr-editor property catalogue reachable from a card in this deck. */
   cardCatalogue(deckId: string): Promise<ConditionProperty[]>;
   /** The box-scoped catalogue (no @deck): query conditions edit against this. */
@@ -2565,6 +2572,7 @@ export const INVOKE_CHANNELS = {
   "hand:move": "moveHand",
   "box:save": "saveBox",
   "stage:rename": "renameStage",
+  "property:rename": "renameProperty",
   "stage:gates": "stageGates",
   "box:catalogue": "boxCatalogue",
   "deck:duplicate": "duplicateDeck",
@@ -2601,6 +2609,7 @@ export const INVOKE_CHANNELS = {
   "card:create": "createCard",
   "card:duplicate": "duplicateCard",
   "card:move": "moveCard",
+  "card:moveToDeck": "moveCardToDeck",
   "card:delete": "deleteCard",
   "card:deleteMany": "deleteCards",
   "card:deleteAcross": "deleteCardsAcross",

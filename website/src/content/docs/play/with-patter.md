@@ -108,7 +108,7 @@ p = performer.choose(p, optionId, storyFlow.outcomes(card.id, handId));
 storyFlow.play(card.id, p.outcome!, handId);
 ```
 
-It uses your Patter engine as it is, on your registry, and needs `@patterkit/runtime` 0.14 or later
+It uses your Patter engine as it is, on your registry, and needs `@patterkit/runtime` 0.34 or later
 beside it. After a load, `performer.resume(saved, outcomes)` carries on from a saved Performance.
 It also has `checkPairing`, the check below as a function for your build, and a browser drop-in
 (`with-patter.min.js`, a `StoryletsWithPatter` global) for a page with no bundler, which is how

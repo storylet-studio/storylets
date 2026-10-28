@@ -343,6 +343,7 @@ static int runPeek(const JsonValue& cases)
             BundlePtr bundle = ParseBundle(c.at("bundle"));
             EngineOptions opts;
             opts.seed = c.numOr("seed", 0);
+            opts.onError = [](const PlayError&) {};
             Engine engine(bundle, opts);
             Flow& session = *engine.openFlow("main");
             const JsonValue* setup = c.find("setup");
@@ -749,8 +750,12 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
     const JsonValue* bundleBJson = c.find("bundleB");
     BundlePtr bundleB = bundleBJson && bundleBJson->isObject() ? ParseBundle(*bundleBJson) : nullptr;
     double seed = c.numOr("seed", 0);
+    // What the engine reported to its onError (corpus 18), as `node`s. Every
+    // engine this runner makes reports here, as the JS runner's do.
+    std::vector<std::string> playErrors;
     EngineOptions opts;
     opts.seed = seed;
+    opts.onError = [&playErrors](const PlayError& e) { playErrors.push_back(e.node); };
     auto engine = std::make_unique<Engine>(bundle, opts);
     // The bundle the engine runs now: a kept durable half must carry its content.
     BundlePtr running = bundle;
@@ -900,6 +905,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         {
             verdicts.clear();
             diagnostics.clear();
+            playErrors.clear();
             traces.clear();
             std::optional<std::string> writeError;
             try
@@ -919,6 +925,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             std::optional<std::string> peekError;
             verdicts.clear();
             diagnostics.clear();
+            playErrors.clear();
             traces.clear();
             try
             {
@@ -956,11 +963,24 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             if (hands && hands->isArray()) handRefs = stringList(*hands);
             verdicts.clear();
             diagnostics.clear();
+            playErrors.clear();
             traces.clear();
             OrderedMap<std::string, std::vector<DealtCard>> dealt = session->dealMany(handRefs);
             checkVerdicts(at, op);
             checkDiagnostic(at, op);
             checkTrace(at, op);
+            if (const JsonValue* expected = op.find("expectPlayErrors"))
+            {
+                // Distinct and sorted, as the JS runner compares them.
+                std::vector<std::string> reported = playErrors;
+                std::sort(reported.begin(), reported.end());
+                reported.erase(std::unique(reported.begin(), reported.end()), reported.end());
+                const std::vector<std::string> want = stringList(*expected);
+                if (reported != want)
+                {
+                    failures.push_back(at + ": onError expected " + show(want) + ", got " + show(reported));
+                }
+            }
             const JsonValue* expectBoard = op.find("expectBoard");
             if (expectBoard && expectBoard->isObject())
             {
@@ -1595,6 +1615,35 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 }
             }
         }
+        else if (kind == "loadEnvelope")
+        {
+            // Corpus 18: a fresh engine on the case's bundle is handed raw JSON
+            // that need not be a save at all. It must be refused, naming every
+            // expectRefused string. The JSON reader is where an envelope that
+            // is not an object, or has no content, is refused.
+            std::optional<std::string> error;
+            try
+            {
+                Engine fresh(bundle, opts);
+                fresh.loadGame(savedetail::EnvelopeFromTree(op.at("envelope")));
+            }
+            catch (const std::exception& ex)
+            {
+                error = ex.what();
+            }
+            if (!error.has_value())
+            {
+                failures.push_back(at + ": expected the envelope to be refused, it was loaded");
+            }
+            else
+            {
+                for (const std::string& want : stringList(op.at("expectRefused")))
+                {
+                    if (error->find(want) != std::string::npos) continue;
+                    failures.push_back(at + ": expected the refusal to name \"" + want + "\", got \"" + *error + "\"");
+                }
+            }
+        }
         else if (kind == "reset")
         {
             engine = std::make_unique<Engine>(bundle, opts);
@@ -1768,6 +1817,49 @@ static int runSave(const JsonValue& cases)
         if (!restored.getFlow("main"))
         {
             fail("save", name, "the load did not rebuild the \"main\" flow");
+        }
+
+        // A save from before version 3 names cards, hands and boxes by internal
+        // id. The same envelope re-keyed that way, as save@2, loads exactly and
+        // saves again as the version 3 envelope it came from.
+        {
+            std::unordered_map<std::string, std::string> idOf;
+            for (const Box& box : bundle->boxes)
+            {
+                idOf[EffectiveGameId(box)] = box.id;
+                for (const Deck& deck : box.decks) for (const Card& card : deck.cards) idOf[EffectiveGameId(card)] = card.id;
+                for (const Hand& hand : box.hands) idOf[EffectiveGameId(hand)] = hand.id;
+            }
+            auto internal = [&idOf](const std::string& key) { auto it = idOf.find(key); return it == idOf.end() ? key : it->second; };
+            const SaveEnvelope v3 = engine.saveGame();
+            if (v3.schema != "storylets/save@3") fail("save", name, "saveGame wrote " + v3.schema + ", not storylets/save@3");
+            SaveEnvelope v2 = v3;
+            v2.schema = "storylets/save@2";
+            for (auto& id : v2.shared.spent) id = internal(id);
+            for (const std::string& flowId : v2.flows.keys())
+            {
+                FlowSave& f = *v2.flows.get(flowId);
+                OrderedMap<std::string, double> turns, cooldowns;
+                OrderedMap<std::string, std::vector<std::string>> board;
+                for (const auto& p : f.turns) turns.set(internal(p.first), p.second);
+                for (const auto& p : f.cooldowns) cooldowns.set(internal(p.first), p.second);
+                for (const auto& p : f.board)
+                {
+                    std::vector<std::string> cards;
+                    for (const auto& c : p.second) cards.push_back(internal(c));
+                    board.set(internal(p.first), std::move(cards));
+                }
+                f.turns = std::move(turns);
+                f.cooldowns = std::move(cooldowns);
+                f.board = std::move(board);
+            }
+            Engine older(bundle, EngineOptions{});
+            const LoadReport report = older.loadGame(v2);
+            if (!report.exact) fail("save", name, "a save@2 envelope keyed by internal id did not load exactly");
+            if (serializeState(older, world) != serializeState(engine, world))
+            {
+                fail("save", name, "a save@2 envelope keyed by internal id did not save again as the save@3 it came from");
+            }
         }
 
         // The state logger reads the save's shape, so it belongs on this path:

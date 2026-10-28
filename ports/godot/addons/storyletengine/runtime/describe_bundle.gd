@@ -4,9 +4,9 @@
 # (design/engine-runtimes.md section 2, piece 6). Port of
 # packages/runtime/src/describe.ts.
 #
-# A BUNDLE-level API, deliberately NOT a session method: it answers the
+# A BUNDLE-level API, deliberately NOT a flow method: it answers the
 # integrator's question - "I dropped a .storyletsc into my project, what may my
-# game code call?" - from the imported asset alone, with no session, no state
+# game code call?" - from the imported asset alone, with no flow, no state
 # and no game running. That makes the boundary rule (design 4) visible: hands
 # are what deal() takes, tag groups + tags are what peek() criteria are drawn
 # from, declared properties are what expressions read and a host may set. Card
@@ -15,9 +15,9 @@
 #
 # Everything is in bundle order, so the description is deterministic and two
 # runtimes render the same rows in the same sequence. The property scopes are
-# the static twin of StoryletSession.list_properties(): the same stores, in the
+# the static twin of StoryletFlow.list_properties(): the same stores, in the
 # same order, before anything is instantiated (a hand instance carries its
-# template's declarations, exactly as the session's hand bags do).
+# template's declarations, exactly as the flow's hand bags do).
 #
 # Dictionary keys are camelCase, exactly as list_boxes() / list_properties()
 # rows are: they mirror the bundle's own JSON vocabulary.
@@ -34,7 +34,7 @@ const SCOPE_TAG := "tag"
 
 
 ## Describe a compiled bundle: the callable surface of an imported asset, no
-## session required (design 2, piece 6). Bundle order throughout; the same
+## flow required (design 2, piece 6). Bundle order throughout; the same
 ## shape every runtime returns.
 ##
 ## Returns {
@@ -152,7 +152,7 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 				row["movable"] = movable
 			hands.append(row)
 
-		# The property scopes, in the session's store order: box, decks, hands,
+		# The property scopes, in the flow's store order: box, decks, hands,
 		# tags. Empty declaration blocks are dropped (nothing to read or set).
 		_push(properties, SCOPE_BOX, box_game_id, box_game_id, "", box.get("properties", []))
 		for deck in decks:
@@ -294,7 +294,7 @@ static func _template_of(hand: Dictionary, templates: Array) -> Variant:
 
 ## A hand's declared @hand state: a template instance inherits its template's
 ## declarations, a standalone hand declares its own (schema 2.6) - the same rule
-## the session's hand bags are built on.
+## the flow's hand bags are built on.
 static func _hand_decls(hand: Dictionary, templates: Array) -> Variant:
 	if hand.has("template"):
 		var template = _template_of(hand, templates)
@@ -329,7 +329,7 @@ static func _movable_holes(hand: Dictionary, groups: Array) -> Array:
 	return holes
 
 
-## The effective slot cap, resolved the way the session resolves capacity: the
+## The effective slot cap, resolved the way the flow resolves capacity: the
 ## hand's override, else the template's or rule's, else unbounded (INF).
 static func _hand_slots(hand: Dictionary, template: Variant) -> float:
 	if hand.has("slots"):

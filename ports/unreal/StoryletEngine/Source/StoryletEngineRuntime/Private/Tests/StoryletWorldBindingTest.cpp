@@ -98,12 +98,15 @@ bool FStoryletWorldBindingTest::RunTest(const FString& Parameters)
 
 	// --- reads go through the container. A name the host has not set is "no
 	// property" to a path read (the JS reference's deliberate guard: a default
-	// silently standing in for a missing host value was Patter's old bug),
-	// while a deal treats it as its declared default, as the gating below shows.
+	// silently standing in for a missing host value was Patter's old bug), and
+	// to a deal: the condition on it fails and counts as false, as the gating
+	// below shows, and is reported (OnError; with nothing bound, a Warning).
 	TestEqual(TEXT("time_of_day read from the host"), Flow->GetPropertyString(TEXT("world.time_of_day")), FString(TEXT("night")));
 	AddExpectedMessage(TEXT("no property at \"world.weather\""), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
 	TestEqual(TEXT("weather unset is no property"), Flow->GetPropertyString(TEXT("world.weather")), FString());
 
+	AddExpectedMessage(TEXT("the condition on card road in flow 'main' failed, counted as false"), ELogVerbosity::Warning,
+		EAutomationExpectedMessageFlags::Contains, 1);
 	TArray<FStoryletDealtCard> Hand = Flow->Deal(TEXT("board"));
 	TestTrue(TEXT("inn dealt"), HandHas(Hand, TEXT("inn")));
 	TestFalse(TEXT("road gated on knows_road"), HandHas(Hand, TEXT("road")));

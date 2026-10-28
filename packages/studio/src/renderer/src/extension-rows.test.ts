@@ -43,7 +43,7 @@ const project = { boxes: [box], extensions: [probe], extensionNodes: { card: [{ 
 const host = (save = vi.fn()): InspectorHost => ({
   openThreads: () => 0, showComments: vi.fn(), saveCard: vi.fn(), saveDeckConfig: vi.fn(), deleteCard: vi.fn(),
   saveBox: vi.fn(), saveTemplate: vi.fn(), saveTagGroup: vi.fn(), saveHand: vi.fn(), deleteTemplate: vi.fn(),
-  deleteTagGroup: vi.fn(), deleteHand: vi.fn(), renameStage: vi.fn(), stageGates: async () => 0, setGroupSpatial: vi.fn(),
+  deleteTagGroup: vi.fn(), deleteHand: vi.fn(), renameStage: vi.fn(), renameProperty: vi.fn(), stageGates: async () => 0, setGroupSpatial: vi.fn(),
   handCards: async () => null, deckCatalogue: async () => [], openCardFromHand: vi.fn(), newCardAtHand: vi.fn(), openHand: vi.fn(),
   extensions: { project: () => project, save },
 } as InspectorHost);

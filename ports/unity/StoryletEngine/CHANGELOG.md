@@ -2,7 +2,42 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`EngineOptions.OnError`** is told of every condition the engine couldn't evaluate and counted as false, as a
+  `PlayError` (`Flow`, `Kind`, `Node` such as `card lantern`, `Source`, `Message`), whether or not anything is
+  tracing. Left unset, each goes to `Engine.DefaultOnError`, a warning that the Unity layer points at
+  `Debug.LogWarning`. Patterplay's `OnError`, the same shape.
+
+### Changed
+
+- **Saves name cards by Game ID.** A save (now `storylets/save@3`, `Model.SAVE_SCHEMA`) keys a flow's board,
+  cooldowns and box clocks, and the spent shared cards, by Game ID, as its play log always did. A card deleted and
+  made again under the same Game ID keeps its place, its cooldown and its play count, where it used to keep only the
+  count. Older saves still load (`storylets/save@2`, now `Model.SAVE_SCHEMA_V2`, and `storylets/save@1`), and so do
+  flows parked before, every key read as a Game ID first and an internal id second; a load report names a card or
+  hand the build no longer has by the key the save carries. The state logger's `turn:`, `cooldown:` and `board:`
+  lines name Game IDs too. The conformance corpus (version 19) checks it in every runtime.
+
+- **A load drops a held card that no longer qualifies.** When the save carries the property values (a standalone
+  engine's, or a version 1 save), `LoadGame` checks every card it put back on a board as a deal would, once the
+  values are in place, and drops what no longer qualifies: a card whose condition is now false after a content
+  edit, say, or whose deck moved to another box. Each one is in the report's `Evicted` with the deal's reason
+  (`hand-condition`, `vanished`, `deck-gate`, `taken`, `cooldown`, `tags` or `condition`, now on
+  `EvictionReasons`), and the report is not `Exact`. The check draws nothing, so the next deal is what it would
+  have been, and emits no trace events. `PreviewLoad` gives the same answer without touching the engine. A game
+  that loads its own registry has no values at the load, so its next deal does the same. The conformance corpus
+  (version 20) checks it in every runtime.
+
 ### Fixed
+
+- **What the game hands in is checked.** `SetProperty` on an engine or a flow refuses a value that doesn't fit
+  its declaration, saying what the property takes (`"story.gold" takes a number; "5" doesn't fit`), and a
+  `@world` name the content never declared. An enum whose own default is "" (none chosen) takes "" back, so a game
+  can put its default back, and the state window's Reset to default works for one. A bundle that isn't an object,
+  or lacks one of its parts, is refused naming what it lacks, from `BundleLoader.Parse` and the `Engine` constructor
+  alike; `PreviewLoad` and `LoadGame` refuse an envelope that isn't a save, has an unknown schema or has no content,
+  before reading anything else. The conformance corpus (versions 18 and 19) checks it in every runtime.
 
 - **What a game is handed is its own.** A dealt card's fields and extension values, an outcome's, a box's, a field's
   structured default and `ExtensionsOf`'s values are copies: a game that changed one used to change it in the bundle

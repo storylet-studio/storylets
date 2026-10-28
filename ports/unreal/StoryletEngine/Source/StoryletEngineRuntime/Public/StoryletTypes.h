@@ -766,3 +766,35 @@ struct FStoryletBundleDescription
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FStoryletMapSummary Map;
 };
+
+/** A content error the engine played through, as UStoryletEngine::OnError
+ *  reports it. Content can fail at run time in ways the compiler cannot see: a
+ *  host value of the wrong type, a resolver that throws, a division by zero. A
+ *  deal never stops for one: the condition counts as false, so the card, deck
+ *  or hand is not available. The same rule and shape as Patterplay's
+ *  FPatterPlayError, on every Storylet Engine runtime. */
+USTRUCT(BlueprintType)
+struct FStoryletPlayError
+{
+	GENERATED_BODY()
+
+	/** The flow it happened in. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Flow;
+
+	/** What failed: always "condition", the one thing a Storylets deal evaluates. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Kind;
+
+	/** Whose condition: "card <gameId>", "deck <gameId>", "hand <gameId>" or
+	 *  "outcome <card gameId>/<outcome gameId>". */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Node;
+
+	/** The expression's source text, when the bundle carries it; empty when it does not. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Source;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Message;
+};

@@ -6,12 +6,47 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- **The game hears of a condition that failed.** A new `"on_error"` option to `StoryletEngine.create` takes a
+  `Callable(error: Dictionary)`, told of every card, deck, hand or outcome condition the engine could not evaluate
+  (a host value of the wrong type, a division by zero) and counted as false, whether or not anything is tracing:
+  `{"flow", "kind": "condition", "node", "source", "message"}`, Patterplay's `on_error` shape, with `node` such as
+  `card <gameId>` or `outcome <card>/<outcome>`. Without one, a `push_warning` says it. It used to reach only a
+  trace, so with tracing off a typo in a condition looked like a card that never came up.
+
+### Changed
+
+- **Saves name cards by Game ID.** A save (now `storylets/save@3`, `StoryletBundle.SAVE_SCHEMA`) keys a flow's board,
+  cooldowns and box clocks, and the spent shared cards, by Game ID, as its play log always did. A card deleted and
+  made again under the same Game ID keeps its place, its cooldown and its play count, where it used to keep only the
+  count. Older saves still load (`SAVE_SCHEMA_V2` names version 2), and a load report names a card the build no
+  longer has by the key the save carries. The state logger's `turn:`, `cooldown:` and `board:` lines follow. The
+  conformance corpus (version 19) checks it in every runtime.
+- **A load drops a held card that no longer qualifies.** When the save carries the property values (a standalone
+  engine's, or a version 1 envelope), `load_game` checks every card it puts back on a board as a deal would, with
+  those values in place, and drops one whose condition, deck gate, hand condition, cooldown, tags or spent shared copy
+  now rules it out, or whose deck has moved to another box. Each goes in the report's `evicted` with its reason
+  (`"condition"`, `"deck-gate"`, `"hand-condition"`, `"cooldown"`, `"tags"`, `"taken"` or `"vanished"`), and the
+  report is not `exact`. The check draws nothing, so the next deal is the one it would have been, and fires no trace
+  events. `preview_load` gives the same answer without touching the engine. A save from before a content edit used
+  to put such a card back silently. A game that loads its own registry has no values yet at the load: its next deal
+  does the same. The conformance corpus (version 20) checks it in every runtime.
+
 ### Fixed
 
 - **What a game is handed is its own.** A dealt card's fields and extension values, an outcome's, a box's, a field's
   structured default and `extensions_of`'s values are copies: a game that changed one used to change it in the bundle
   for every later deal, in every engine on that bundle. The conformance corpus (version 17) checks it in every
   runtime.
+- **What a game hands in is checked.** `set_property`, on the engine or a flow, refuses a value that doesn't fit its
+  declaration, saying what it takes (`"story.gold" takes a number; "5" doesn't fit`), and refuses a `@world` name the
+  content never declared; another engine's scope is that engine's to check. An enum whose own default is `""` (none
+  chosen) takes `""` back, so a game can put its default back. `create` refuses a bundle that is not a
+  Dictionary, or lacks one of its parts, by what is wrong with it, and `load_game` and `preview_load` refuse an
+  envelope that is not a save, has a schema this runtime doesn't read, or carries no content, before reading
+  anything. Each used to fail later as a script error, or not at all. The conformance corpus (version 18, and 19 for
+  the enum) checks it in every runtime.
 
 ## [0.14.0] - 2026-10-21
 

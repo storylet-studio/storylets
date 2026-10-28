@@ -30,9 +30,9 @@ Four assemblies, the Patterplay split applied verbatim, plus the shared kernel:
   Newtonsoft-touching layer: `BundleLoader` parses a compiled bundle's JSON
   into the pure model, and `StoryletSave` is the save-file string boundary
   (`SerializeState` / `DeserializeState` / `LoadState` over the runtime's
-  own `storylets/save@2` envelope, `storylets/save@1` still read, inside the
-  host's `storylets/savefile@1` file, the `.storyletsave` format; a foreign or
-  malformed blob throws), and `StoryletLiveBundle` applies a bundle the
+  own `storylets/save@3` envelope, `storylets/save@2` and `storylets/save@1`
+  still read, inside the host's `storylets/savefile@1` file, the
+  `.storyletsave` format; a foreign or malformed blob throws), and `StoryletLiveBundle` applies a bundle the
   editor pushed over the Live Link (`TryParsePush` / `Apply`). In Unity it
   rides `com.unity.nuget.newtonsoft-json`.
 - `Runtime/Unity/` (`StoryletEngine.Runtime.Unity`) - the UnityEngine-touching
@@ -58,7 +58,7 @@ registry store and save it, `DefineForeign` with a resolver to keep it yourself)
 `SaveGame()` leaves the values to the game, which saves `registry.Save()` once and loads it
 before or after `LoadGame`. Without one the engine makes its own registry, self-backs
 `@world`, and `SaveGame()` carries every value, so one call is still the whole run.
-`storylets/save@1` envelopes still load. A card may name another engine's scope
+`storylets/save@2` and `storylets/save@1` envelopes still load. A card may name another engine's scope
 (`@patter.visits`) with no setting: it is read and written through the registry, and
 `OpenFlow` and `LoadGame` refuse content that names one no engine on the registry registered. See
 [Unity](https://storylets.dev/play/unity/#one-registry-per-game) on the site.

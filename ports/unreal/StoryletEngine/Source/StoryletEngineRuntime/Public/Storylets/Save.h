@@ -1,9 +1,9 @@
 // The save-file string boundary for the C++ core: the .storyletsave FILE
 // (storylets/savefile@1 - the HOST's wrapper: the engine's envelope plus, when
 // the host keeps one, its @world container; design/flows.md). The envelope is
-// storylets/save@2, written in the TypeScript reference's key order (schema,
+// storylets/save@3, written in the TypeScript reference's key order (schema,
 // content, registry when the engine owns its registry, shared, flows);
-// storylets/save@1 envelopes still read.
+// storylets/save@2 and storylets/save@1 envelopes still read.
 //
 // Pure std, self-sufficient, and PUBLIC - the parity member every runtime
 // carries under the same two names (serializeState / deserializeState; JS
@@ -44,6 +44,34 @@ namespace storylets
             inline std::string NumToken(double N) { return StoryletValue::JsNumber(N); }
 
             inline std::string ValueToken(const StoryletValue& V) { return V.toJsonString(); }
+
+            /** A JSON token as JavaScript's String() prints it, absent as
+             *  "undefined": the text the reference's durable refusals quote, so a
+             *  half with no schema, or a non-string one, is refused in the same
+             *  words everywhere. */
+            inline std::string JsText(const JsonValue* token)
+            {
+                if (!token) return "undefined";
+                switch (token->type)
+                {
+                    case JsonValue::Null: return "null";
+                    case JsonValue::Bool: return token->b ? "true" : "false";
+                    case JsonValue::Number: return NumToken(token->num);
+                    case JsonValue::String: return token->str;
+                    case JsonValue::Array:
+                    {
+                        // Array.prototype.join: a null item is empty.
+                        std::string out;
+                        for (size_t i = 0; i < token->arr.size(); ++i)
+                        {
+                            if (i) out += ",";
+                            if (!token->arr[i].isNull()) out += JsText(&token->arr[i]);
+                        }
+                        return out;
+                    }
+                    default: return "[object Object]";
+                }
+            }
 
             inline void WriteBag(std::string& Out, const OrderedMap<std::string, StoryletValue>& Bag, int Depth)
             {
@@ -334,8 +362,31 @@ namespace storylets
                 return F;
             }
 
+            /** Refuse a save envelope this runtime cannot read, by what is
+             *  wrong with it, before anything reads it (the hands-on review,
+             *  2026-10, foundation 5; the reference's refuseUnreadableSave).
+             *  Not an object, a schema this runtime does not read, or no
+             *  content: each said plainly, rather than read as an empty save. */
+            inline void RefuseUnreadableSave(const JsonValue& Tree)
+            {
+                if (!Tree.isObject())
+                {
+                    throw StoryletError("not a Storylets save: expected an object, got " + DescribeInput(Tree));
+                }
+                const JsonValue* Schema = Tree.find("schema");
+                if (!Schema || !Schema->isString() || !IsReadableSaveSchema(Schema->str))
+                {
+                    throw StoryletError(UnsupportedSaveSchemaMessage(JsText(Schema)));
+                }
+                const JsonValue* Content = Tree.find("content");
+                if (!Content || !Content->isObject()) throw StoryletError("not a complete Storylets save: no content");
+            }
+
+            /** A parsed envelope as the engine's SaveEnvelope. Throws
+             *  StoryletError for one RefuseUnreadableSave refuses. */
             inline SaveEnvelope EnvelopeFromTree(const JsonValue& Tree)
             {
+                RefuseUnreadableSave(Tree);
                 SaveEnvelope Env;
                 Env.schema = Tree.strOr("schema");
                 const JsonValue* Content = Tree.find("content");
@@ -391,9 +442,9 @@ namespace storylets
      *
      *  Throws StoryletError on a foreign or malformed file, or a save for
      *  another project - before any mutation, so a refused load leaves the
-     *  engine exactly as it was. The envelope may be storylets/save@2 or
-     *  storylets/save@1. Returns the file's @world values for the HOST to
-     *  apply: a bound @world is the game's, and the engine never carries it
+     *  engine exactly as it was. The envelope may be storylets/save@3,
+     *  @2 or @1. Returns the file's @world values for the HOST to apply: a
+     *  bound @world is the game's, and the engine never carries it
      *  (design/flows.md).
      *
      *  `onReport`, when given, is handed the LoadReport loadGame returned (the
@@ -406,7 +457,7 @@ namespace storylets
         const std::string envelopeSchema = engineTree && engineTree->isObject() ? engineTree->strOr("schema") : std::string();
         if (tree.strOr("schema") != SAVEFILE_SCHEMA
             || !engineTree || !engineTree->isObject()
-            || (envelopeSchema != SAVE_SCHEMA && envelopeSchema != SAVE_SCHEMA_V1))
+            || !IsReadableSaveSchema(envelopeSchema))
         {
             throw StoryletError(std::string("not a storylets save (expected schema \"") + SAVEFILE_SCHEMA + "\")");
         }
@@ -514,34 +565,6 @@ namespace storylets
 
     namespace savedetail
     {
-        /** A JSON token as JavaScript's String() prints it, absent as
-         *  "undefined": the text the reference's durable refusals quote, so a
-         *  half with no schema, or a non-string one, is refused in the same
-         *  words everywhere. */
-        inline std::string JsText(const JsonValue* token)
-        {
-            if (!token) return "undefined";
-            switch (token->type)
-            {
-                case JsonValue::Null: return "null";
-                case JsonValue::Bool: return token->b ? "true" : "false";
-                case JsonValue::Number: return NumToken(token->num);
-                case JsonValue::String: return token->str;
-                case JsonValue::Array:
-                {
-                    // Array.prototype.join: a null item is empty.
-                    std::string out;
-                    for (size_t i = 0; i < token->arr.size(); ++i)
-                    {
-                        if (i) out += ",";
-                        if (!token->arr[i].isNull()) out += JsText(&token->arr[i]);
-                    }
-                    return out;
-                }
-                default: return "[object Object]";
-            }
-        }
-
         /** A value a property can hold: a boolean, a number, a string, or an
          *  array of strings (flags). */
         inline bool IsReadableValue(const JsonValue& token)

@@ -143,7 +143,7 @@ export function createProjectSettings(
     },
   };
   /** World stages renamed since the dialog opened, carried at Save. */
-  const worldRenames: { target: StageTargetDto; from: string; to: string }[] = [];
+  const worldRenames: { target: StageTargetDto; from: string; to: string; property?: true }[] = [];
   let dialog: SettingsDialog | undefined;
   /** The shell hands back open/destroy and keeps its modal to itself, so the
    *  frame is the node it just appended: what the read-only pass greys, and
@@ -216,6 +216,8 @@ export function createProjectSettings(
           const props = mountPropertyList(h, data!.world, { readOnlySwitch: true, sharingSwitches: false, stages: {
             target: (decl) => (decl.name.trim() === "" ? undefined : { kind: "property", scope: "world", name: decl.name }),
             rename: (target, from, to) => { worldRenames.push({ target, from, to }); },
+            // A renamed @world property, carried through every reference on Save, in order with the stages.
+            renameProperty: (target, from, to) => { worldRenames.push({ target, from, to, property: true }); },
             gates: (target) => studio.stageGates(target),
           } });
           h.append(el("h3", { className: "set-cap", text: "Coverage drivers" }));
@@ -257,7 +259,8 @@ export function createProjectSettings(
       ],
       onSave: async () => {
         for (const r of worldRenames.splice(0)) {
-          if (!ok(await studio.renameStage(r.target, r.from, r.to), onError)) return false;
+          const renamed = r.property ? studio.renameProperty(r.target, r.from, r.to) : studio.renameStage(r.target, r.from, r.to);
+          if (!ok(await renamed, onError)) return false;
         }
         let result = await studio.saveProjectSettings(data!);
         // Refused (a lock, say): the dialog stays open with the edits in it.

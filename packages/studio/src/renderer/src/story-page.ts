@@ -62,6 +62,7 @@ export function renderStoryCentre(host: HTMLElement, ctx: StoryPageContext, rest
       // Its own slot, queued ahead of the page's save (which re-queues behind it).
       rename: (target, from, to) => ctx.queue(`stage:${renames++}`, () => studio.renameStage(target, from, to)),
       gates: (target) => studio.stageGates(target),
+      renameProperty: (target, from, to) => ctx.queue(`rename:${renames++}`, () => studio.renameProperty(target, from, to)),
     }, rowExtras: (decl) => {
       const b = el("button", { className: "set-uses", text: "uses",
         tip: `Find every read and write of @story.${decl.name}`,

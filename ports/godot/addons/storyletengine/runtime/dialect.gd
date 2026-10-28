@@ -21,7 +21,7 @@ const NEVER_PLAYED := 9999.0
 
 
 ## Build the dialect descriptor StoryletExpression.evaluate consumes. Callers
-## should hold one instance (the session builds it once).
+## should hold one instance (the flow builds it once).
 static func dialect() -> Dictionary:
 	return {
 		"scopes": [

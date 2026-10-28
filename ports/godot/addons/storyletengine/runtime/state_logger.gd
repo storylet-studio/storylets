@@ -12,14 +12,15 @@
 # What is storylets' own and stays here: the flattened path scheme
 #   world.x / story.x / box.<gameId>.x / deck.<gameId>.x / hand.<gameId>.x
 #   value.<gameId>.x  the owned property scopes (design change 4.4)
-#   turn:<boxId>      per-box clocks
-#   cooldown:<cardId> next-eligible turns
-#   board:<handId>    hand contents (card ids, dealt order)
+#   turn:<boxGameId>       per-box clocks
+#   cooldown:<cardGameId>  next-eligible turns
+#   board:<handGameId>     hand contents (card Game IDs, dealt order)
+# (Game IDs as the save keys them from version 3; internal ids before.)
 # snapshot_state (one flow's view off the bags) and the create_state_logger
 # factory that mounts the engine's bags and one flow's own.
 #
-# The three colon keys stay keyed by INTERNAL id: they are the save envelope's
-# own bookkeeping, not property addresses, and nothing addresses them.
+# The three colon keys are the save envelope's own bookkeeping, not property
+# addresses, and nothing addresses them: they read as the envelope names them.
 class_name StoryletStateLogger
 extends "res://addons/storyletengine/runtime/expr/state_logger.gd"
 

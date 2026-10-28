@@ -2,7 +2,7 @@
 // @storylet-studio/model (packages/model/src/index.ts): the bundle schema
 // "storylets/bundle@1" ("@0" still read; world/story property decls, boxes with
 // decks/cards/outcomes/tag groups/hands/hand templates, ranking, fields, redraw,
-// copies, the home group, the project map, Storylet extension values), SaveEnvelope ("storylets/save@2"; @1 still read), and the gameId
+// copies, the home group, the project map, Storylet extension values), SaveEnvelope ("storylets/save@3"; @1 and @2 still read), and the gameId
 // derivation rules (GameIdify / EffectiveGameId). The loader consumes the
 // core's neutral JsonValue tree (the Unity port's BundleLoader, minus the
 // JSON library), so hosts feed it from any parser. No behaviour lives here.
@@ -44,8 +44,13 @@ namespace storylets
         return schema == BUNDLE_SCHEMA_V0 || schema == BUNDLE_SCHEMA;
     }
 
-    /** The engine's save envelope, version 2 (the one-registry model):
-     *  property values are the game's ScopeRegistry's, not the engine's. The
+    /** The engine's save envelope, version 3: version 2's shape (the
+     *  one-registry model) keyed by GAME ID (the hands-on review, 2026-10,
+     *  foundation 7). A flow's turns, cooldowns and board, and the shared
+     *  spent cards, name boxes, cards and hands by Game ID, as the play log
+     *  always did, so a card deleted and made again under the same Game ID
+     *  keeps its cooldown and its place as well as its play count. Property
+     *  values are the game's ScopeRegistry's, not the engine's. The
      *  envelope holds what is NOT a property (boards, clocks, cooldowns, PRNGs,
      *  play logs, spent cards), plus, when the engine made its own registry (a
      *  standalone game), that registry's values under `registry`. A game that
@@ -59,7 +64,10 @@ namespace storylets
      *  as `%25` and `/` as `%2F`. A bag with no declared properties is not
      *  registered. A self-backed @world (no resolver bound) is a stored
      *  property too, under `world`. */
-    inline const char* const SAVE_SCHEMA = "storylets/save@2";
+    inline const char* const SAVE_SCHEMA = "storylets/save@3";
+    /** Version 2, keyed by internal id: still read, every key resolved as a
+     *  Game ID first and an internal id second. */
+    inline const char* const SAVE_SCHEMA_V2 = "storylets/save@2";
     /** The version 1 envelope's schema tag, still read: its property
      *  partitions move into the registry as it loads. */
     inline const char* const SAVE_SCHEMA_V1 = "storylets/save@1";
@@ -67,6 +75,19 @@ namespace storylets
      *  envelope plus, when the host keeps one, its @world container -
      *  design/flows.md). The engine never reads or writes the world half. */
     inline const char* const SAVEFILE_SCHEMA = "storylets/savefile@1";
+
+    /** Is this a save envelope schema this runtime reads (@1, @2 or @3)? */
+    inline bool IsReadableSaveSchema(const std::string& schema)
+    {
+        return schema == SAVE_SCHEMA || schema == SAVE_SCHEMA_V2 || schema == SAVE_SCHEMA_V1;
+    }
+
+    /** The refusal for any other: the reference's words, on every runtime. */
+    inline std::string UnsupportedSaveSchemaMessage(const std::string& schema)
+    {
+        return "unsupported save schema: " + schema + " (this runtime reads " + SAVE_SCHEMA_V1 + ", "
+            + SAVE_SCHEMA_V2 + " and " + SAVE_SCHEMA + ")";
+    }
 
     /** The reserved tag group (schema 2.4): present in every box without
      *  declaration, its tags the box's hand ids. Every hand implicitly binds
@@ -610,6 +631,14 @@ namespace storylets
     struct Bundle
     {
         std::string schema = BUNDLE_SCHEMA;
+        /** What ParseBundle was handed when it was not a JSON object at all
+         *  (`null`, `an array`), empty when it was one; and the parts a bundle
+         *  tree lacked (`no content`, `no boxes`), in the reference's order.
+         *  Recorded, not thrown, so a reader such as describeBundle takes what
+         *  it is given; the engine refuses either at construction, in the
+         *  reference's order (the hands-on review, 2026-10, foundation 5). */
+        std::string notAnObject;
+        std::vector<std::string> missingParts;
         BundleContent content;
         std::string metadata = "full";          // "full" | "stripped"
         BundleSettings settings;
@@ -701,16 +730,18 @@ namespace storylets
          *  properties are the registry's. Present in every flow of a version 1
          *  envelope. */
         std::optional<PropsPartition> props;
-        /** Per-box turn counters, keyed by box id (schema 3.4) - per flow:
-         *  there is deliberately no global turn. */
+        /** Per-box turn counters, keyed by box Game ID (schema 3.4; by box
+         *  id before version 3) - per flow: there is deliberately no global
+         *  turn. */
         OrderedMap<std::string, double> turns;
         /** mulberry32 state, uint32 (schema 3.3), per flow. */
         uint32_t prng = 0;
         /** Absolute next-eligible turn (of the card's box's clock) per card
-         *  id; MAX_SAFE_INTEGER = never. */
+         *  Game ID (card id before version 3); MAX_SAFE_INTEGER = never. */
         OrderedMap<std::string, double> cooldowns;
-        /** Hand contents (card ids, in dealt order), keyed by hand id. The
-         *  claims ledger is derived from this (schema 3.5). */
+        /** Hand contents (card Game IDs, in dealt order), keyed by hand Game
+         *  ID (internal ids before version 3). The claims ledger is derived
+         *  from this (schema 3.5). */
         OrderedMap<std::string, std::vector<std::string>> board;
         std::vector<PlayRecord> playLog;
     };
@@ -726,13 +757,15 @@ namespace storylets
     {
         /** The shared property partitions: version 1 only. */
         std::optional<PropsPartition> props;
-        /** Card ids, sorted, so a save is byte-stable for a diff. */
+        /** Card Game IDs (ids before version 3), sorted, so a save is
+         *  byte-stable for a diff. */
         std::vector<std::string> spent;
     };
 
     struct SaveEnvelope
     {
-        /** SAVE_SCHEMA when written today; SAVE_SCHEMA_V1 still read. */
+        /** SAVE_SCHEMA when written today; SAVE_SCHEMA_V2 (the same shape,
+         *  keyed by internal id) and SAVE_SCHEMA_V1 still read. */
         std::string schema = SAVE_SCHEMA;
         BundleContent content;
         /** The engine's own registry's values, keyed by registry key: present
@@ -755,9 +788,10 @@ namespace storylets
     // computes it and applies it, and previewFlowRestore answers the same
     // questions for one flow.
     //
-    // Identities are GAME IDS. The one exception is an entity the edit DELETED -
-    // a vanished card, a vanished hand - which has no gameId left to give, so
-    // the report carries the id the save itself carries.
+    // Identities are GAME IDS. An entity the edit DELETED - a vanished card, a
+    // vanished hand - is named by the key the save itself carries, which is its
+    // Game ID from save version 3 (an internal id in an older save). There is
+    // nothing else to name it by.
 
     /** One card a restore refused to put back on the board. "claimed-elsewhere"
      *  is only ever a single-flow restore into a LIVE engine: the card is shared
@@ -767,7 +801,10 @@ namespace storylets
         std::string flow;
         std::string hand;
         std::string card;
-        /** "vanished" | "hand-vanished" | "claimed-elsewhere". */
+        /** "vanished" | "hand-vanished" | "claimed-elsewhere", or, for a held
+         *  card a load checked against the values it put back, a deal's
+         *  reason: "hand-condition" | "deck-gate" | "taken" | "cooldown" |
+         *  "tags" | "condition". */
         std::string reason;
     };
 
@@ -1039,6 +1076,45 @@ namespace storylets
             return {};
         }
         return {};
+    }
+
+    // --- inputs the game hands over ----------------------------------------------
+
+    /** What a refused input was, for the message: `null`, `an array`, `a
+     *  string`, as the reference's describeInput words it (the hands-on review,
+     *  2026-10, foundation 5). */
+    inline std::string DescribeInput(const JsonValue& value)
+    {
+        switch (value.type)
+        {
+            case JsonValue::Null: return "null";
+            case JsonValue::Array: return "an array";
+            case JsonValue::Bool: return "a boolean";
+            case JsonValue::Number: return "a number";
+            case JsonValue::String: return "a string";
+            default: return "an object";
+        }
+    }
+
+    /** The parts of a bundle the engine reads before anything else, each named
+     *  with what it should be, in the reference's order; empty when they are
+     *  all there. */
+    inline std::vector<std::string> BundleShapeProblems(const JsonValue& bundle)
+    {
+        std::vector<std::string> problems;
+        const JsonValue* content = bundle.find("content");
+        if (!content || !content->isObject()) problems.push_back("no content");
+        const JsonValue* settings = bundle.find("settings");
+        if (!settings || !settings->isObject()) problems.push_back("no settings");
+        for (const char* scope : {"story", "world"})
+        {
+            const JsonValue* part = bundle.find(scope);
+            const JsonValue* props = part && part->isObject() ? part->find("properties") : nullptr;
+            if (!props || !props->isArray()) problems.push_back(std::string("no ") + scope + " properties");
+        }
+        const JsonValue* boxes = bundle.find("boxes");
+        if (!boxes || !boxes->isArray()) problems.push_back("no boxes");
+        return problems;
     }
 
     // --- the bundle loader (neutral JsonValue -> compiled model) ---------------
@@ -1513,10 +1589,14 @@ namespace storylets
     }
 
     /** Parse a compiled bundle from a neutral JsonValue tree (the asset path
-     *  persists the raw JSON verbatim and rebuilds the compiled form on load). */
+     *  persists the raw JSON verbatim and rebuilds the compiled form on load).
+     *  A tree that is not an object, or lacks a part, is recorded on the
+     *  bundle (notAnObject, missingParts) for the engine to refuse. */
     inline BundlePtr ParseBundle(const JsonValue& b)
     {
         auto bundle = std::make_shared<Bundle>();
+        if (!b.isObject()) bundle->notAnObject = DescribeInput(b);
+        else bundle->missingParts = BundleShapeProblems(b);
         // No default: a blob with no schema tag is not a bundle this runtime
         // knows, and the engine refuses it by name at construction (D4) rather
         // than reading it as the current schema.

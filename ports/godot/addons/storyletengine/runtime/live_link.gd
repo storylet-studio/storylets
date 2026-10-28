@@ -1,6 +1,6 @@
 # StoryletLiveLink - the game-side client for Storyletter's Live Link
 # (design/live-link.md). Joins a running game to the editor over a loopback
-# WebSocket. Two things travel on it: the attached session's trace stream and
+# WebSocket. Two things travel on it: the attached flow's trace stream and
 # board snapshots go UP, so the editor's Board can show the game's run instead
 # of its own (OBSERVE-ONLY: the game stays in control, the editor is a passive
 # mirror); freshly compiled bundles come DOWN after a save, so the run picks
@@ -44,8 +44,8 @@ class_name StoryletLiveLink
 extends Node
 
 # Live refresh: the editor pushed a freshly compiled bundle over the link.
-# `data` is the full .storyletsc JSON: hand it (with your current session) to
-# apply_live_bundle, attach the session it returns, then call set_build(build)
+# `data` is the full .storyletsc JSON: hand it (with your current flow) to
+# apply_live_bundle, attach the flow it returns, then call set_build(build)
 # so the editor's icon flips back to in sync. Emitted from _process, so the
 # handler runs on the main thread. Never emitted with a malformed frame.
 signal bundle_pushed(build: String, data: String)

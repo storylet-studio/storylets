@@ -105,9 +105,39 @@ namespace StoryletStudio.StoryletEngine
         /// path persists the text verbatim and rebuilds the compiled form on load).</summary>
         public static Bundle Parse(string json)
         {
-            return Parse(JObject.Parse(json));
+            return Parse(JToken.Parse(json));
         }
 
+        /// <summary>Parse a compiled bundle already read as JSON. Anything but
+        /// an object (`null`, a list, a string) is refused as not a bundle at
+        /// all, as the engine refuses a null Bundle (the hands-on review,
+        /// 2026-10, foundation 5).</summary>
+        public static Bundle Parse(JToken token)
+        {
+            if (token is JObject b) return Parse(b);
+            throw new StoryletError($"not a Storylets bundle: expected an object, got {Describe(token)}");
+        }
+
+        /// <summary>What a refused input was, for the message, in the JS
+        /// reference's words: `null`, `an array`, `a string`.</summary>
+        internal static string Describe(JToken token)
+        {
+            switch (token?.Type ?? JTokenType.Null)
+            {
+                case JTokenType.Null:
+                case JTokenType.Undefined: return "null";
+                case JTokenType.Array: return "an array";
+                case JTokenType.Integer:
+                case JTokenType.Float: return "a number";
+                case JTokenType.Boolean: return "a boolean";
+                default: return "a string";
+            }
+        }
+
+        /// <summary>A part the bundle lacks (`content`, `boxes`, a scope's
+        /// `properties`) is left null rather than defaulted, so the engine can
+        /// refuse the bundle naming what it lacks instead of playing a cut-short
+        /// file as an empty one.</summary>
         public static Bundle Parse(JObject b)
         {
             var bundle = new Bundle
@@ -126,19 +156,22 @@ namespace StoryletStudio.StoryletEngine
                 bundle.Content.Version = content.Value<string>("version");
                 bundle.Content.Hash = content.Value<string>("hash");
             }
+            else bundle.Content = null;
             var settings = b["settings"] as JObject;
-            if (settings != null && settings["playAdvancesTurns"] != null)
+            if (settings == null) bundle.Settings = null;
+            else if (settings["playAdvancesTurns"] != null)
             {
                 bundle.Settings.PlayAdvancesTurns = settings.Value<double>("playAdvancesTurns");
             }
             var world = b["world"] as JObject;
-            if (world?["properties"] is JArray worldProps) bundle.World.Properties = ParsePropertyDecls(worldProps);
+            bundle.World.Properties = world?["properties"] is JArray worldProps ? ParsePropertyDecls(worldProps) : null;
             var story = b["story"] as JObject;
-            if (story?["properties"] is JArray storyProps) bundle.Story.Properties = ParsePropertyDecls(storyProps);
+            bundle.Story.Properties = story?["properties"] is JArray storyProps ? ParsePropertyDecls(storyProps) : null;
             if (b["boxes"] is JArray boxes)
             {
                 foreach (var box in boxes) bundle.Boxes.Add(ParseBox((JObject)box));
             }
+            else bundle.Boxes = null;
             // Other engines' scopes the content names (`@patter.visits`): read
             // and written through the game's registry, and reported when no
             // engine registered one.

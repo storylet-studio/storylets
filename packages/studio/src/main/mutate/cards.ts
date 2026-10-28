@@ -242,10 +242,25 @@ export async function duplicateCard(session: ProjectSession, deckId: string, car
   clone.id = newId("c");
   stampOrder(clone.outcomes);
   for (const o of clone.outcomes) o.id = newId("o");
-  // Site a distinct gameId so the copy never collides, and mark the title.
-  const taken = allCardGameIds(session);
-  clone.gameId = dedupedGameId(effectiveGameId(original), taken);
-  if (clone.title !== undefined) clone.title = `${clone.title} (copy)`;
+  // The next free title ("Ambush 2", then "Ambush 3"; never "Ambush (copy)
+  // (copy)") and no pinned gameId, so the copy's address follows its title as
+  // a new card's does. Pinning "ambush-copy" spread -copy-copy-copy ids into
+  // warnings, coverage and conditions (the hands-on review, 2026-10,
+  // foundation 4); `freeTitle` dedupes on the derived gameId, project-wide.
+  // Taken: every card's gameId AND every title's slug, so a copy of a card
+  // whose gameId is pinned away from its title still gets a title of its own.
+  const taken = new Set(allCardGameIds(session));
+  for (const box of session.loaded.source!.boxes) {
+    for (const d of box.decks) for (const c of d.shard.cards) if (c.title !== undefined) taken.add(gameIdify(c.title));
+  }
+  delete clone.gameId;
+  clone.title = freeTitle((original.title ?? effectiveGameId(original)).replace(/ \d+$/, ""), taken);
+  // Just after the original as the deck shows it: its own order, it would tie
+  // with the original and could sort before it. Halfway to the next card.
+  if (typeof original.order === "number") {
+    const later = found.deck.shard.cards.map((c) => c.order).filter((o): o is number => typeof o === "number" && o > original.order!);
+    clone.order = later.length > 0 ? (original.order + Math.min(...later)) / 2 : original.order + 1;
+  }
   found.deck.shard.cards.splice(idx + 1, 0, clone);
   return commitMaking(session, "Duplicate card", freshKey(), [deckWrite(session, found.deck)], { cardId: clone.id });
 }
@@ -260,6 +275,35 @@ export async function moveCard(session: ProjectSession, deckId: string, cardId: 
   found.deck.shard.cards.find((c) => c.id === cardId)!.order = order;
   return commit(session, "Reorder cards", freshKey(), [deckWrite(session, found.deck)]);
 }
+
+/**
+ * Move a card to another deck of the same box, as one undo step that writes
+ * both decks (the hands-on review, 2026-10, foundation 4: there was no way to
+ * move one, short of copying its text by hand). It keeps its id and Game ID,
+ * so every condition, play count and save that names it still does, and it
+ * lands at the end of its new deck. Within a box only: a box is one kind of
+ * card, and another box's template would not fit it. Its place on the old
+ * deck's canvas is left in the sidecar, inert, as ops view.ts leaves any card
+ * that has gone.
+ */
+export async function moveCardToDeck(session: ProjectSession, fromDeckId: string, cardId: string, toDeckId: string): Promise<Written> {
+  const from = locate(session, fromDeckId);
+  const to = locate(session, toDeckId);
+  if (!from || !to) return gone("deck");
+  if (from.box !== to.box) return { error: "a card can only move to another deck in its own box" };
+  if (from.deck === to.deck) return reload(session);
+  const idx = from.deck.shard.cards.findIndex((c) => c.id === cardId);
+  if (idx < 0) return gone("card");
+  const [card] = from.deck.shard.cards.splice(idx, 1);
+  const last = Math.max(-1, ...to.deck.shard.cards.map((c) => (typeof c.order === "number" ? c.order : -1)));
+  if (typeof card!.order === "number" || last >= 0) card!.order = last + 1;
+  to.deck.shard.cards.push(card!);
+  const title = effectiveTitle(to.deck.shard.deck);
+  return commit(session, `Move card to ${title}`, freshKey(), [deckWrite(session, from.deck), deckWrite(session, to.deck)]);
+}
+
+/** A deck as an undo step names it. */
+const effectiveTitle = (deck: { title?: string; gameId?: string; id: string }): string => deck.title ?? effectiveGameId(deck);
 
 export async function deleteCard(session: ProjectSession, deckId: string, cardId: string): Promise<Written> {
   return deleteCards(session, deckId, [cardId]);

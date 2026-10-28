@@ -84,7 +84,14 @@ bool FHamletGame::Setup(const FString& StoryletJson, const FString& PatterJson, 
 // --- the loop -----------------------------------------------------------------
 
 void FHamletGame::Go(const FString& Place) { At = Place; Playing.Reset(); if (!Place.IsEmpty()) Story->Deal(Place); }
-TArray<FStoryletDealtCard> FHamletGame::Hand() { return At.IsEmpty() ? TArray<FStoryletDealtCard>{} : Story->Deal(At); }
+// What the place offers now: READ from the board, never dealt here. The actions deal (arriving, a
+// card played, time passing), so a redraw changes nothing and a save holds the hand on screen.
+TArray<FStoryletDealtCard> FHamletGame::Hand()
+{
+	if (At.IsEmpty()) return {};
+	for (const FStoryletHandContents& h : Story->Board()) if (h.Hand == At) return h.Cards;
+	return {};
+}
 
 void FHamletGame::Start(const FStoryletDealtCard& Card)
 {
@@ -232,6 +239,14 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 	if (!FJsonSerializer::Deserialize(reader, env) || !env) { OutError = TEXT("not a JSON envelope"); return false; }
 	try
 	{
+		// The saved world goes in first, since the load checks the hand it puts back against it; a
+		// refused load puts the old world back, so the game is left as it was.
+		TArray<TPair<std::string, StoryletValue>> before;
+		for (const FString& Name : World.Store->Names())
+		{
+			StoryletValue v;
+			if (World.Store->Get(S(Name), v)) before.Emplace(S(Name), v);
+		}
 		const TSharedPtr<FJsonObject>* w;
 		if (env->TryGetObjectField(TEXT("world"), w))
 			for (const auto& kv : (*w)->Values)
@@ -241,7 +256,12 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 				else World.Host(S(KeyString(kv.Key)), StoryletValue::Str(S(kv.Value->AsString())));
 			}
 		// The wrapper's load restores the file's @world into the bound container too (the same values).
-		if (!UStoryletSave::LoadStateFromJson(Storylets.Get(), env->GetStringField(TEXT("storylets")))) { OutError = TEXT("the storylets half did not load"); return false; }
+		if (!UStoryletSave::LoadStateFromJson(Storylets.Get(), env->GetStringField(TEXT("storylets"))))
+		{
+			for (const auto& kv : before) World.Host(kv.Key, kv.Value);
+			OutError = TEXT("the storylets half did not load");
+			return false;
+		}
 		if (!UPatterSave::LoadStateFromJson(Patter.Get(), env->GetStringField(TEXT("patter")))) { OutError = TEXT("Patter's half did not load"); return false; }
 		// A load rebuilds the flows, and OpenFlow on an existing id REPLACES it, hand and all: GetFlow.
 		Story.Reset(Storylets->GetFlow(FlowId));

@@ -65,9 +65,9 @@ export { renameStageInExpression };
 
 /** Every place an expression lives in a box, with a setter and whether its
  *  value is assigned to a property (a change), and which deck it is in. */
-interface ExprSite { get: () => string | undefined; set: (src: string) => void; assignedTo?: string; deck?: SourceDeck }
+export interface ExprSite { get: () => string | undefined; set: (src: string) => void; assignedTo?: string; deck?: SourceDeck }
 
-function boxSites(box: SourceBox): ExprSite[] {
+export function boxSites(box: SourceBox): ExprSite[] {
   const sites: ExprSite[] = [];
   const at = (holder: Record<string, unknown>, key: string, deck?: SourceDeck): void => {
     sites.push({
@@ -97,7 +97,7 @@ function boxSites(box: SourceBox): ExprSite[] {
 
 /** The declaration a target names, where it lives, and which boxes' (and
  *  which deck's) expressions can reach it. */
-interface Located {
+export interface Located {
   decl: PropertyDecl | FieldDecl;
   /** Marks the shard holding the declaration as changed. */
   touch: (r: StageRenameResult) => void;
@@ -108,7 +108,7 @@ interface Located {
   groups: { group: TagGroup; touch: (r: StageRenameResult) => void }[];
 }
 
-function locate(source: SourceProject, target: StageTarget): Located | undefined {
+export function locate(source: SourceProject, target: StageTarget): Located | undefined {
   const boxById = (id: string | undefined) => source.boxes.find((b) => b.box.box.id === id);
   if (target.kind === "field") {
     const box = boxById(target.box);
@@ -178,7 +178,7 @@ const refersTo = (target: StageTarget): StageTargetRef | undefined =>
   target.kind === "field" ? undefined : (scope, name) => scope === target.scope && name === target.name;
 
 /** A change's target key (`@story.act`, a bare `@act`) as scope and name. */
-function changeTarget(key: string, dialect: Dialect): { scope: string; name: string } | undefined {
+export function changeTarget(key: string, dialect: Dialect): { scope: string; name: string } | undefined {
   try {
     const n = parse(key, dialect);
     return n.kind === "scopedvar" ? { scope: n.scope, name: n.name } : undefined;

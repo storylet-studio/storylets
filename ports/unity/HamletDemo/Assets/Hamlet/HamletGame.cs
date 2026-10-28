@@ -76,7 +76,10 @@ namespace StoryletStudio.Hamlet
 
         /// Arrive somewhere. A place is a HAND, so arriving means dealing it.
         public void Go(string place) { At = place; Playing = null; if (place != "") Story.Deal(place); }
-        public List<DealtCard> Hand() => At == "" ? new List<DealtCard>() : Story.Deal(At);
+        /// What the place offers now: READ from the board, never dealt here. The actions deal
+        /// (arriving, a card played, time passing), so a redraw changes nothing and a save holds
+        /// the hand on screen.
+        public List<DealtCard> Hand() => At == "" ? new List<DealtCard>() : Story.Board().GetOrDefault(At) ?? new List<DealtCard>();
 
         /// Pick a card: the storylet side chose the beat; Patter performs it, found BY NAME.
         public void Start(DealtCard card)
@@ -203,9 +206,18 @@ namespace StoryletStudio.Hamlet
         public bool Load(string json)
         {
             var env = JObject.Parse(json);
+            // The saved world goes in first, since the load checks the hand it puts back against
+            // it; a refused load puts the old world back, so the game is left as it was.
+            var before = new Dictionary<string, object>(World.Values);
             var w = env["world"] as JObject;
             if (w != null) foreach (var p in w.Properties()) World.Values[p.Name] = p.Value.Type == JTokenType.Boolean ? (object)p.Value.Value<bool>() : p.Value.Type == JTokenType.Integer || p.Value.Type == JTokenType.Float ? (object)p.Value.Value<double>() : p.Value.Value<string>();
-            StoryletSave.DeserializeState(Storylets, env["storylets"].Value<string>());
+            try { StoryletSave.DeserializeState(Storylets, env["storylets"]?.Value<string>()); }
+            catch
+            {
+                World.Values.Clear();
+                foreach (var kv in before) World.Values[kv.Key] = kv.Value;
+                return false;
+            }
             PatterSave.DeserializeState(Patter, env["patter"].Type == JTokenType.String ? env["patter"].Value<string>() : env["patter"].ToString(Newtonsoft.Json.Formatting.None));
             // A load rebuilds the flows, and OpenFlow on an existing id REPLACES it, hand and all: GetFlow.
             Story = Storylets.GetFlow(Flow);

@@ -6,13 +6,14 @@
 //
 // Flattened path scheme (the JS play-helpers logger's, verbatim). A property's
 // owner segment is its GAMEID (design/engine-server.md 4.4); the three
-// non-property keys stay on the internal ids the save envelope is keyed by,
-// which is what they are read off:
+// non-property keys are read off the save envelope, so they name what it
+// names:
 //   world.x / story.x / box.<gameId>.x / deck.<gameId>.x / hand.<gameId>.x
 //   value.<gameId>.x
-//   turn:<boxId>      per-box clocks
-//   cooldown:<cardId> next-eligible turns
-//   board:<handId>    hand contents (card ids, dealt order)
+//   turn:<boxGameId>       per-box clocks
+//   cooldown:<cardGameId>  next-eligible turns
+//   board:<handGameId>     hand contents (card Game IDs, dealt order)
+// (Game IDs as the save keys them from version 3; internal ids before.)
 // Line format: `${label}${path}: ${from} -> ${to}`, `<unset>` for null.
 
 using System;

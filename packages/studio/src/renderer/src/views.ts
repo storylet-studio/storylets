@@ -82,6 +82,8 @@ export interface ViewActions {
   duplicateBox(box: string): void;
   deleteBox(box: string): void;
   duplicateCard(box: string, deck: string, card: string): void;
+  /** Move a card to another deck of its box, one undo step; the view stays where it is. */
+  moveCardToDeck(box: string, deck: string, card: string, toDeck: string): void;
   deleteCard(box: string, deck: string, card: string): void;
   /** Point the Links lens at this card and bring it forward, opening it if it is
    *  not up yet. Asks about the card under the pointer, which need not be the
@@ -561,15 +563,20 @@ function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boole
   return face;
 }
 
-const cardMenu = (box: string, deck: string, card: CardDto, actions: ViewActions) =>
+const cardMenu = (box: BoxDto, deck: string, card: CardDto, actions: ViewActions) =>
   (e: MouseEvent): void => { e.preventDefault(); openContextMenu(e.clientX, e.clientY, [
     // "What else touches this?" is a question you ask ABOUT a card you can see,
     // so it belongs on the card, not only in a menu bar that first requires the
     // card to become the editor's selection.
     { label: "Links\u2026", onClick: () => actions.showLinks(card.id) },
-    { label: "Duplicate", onClick: () => actions.duplicateCard(box, deck, card.id) },
+    { label: "Duplicate", onClick: () => actions.duplicateCard(box.id, deck, card.id) },
+    // One item per other deck of the box: a box is one kind of card, so a card
+    // moves only among its own box's decks (the hands-on review, 2026-10).
+    ...box.decks.filter((d) => d.id !== deck).map((d) => ({
+      label: `Move to ${d.title ?? d.gameId}`, onClick: () => actions.moveCardToDeck(box.id, deck, card.id, d.id),
+    })),
     // The object, and the ellipsis only when a question follows (deletes.ts).
-    { label: deleteLabel("card"), danger: true, onClick: () => actions.deleteCard(box, deck, card.id) },
+    { label: deleteLabel("card"), danger: true, onClick: () => actions.deleteCard(box.id, deck, card.id) },
   ]); };
 
 export function renderDeckCentre(
@@ -642,7 +649,7 @@ export function renderDeckCentre(
       : el("div", { className: "gb-body" }, ...groupedCards(box, groups, {
           page: "deck", catalogue: () => catalogue, selectedCards, actions,
           gestures: () => gestures,
-          menu: (e) => cardMenu(box.id, deck.id, e.card, actions),
+          menu: (e) => cardMenu(box, deck.id, e.card, actions),
           ...(drag ? { move } : {}),
           ghost: () => el("button", { className: "scard ghost", text: "+ New card", onClick: newCard }),
         }));
@@ -826,7 +833,7 @@ function deckTable(
         el("td", { className: "ct-open" }, openChip(c.id, gestures)),
       );
       wireCardGestures(row, c.id, gestures);
-      row.addEventListener("contextmenu", cardMenu(box.id, deck.id, c, actions));
+      row.addEventListener("contextmenu", cardMenu(box, deck.id, c, actions));
       if (move) wireDrop(row, c.id, "y", move);
       body.append(row);
     }
@@ -975,7 +982,7 @@ export function renderBoxCentre(
             select: (card, how) => actions.selectCard(card, how),
             open: (card) => actions.inspectCard(box.id, e.deck.id, card),
           }),
-          menu: (e) => cardMenu(box.id, e.deck.id, e.card, actions),
+          menu: (e) => cardMenu(box, e.deck.id, e.card, actions),
           // Under Deck the heading names it; under anything else the card does.
           showDeck: by !== "deck",
         })));

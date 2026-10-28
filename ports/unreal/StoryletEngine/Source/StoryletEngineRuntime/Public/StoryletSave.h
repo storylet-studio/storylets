@@ -5,7 +5,7 @@
 // play-helpers' save.ts.
 //
 // The file is the HOST's (storylets/savefile@1): the engine's envelope
-// (storylets/save@2; @1 still loads) plus its @world values, because a bound
+// (storylets/save@3; @1 and @2 still load) plus its @world values, because a bound
 // @world is the game's own state and never rides the envelope (design/flows.md).
 // Every live flow is in there, keyed by name. An engine on its own registry
 // carries every property value in the envelope; an engine on the game's

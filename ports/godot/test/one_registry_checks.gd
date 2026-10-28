@@ -202,7 +202,7 @@ func _save_leaves_values_out() -> void:
 	var g := _game()
 	_heist((g["engine"] as StoryletEngine).open_flow("f"))
 	var save: Dictionary = (g["engine"] as StoryletEngine).save_game()
-	_expect("the schema", save.get("schema"), "storylets/save@2")
+	_expect("the schema", save.get("schema"), "storylets/save@3")
 	_check("the envelope carried the registry's values", not save.has("registry"))
 	_expect("save.shared", save["shared"], {"spent": []})
 	_check("the flow's blob carried props", not (save["flows"]["f"] as Dictionary).has("props"))

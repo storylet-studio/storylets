@@ -28,7 +28,8 @@ describe("snapshotState", () => {
     // @world is the HOST's container, not the envelope's: no world paths
     // here (design/flows.md - the host mounts and saves it itself).
     expect(snap["world.season"]).toBeUndefined();
-    expect(snap["board:h_seat"]).toEqual(["c_pay"]);
+    // By Game ID, as the save keys them from version 3.
+    expect(snap["board:seat"]).toEqual(["pay"]);
     expect(Object.keys(snap).some((k) => k.startsWith("turn:"))).toBe(true);
   });
 });
@@ -46,7 +47,7 @@ describe("createStateLogger", () => {
 
     expect(changes.some((c) => c.path === "story.gold" && c.from === 0 && c.to === 5)).toBe(true);
     expect(lines).toContain("[t] story.gold: 0 -> 5");
-    expect(lines.some((l) => l.startsWith("[t] board:h_seat:"))).toBe(true);   // the card left its hand
+    expect(lines.some((l) => l.startsWith("[t] board:seat:"))).toBe(true);   // the card left its hand
     expect(logger.capture()).toEqual([]);   // re-baselined: nothing new
   });
 

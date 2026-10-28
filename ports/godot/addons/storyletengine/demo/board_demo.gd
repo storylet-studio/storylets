@@ -7,10 +7,10 @@
 # The board IS the loop: deal every hand, click a card to see its outcomes,
 # play one, watch the box clocks move. The smallest possible integration is
 # the top of _ready() plus _on_deal_all_hands(): load the bundle, create a
-# session, deal, read board(). Everything else here is the UI around it.
+# flow, deal, read board(). Everything else here is the UI around it.
 #
 # The bundle ships INSIDE the addon (demo/the-hamlet.storyletsc), so the demo
-# runs straight from the downloaded zip. The session is created with the log
+# runs straight from the downloaded zip. The flow is created with the log
 # option and registered with StoryletDebug under "board demo", so the
 # StoryletStatePanel in this scene fills with properties, clocks and log lines
 # as you play.
@@ -18,7 +18,7 @@
 # It also carries a StoryletLiveLink (debug builds only; inert without an
 # editor): with Play > Live Link on in Storyletter, the editor's Board shows
 # this demo's run, and saving in the editor pushes the new bundle in here
-# (_on_bundle_pushed swaps it under the run and re-binds the session).
+# (_on_bundle_pushed swaps it under the run and re-binds the flow).
 #
 # Open addons/storyletengine/demo/board_demo.tscn and press Play (F6 with the
 # scene focused). Delete the demo folder freely.
@@ -30,7 +30,7 @@ const NOTHING := "(nothing here right now)"
 
 var _bundle: Dictionary
 var _engine: StoryletEngine
-var _session: StoryletFlow
+var _flow: StoryletFlow
 var _link: StoryletLiveLink
 # Hand gameId (what board() keys on) -> the name we show: title, else gameId.
 var _hand_names: Dictionary = {}
@@ -60,7 +60,7 @@ func _ready() -> void:
 	$Layout/Controls/NextTurn.pressed.connect(_on_next_turn)
 	$Layout/Controls/Restart.pressed.connect(_on_restart)
 
-	# The Live Link, before the session so the first deal reaches the editor.
+	# The Live Link, before the flow so the first deal reaches the editor.
 	# A debug build opens it; a missing editor is a silent no-op.
 	var content: Dictionary = _bundle["content"]
 	_link = StoryletLiveLink.new(str(content["hash"]), "%s %s" % [content["project"], content["version"]])
@@ -68,35 +68,35 @@ func _ready() -> void:
 	add_child(_link)
 	StoryletDebug.register_link(_link)   # the state panel shows where the link is
 
-	_open_session()
+	_open_flow()
 	# The board opens dealt: the first hands are already out, so there is
 	# something to read and play the moment the demo starts.
 	_on_deal_all_hands()
 
 
 func _exit_tree() -> void:
-	_close_session()
+	_close_flow()
 
 
-# -- the session ------------------------------------------------------------------
+# -- the flow ------------------------------------------------------------------
 
-func _open_session() -> void:
+func _open_flow() -> void:
 	# Seed 7 and the retained log on, so the examiner's log panel fills as you play.
 	_engine = StoryletEngine.create(_bundle, {"seed": SEED, "log": true})
-	_session = _engine.open_flow("main")
-	_bind_session()
+	_flow = _engine.open_flow("main")
+	_bind_flow()
 
 
-func _close_session() -> void:
-	if _session != null:
+func _close_flow() -> void:
+	if _flow != null:
 		_link.detach()
 		StoryletDebug.unregister(_engine)
-		_session = null
+		_flow = null
 		_engine = null
 
 
-# Everything that holds the session: the state panel's registry and the link.
-func _bind_session() -> void:
+# Everything that holds the flow: the state panel's registry and the link.
+func _bind_flow() -> void:
 	StoryletDebug.register(_engine, "board demo")   # the state panel finds it here
 	_link.attach(_engine)                             # the editor's Board follows its flows
 
@@ -110,8 +110,8 @@ func _name_hands() -> void:
 
 
 # Live refresh: Storyletter saved and pushed the new bundle. Swap it in under
-# the run (a new session carrying the old one's save), re-bind everything that
-# held the old session or bundle, then tell the editor which build runs now.
+# the run (a new flow carrying the old one's save), re-bind everything that
+# held the old flow or bundle, then tell the editor which build runs now.
 func _on_bundle_pushed(build: String, data: String) -> void:
 	var r := StoryletLiveLink.apply_live_bundle(_engine, data, {"seed": SEED, "log": true})
 	if not r["ok"]:
@@ -120,11 +120,11 @@ func _on_bundle_pushed(build: String, data: String) -> void:
 	StoryletDebug.unregister(_engine)   # the OLD engine leaves the panel; the link is unchanged and stays registered
 	_bundle = r["bundle"]
 	_engine = r["engine"]
-	_session = _engine.get_flow("main")
-	if _session == null:
-		_session = _engine.open_flow("main")
+	_flow = _engine.get_flow("main")
+	if _flow == null:
+		_flow = _engine.open_flow("main")
 	_name_hands()
-	_bind_session()
+	_bind_flow()
 	_link.set_build(build)
 	_append("live link: build %s applied, the run carried across" % build)
 	_collapse()
@@ -135,7 +135,7 @@ func _on_bundle_pushed(build: String, data: String) -> void:
 
 func _on_deal_all_hands() -> void:
 	# One call deals every hand; the returned slice is exactly what it dealt.
-	var dealt := _session.deal_many()
+	var dealt := _flow.deal_many()
 	for hand_game_id in dealt:
 		var names: Array = []
 		for card in dealt[hand_game_id]:
@@ -153,21 +153,21 @@ func _on_deal_all_hands() -> void:
 # on purpose: the transcript keeps the beats you caused, and the arrivals and
 # departures are already in the state panel's log.
 func _refill() -> void:
-	_session.deal_many()
+	_flow.deal_many()
 	_refresh()
 
 
 func _on_next_turn() -> void:
 	# Every box keeps its own clock, so a turn is advanced box by box.
-	for box in _session.list_boxes():
-		_session.advance_turns(box["gameId"], 1.0)
-		_append("turn %s -> %s" % [_display(box), StoryletValues.js_number(_session.turn(box["gameId"]))])
+	for box in _flow.list_boxes():
+		_flow.advance_turns(box["gameId"], 1.0)
+		_append("turn %s -> %s" % [_display(box), StoryletValues.js_number(_flow.turn(box["gameId"]))])
 	_refill()   # time passed: cooldowns lapse, so the hands refresh too
 
 
 func _on_restart() -> void:
-	_close_session()
-	_open_session()
+	_close_flow()
+	_open_flow()
 	_clear(_transcript)
 	_append("restarted (seed %d)" % SEED)
 	_collapse()
@@ -189,7 +189,7 @@ func _on_outcome_pressed(hand_game_id: String, card: Dictionary, outcome: Dictio
 	# takes the card out of its hand and advances that box's clock. A card with
 	# no outcomes is played with none, named as "".
 	var outcome_game_id: String = outcome.get("gameId", "")
-	var err := _session.play(card["id"], outcome_game_id, hand_game_id)
+	var err := _flow.play(card["id"], outcome_game_id, hand_game_id)
 	if err != "":
 		_append("! " + err)
 		return
@@ -211,14 +211,14 @@ func _refresh() -> void:
 func _refresh_header() -> void:
 	var content: Dictionary = _bundle["content"]
 	var clocks: Array = []
-	for box in _session.list_boxes():
+	for box in _flow.list_boxes():
 		clocks.append("%s turn %s" % [_display(box), StoryletValues.js_number(box["turn"])])
 	_header.text = "%s %s - %s" % [content["project"], content["version"], ", ".join(clocks)]
 
 
 func _refresh_board() -> void:
 	_clear(_board)
-	var the_board := _session.board()
+	var the_board := _flow.board()
 	for hand_game_id in the_board:
 		var group := VBoxContainer.new()
 		var label := Label.new()
@@ -246,7 +246,7 @@ func _outcomes_block(hand_game_id: String, card: Dictionary) -> MarginContainer:
 	var indent := MarginContainer.new()
 	indent.add_theme_constant_override("margin_left", 24)
 	var column := VBoxContainer.new()
-	var views := _session.outcomes(card["id"], hand_game_id)
+	var views := _flow.outcomes(card["id"], hand_game_id)
 	if views.is_empty():
 		# A card with no outcomes (a notice, a codex entry) is still played:
 		# one Done button stands where the outcomes would.

@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { writeBinaryFile, writeTextFile } from "@wildwinter/simple-vc-lib";
 import { PACK_EXTENSION, runPack } from "@storylet-studio/ops";
-import { SAVEFILE_SCHEMA, SAVE_SCHEMA, SAVE_SCHEMA_V1 } from "@storylet-studio/model";
+import { SAVEFILE_SCHEMA, SAVE_SCHEMA, SAVE_SCHEMA_V1, SAVE_SCHEMA_V2 } from "@storylet-studio/model";
 import type { LoadReport, SaveFile } from "@storylet-studio/model";
 import { Engine } from "@storylet-studio/runtime";
 import { compileBundle, exportBundle } from "../project.js";
@@ -167,7 +167,7 @@ export function registerPublish(ipc: Ipc, deps: Pick<MainContext, "session" | "e
       const file = JSON.parse(readFileSync(path, "utf8")) as SaveFile;
       // What play-helpers' `loadState` accepts, which is what the Board loads it
       // with: a version 1 engine envelope is still read (review 2026-10, item 20).
-      if (file?.schema !== SAVEFILE_SCHEMA || (file.engine?.schema !== SAVE_SCHEMA && file.engine?.schema !== SAVE_SCHEMA_V1)) {
+      if (file?.schema !== SAVEFILE_SCHEMA || (file.engine?.schema !== SAVE_SCHEMA && file.engine?.schema !== SAVE_SCHEMA_V2 && file.engine?.schema !== SAVE_SCHEMA_V1)) {
         return { error: "not a storylets save file" };
       }
       const session = deps.session();

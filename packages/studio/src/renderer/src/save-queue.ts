@@ -144,6 +144,10 @@ export function createSaveQueue(ctx: SaveQueueContext) {
     },
     /** A quality's stage renamed, carrying every value naming it. Queued
      *  before the declaration list's own save, which re-queues behind it. */
+    /** A property renamed, carrying every reference to it, queued like a stage rename. */
+    renameProperty(target: StageTargetDto, from: string, to: string): void {
+      queueStruct(`rename:${stageRenames++}`, () => studio.renameProperty(target, from, to));
+    },
     renameStage(target: StageTargetDto, from: string, to: string): void {
       queueStruct(`stage:${stageRenames++}`, () => studio.renameStage(target, from, to));
     },

@@ -2,7 +2,7 @@
 // GAME's side: what the engine puts in the registry, what the game saves, and
 // that loading works in either order and from a version 1 envelope. A port of
 // packages/runtime/test/one-registry.test.ts, case for case, plus the wire
-// shape of storylets/save@2 as this runtime writes and reads it.
+// shape of storylets/save@3 as this runtime writes and reads it.
 //
 // The bundle is the JS test's, expanded by the conformance scaffold
 // (expandBundle), so the keys and values below are the ones the JS test pins.
@@ -406,12 +406,12 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 Check(flow.Deal("q").Count == 1, "the card was not dealt with @patter.gold at 3");
             }),
 
-            ("the storylets/save@2 wire: exactly the JS key paths", () =>
+            ("the storylets/save@3 wire: exactly the JS key paths", () =>
             {
                 var engine = new Engine(NewBundle(), new EngineOptions { Seed = 1 });
                 Heist(engine.OpenFlow("f"));
                 var wire = StoryletSave.ToJson(engine.SaveGame());
-                Check(wire.Value<string>("schema") == "storylets/save@2", "schema " + wire.Value<string>("schema"));
+                Check(wire.Value<string>("schema") == "storylets/save@3", "schema " + wire.Value<string>("schema"));
                 Check(string.Join(",", wire.Properties().Select(p => p.Name)) == "schema,content,registry,shared,flows", "top-level keys: " + string.Join(",", wire.Properties().Select(p => p.Name)));
                 Check(string.Join(",", ((JObject)wire["shared"]).Properties().Select(p => p.Name)) == "spent", "shared keys");
                 Check(string.Join(",", ((JObject)wire["flows"]["f"]).Properties().Select(p => p.Name)) == "turns,prng,cooldowns,board,playLog", "flow keys: " + string.Join(",", ((JObject)wire["flows"]["f"]).Properties().Select(p => p.Name)));

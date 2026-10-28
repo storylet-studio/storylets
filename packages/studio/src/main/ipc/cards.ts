@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import {
-  createCard, createCardOnCanvas, deleteCard, deleteCards, deleteCardsAcross, duplicateCard, layoutDeck, moveCard,
+  createCard, createCardOnCanvas, deleteCard, deleteCards, deleteCardsAcross, duplicateCard, layoutDeck, moveCard, moveCardToDeck,
   moveCardsOnCanvas, saveCard, setCanvasFurniture,
 } from "../mutate/cards.js";
 import { addNamedOutcome, declareProperty, pickStage, pickTagStage, repointTag } from "../mutate/quick-fixes.js";
@@ -37,6 +37,7 @@ export function registerCards(ipc: Ipc, deps: Pick<MainContext, "session">): voi
   ipc.write("card:duplicate", project(duplicateCard));
   ipc.write("card:delete", project(deleteCard));
   ipc.write("card:move", project(moveCard));
+  ipc.write("card:moveToDeck", project(moveCardToDeck));
   ipc.handle("card:catalogue", read(cardCatalogue, []));
   // Several cards of one deck, as one undo step (review 2026-10, item 5).
   ipc.write("card:deleteMany", project((open, deckId: string, cardIds: string[], key?: unknown) =>

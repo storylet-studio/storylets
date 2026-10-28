@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { canonicalStringify, loadProjectFiles, parseProjectFiles, parseSource, compileProject } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
-import { Table, boardRefusal, boardRegistry, coerceStateInput, loadReportNote } from "./model.js";
+import { Table, boardRefusal, boardRegistry, coerceStateInput, loadReportNote, whyNotOf } from "./model.js";
 import type { LoadReport } from "@storylet-studio/model";
 import type { BoardScopesDto } from "../../shared/api.js";
 
@@ -233,7 +233,8 @@ describe("the Board model", () => {
     expect(played.length).toBeGreaterThan(1);   // or there is nothing to forget
 
     table.newRun();
-    expect(Object.keys(table.saveFile().engine.flows["main"]!.cooldowns)).toEqual([durable]);
+    // A save names the card by Game ID (save version 3).
+    expect(Object.keys(table.saveFile().engine.flows["main"]!.cooldowns)).toEqual(["rat-job"]);
 
     // And the board deals afresh from what is left: the durable card stays
     // played, the ordinary ones come back.
@@ -398,5 +399,15 @@ describe("a game's card by its gameId (Live mode)", () => {
     expect(gameId).not.toBe("c_ambush");   // the hop under test is a real one
     expect(table.faceByGameId(gameId, "docks-street")).toMatchObject({ id: "c_ambush", gameId, from: "docks-street" });
     expect(table.faceByGameId("not-in-this-build", "docks-street")).toEqual({ id: "not-in-this-build", gameId: "not-in-this-build", from: "docks-street" });
+  });
+});
+
+// A card whose Redraw is "never" has come up and won't again: "on cooldown" said
+// it would be back (the hands-on review, 2026-10).
+describe("the Why not? reason for a card held back by its clock", () => {
+  const label = (id: string) => (id === "c_once" ? { gameId: "once", once: true } : { gameId: id });
+  it("says a once-only card was already played, and a repeating one is cooling down", () => {
+    const why = whyNotOf([{ id: "c_once", verdict: "cooldown" }, { id: "c_again", verdict: "cooldown" }], label, []);
+    expect(why.couldHave.map((c) => c.reason)).toEqual(["already played, and it comes up once", "on cooldown"]);
   });
 });

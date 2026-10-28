@@ -8,7 +8,36 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **`onError`: the game hears about a condition that failed.** A condition the engine can't evaluate (a division by
+  zero, a value of the wrong type from a resolver) still counts as false, and now also reaches `EngineOptions.onError`
+  as a `PlayError` (`flow`, `kind`, `node`, `source`, `message`), whether or not anything is tracing. With no handler
+  it's a console warning. It used to reach only a trace, so with tracing off a typo looked like a card that never
+  came up. The same option and shape as Patterplay's.
+- **`Bundle`, `SaveEnvelope` and `LoadReport` are exported**, so a game can type what it hands the engine and what a
+  load hands back without depending on the model package.
+
+### Changed
+
+- **A load drops a held card that no longer qualifies.** A save made before a content edit could put back a card
+  whose condition the edit made false, and nothing said so. A load now checks every held card as a deal would, with
+  the values the save carries, and drops what no longer qualifies, listed in the report's `evicted` with the deal's
+  reason (`condition`, `deck-gate` and so on); `previewLoad` says the same. When the game loads its own registry,
+  the values aren't there yet, and the next deal does it.
+- **Saves name cards by Game ID.** A save (now `storylets/save@3`) keys a flow's board, cooldowns and box clocks, and
+  the spent shared cards, by Game ID, as its play log always did. A card deleted and made again under the same Game
+  ID keeps its place, its cooldown and its play count, where it used to keep only the count. Older saves still load,
+  and a load report names a card the build no longer has by the key the save carries.
+
 ### Fixed
+
+- **A host write must fit what the content declared.** `setProperty` refuses a string for a number, a value an enum
+  or a quality doesn't list, a flag a flags property doesn't, and a `@world` name the content never declared, saying
+  what the property takes. It's the rule a load already checks a save with. An enum whose own default is "" (none
+  chosen) takes "" back, so a game can put its default back.
+- **A broken bundle or save is refused by what's wrong with it.** `new Engine(null)`, a bundle missing its boxes, or
+  a save with the wrong schema used to fail as a raw TypeError; each now says what it got and what's missing.
 
 - **What a game is handed is its own.** A dealt card's fields and extension values, an outcome's, a box's, a field's
   structured default and `extensionsOf`'s values are copies: a game that changed one used to change it in the bundle
