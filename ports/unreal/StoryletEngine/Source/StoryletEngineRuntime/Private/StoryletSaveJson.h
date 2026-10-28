@@ -10,6 +10,7 @@
 #include "CoreMinimal.h"
 #include "Storylets/StoryletValue.h"
 #include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall
+#include <functional>
 #include <string>
 
 namespace storylets { class Engine; }
@@ -28,7 +29,11 @@ bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, F
  *  apply rather than written through the engine: a bound container is restored
  *  directly (the host restoring, which its read-only policy does not bind),
  *  a self-backed engine through setProperty. OutReportJson, when given, takes
- *  the load's LoadReport as JSON (empty on a refusal). */
+ *  the load's LoadReport as JSON (empty on a refusal). BeforeLoad, when given,
+ *  is handed those values before the engine loads, so the caller can put them
+ *  in first (the load checks each held card against them); a refused load is
+ *  the caller's to put back. */
 bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
 	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError,
-	FString* OutReportJson = nullptr);
+	FString* OutReportJson = nullptr,
+	const std::function<void(const storylets::OrderedMap<std::string, storylets::StoryletValue>&)>& BeforeLoad = {});

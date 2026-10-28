@@ -199,10 +199,14 @@ plain Dictionary: `StoryletSave.to_json(pocket)` writes it as the same text ever
 writes, and `JSON.parse_string` reads it back.
 
 `StoryletSave.serialize_state(engine, world_values)` and
-`StoryletSave.deserialize_state(engine, text)` are the `.storyletsave` string boundary. The
-second hands back the file's `@world` values for your game to apply, which matters when your
-game binds `@world` through `"host_scopes"`: those values are your game's, and the engine
-never saves them ([why](/play/world-state/#saving-it)). Like `load_game`, it rebuilds every
+`StoryletSave.deserialize_state(engine, text, {"world": world})` are the `.storyletsave`
+string boundary. They matter when your game binds `@world` through `"host_scopes"`: those
+values are your game's, and the engine never saves them
+([why](/play/world-state/#saving-it)). Pass your world (a Dictionary, which is updated in
+place, or an object with `values()` and `load(values)`) and the saved values go into it before
+the engine loads, because the load checks every card it puts back in a hand against the world as
+it will be. A refused load leaves your world as it was. Without the option, the call hands the
+values back for you to apply, and you should apply them before loading. Like `load_game`, it rebuilds every
 flow, so take your handles again from `engine.get_flow()`. A foreign, malformed, or
 wrong-project blob is refused with a `push_error` and null, so a bad file can't corrupt a run.
 

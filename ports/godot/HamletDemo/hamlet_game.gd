@@ -189,14 +189,14 @@ func wait() -> void:
 
 # --- one envelope, both engines, the world once ----------------------------
 # The same shape as the JS client writes, key for key, so a save from either
-# host loads in the other: the storylet half as the .storyletsave TEXT, Patter's
-# as its save dictionary, the world once (neither engine puts it in its own).
+# host loads in the other: the storylet half as the .storyletsave TEXT, with the
+# world in it once (neither engine puts it in its own envelope), and Patter's as
+# its save dictionary.
 
 func save() -> Dictionary:
 	var env := {
-		"storylets": StoryletSave.serialize_state(story_engine),
+		"storylets": StoryletSave.serialize_state(story_engine, world.duplicate()),
 		"patter": PatterSave.serialize_state(patter),   # Patter's own patter/save@0 text, as ours is a .storyletsave text
-		"world": world.duplicate(),
 		"at": at,
 		"performing": null,
 	}
@@ -207,14 +207,10 @@ func save() -> Dictionary:
 
 func load(env: Dictionary) -> bool:
 	if not env.has("storylets"): return false
-	# The saved world goes in first, since the load checks the hand it puts
-	# back against it; a refused load puts the old world back, so the game is
-	# left as it was.
-	var before: Dictionary = world.duplicate()
-	var loaded: Dictionary = env.get("world", world).duplicate()
-	world.clear(); world.merge(loaded)
-	if StoryletSave.deserialize_state(story_engine, str(env["storylets"])) == null:
-		world.clear(); world.merge(before)
+	# Given the world, the helper puts the saved one in first, since the load
+	# checks the hand it puts back against it, and a refused load leaves the
+	# world as it was.
+	if StoryletSave.deserialize_state(story_engine, str(env["storylets"]), {"world": world}) == null:
 		return false
 	var pt = env["patter"]
 	var patter_ok := PatterSave.deserialize_state(patter, pt) if pt is String else true

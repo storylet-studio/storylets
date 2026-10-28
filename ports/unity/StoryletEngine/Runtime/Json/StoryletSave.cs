@@ -25,8 +25,31 @@ namespace StoryletStudio.StoryletEngine
         public OrderedMap<string, ExprValue> World;
     }
 
+    /// <summary>The host's @world container, as LoadState takes it: what it
+    /// holds now, and a way to put values in. A game whose @world is its own
+    /// object implements this; a kernel PropertyBag is wrapped with
+    /// <see cref="StoryletSave.WorldOf"/>.</summary>
+    public interface IWorldContainer
+    {
+        /// <summary>A copy of the values it holds now.</summary>
+        OrderedMap<string, ExprValue> Snapshot();
+        /// <summary>Put these values in over what it holds.</summary>
+        void Load(OrderedMap<string, ExprValue> values);
+    }
+
     public static class StoryletSave
     {
+        /// <summary>A kernel PropertyBag as an <see cref="IWorldContainer"/>.</summary>
+        public static IWorldContainer WorldOf(PropertyBag bag) => new BagWorld(bag);
+
+        private sealed class BagWorld : IWorldContainer
+        {
+            private readonly PropertyBag _bag;
+            public BagWorld(PropertyBag bag) { _bag = bag; }
+            public OrderedMap<string, ExprValue> Snapshot() => _bag.Clone().Values;
+            public void Load(OrderedMap<string, ExprValue> values) { _bag.Load(values); }
+        }
+
         /// <summary>The current engine state (and the host's @world values, if
         /// given) as pretty-printed .storyletsave JSON.</summary>
         public static string SerializeState(Engine engine, OrderedMap<string, ExprValue> world = null)
@@ -55,30 +78,47 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>Restore a SaveState file into an engine (every flow is
         /// rebuilt; re-take your Flow handles afterwards). Throws on a foreign
-        /// or malformed file. Returns the file's @world values, if any - the
-        /// HOST applies them; the engine never touches them.
+        /// or malformed file. Returns the file's @world values, if any; the
+        /// engine itself never touches them.
+        ///
+        /// <paramref name="world"/>, the host's @world container, when given,
+        /// takes the file's @world values BEFORE the engine loads, so the load's
+        /// check of each held card reads the saved world rather than the one the
+        /// game had; a refused load puts the container back as it was. Without
+        /// it, apply the returned values before loading for the same check.
         ///
         /// <paramref name="onReport"/>, when given, receives the LoadReport the
         /// load produced (what the build dropped, defaulted or evicted), which
         /// this helper used to drop: the JS reference's `{ onReport }`. Optional,
         /// so the return value stays the @world values and existing calls are
         /// unchanged.</summary>
-        public static OrderedMap<string, ExprValue> LoadState(Engine engine, SaveFile file, Action<LoadReport> onReport = null)
+        public static OrderedMap<string, ExprValue> LoadState(Engine engine, SaveFile file, Action<LoadReport> onReport = null, IWorldContainer world = null)
         {
             if (file == null || file.Engine == null)
             {
                 throw new StoryletError($"not a storylets save (expected schema \"{Model.SAVEFILE_SCHEMA}\")");
             }
-            var report = engine.LoadGame(file.Engine);
+            var before = world?.Snapshot();
+            if (world != null && file.World != null) world.Load(file.World);
+            LoadReport report;
+            try
+            {
+                report = engine.LoadGame(file.Engine);
+            }
+            catch
+            {
+                if (before != null) world.Load(before);
+                throw;
+            }
             onReport?.Invoke(report);
             return file.World;
         }
 
         /// <summary>Parse + restore a SerializeState string: the TEXT twin of
         /// LoadState, as Patterplay pairs them. Throws on malformed JSON, a
-        /// foreign file or a project mismatch. <paramref name="onReport"/> as
-        /// LoadState's.</summary>
-        public static OrderedMap<string, ExprValue> DeserializeState(Engine engine, string json, Action<LoadReport> onReport = null)
+        /// foreign file or a project mismatch. <paramref name="onReport"/> and
+        /// <paramref name="world"/> as LoadState's.</summary>
+        public static OrderedMap<string, ExprValue> DeserializeState(Engine engine, string json, Action<LoadReport> onReport = null, IWorldContainer world = null)
         {
             JObject parsed;
             try
@@ -103,7 +143,7 @@ namespace StoryletStudio.StoryletEngine
                 file = new SaveFile
                 {
                     Engine = FromJson(engineToken),
-                    World = parsed["world"] is JObject world ? ParseBag(world) : null,
+                    World = parsed["world"] is JObject savedWorld ? ParseBag(savedWorld) : null,
                 };
             }
             catch (StoryletError)
@@ -114,7 +154,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 throw new StoryletError($"malformed storylets save: {e.Message}", e);
             }
-            return LoadState(engine, file, onReport);
+            return LoadState(engine, file, onReport, world);
         }
 
         // --- envelope <-> JObject (the TS SaveEnvelope wire shape) ---------------

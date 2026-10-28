@@ -132,6 +132,13 @@ namespace StoryletStudio.StoryletEngine.TestHost
             foreach (var f in durable.Failures) { _fails++; Console.Error.WriteLine($"  FAIL [durable] {f}"); }
             Console.WriteLine($"durable: {durable.Passed}/{durable.Total}");
 
+            // The save helpers' @world order, from the game's side: the port of
+            // play-helpers' save.test.ts (the container takes the saved world before
+            // the load checks the hand; a refused load puts it back).
+            var saves = SaveHelpers.Run();
+            foreach (var f in saves.Failures) { _fails++; Console.Error.WriteLine($"  FAIL [save helpers] {f}"); }
+            Console.WriteLine($"save helpers: {saves.Passed}/{saves.Total}");
+
             Console.WriteLine(_fails == 0 ? "ALL PASS" : $"{_fails} FAILED");
             return _fails == 0 ? 0 : 1;
         }

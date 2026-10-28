@@ -54,31 +54,48 @@ bool UStoryletSave::LoadStateFromJsonWithReport(UStoryletEngine* Engine, const F
 		return false;
 	}
 	Engine->ClearLastError();
-	FString Error;
-	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
-	if (!StoryletLoadStateWorld(*Core, Json, World, Error, &OutReportJson))
+	// The file's @world values are the HOST's to restore, and they go in BEFORE
+	// the engine loads: the load checks each held card against the world it
+	// will play in, so restoring them after made it read the old one. A bound
+	// container takes them directly (its read-only policy binds the story, not
+	// a load); a self-backed engine takes them through setProperty (a
+	// storylets/save@1 envelope never carried them). A name nothing answers
+	// for, such as a @world the game's registry does not hold, is dropped. A
+	// refused load puts back what was there, so the game is left as it was.
+	UStoryletWorld* Bound = Engine->GetHostScope(TEXT("world"));
+	storylets::OrderedMap<std::string, storylets::StoryletValue> Before;
+	if (Bound)
 	{
-		Engine->NoteRefusal(TEXT("LoadStateFromJson"), Error);
-		return false;
-	}
-	// The file's @world values are the HOST's to restore. A bound container
-	// takes them directly (its read-only policy binds the story, not a load);
-	// a self-backed engine takes them through setProperty (a storylets/save@2
-	// or @3 envelope already restored them from its registry; a storylets/save@1
-	// envelope never carried them, so this is where they come back). A name
-	// nothing answers for, such as a @world the game's registry does not hold,
-	// is dropped.
-	if (UStoryletWorld* Bound = Engine->GetHostScope(TEXT("world")))
-	{
-		for (const auto& Pair : World) Bound->HostSet(Pair.first, Pair.second);
+		for (const FString& Name : Bound->Names())
+		{
+			storylets::StoryletValue Value;
+			const std::string Key = TCHAR_TO_UTF8(*Name);
+			if (Bound->Get(Key, Value)) Before.set(Key, Value);
+		}
 	}
 	else
 	{
-		for (const auto& Pair : World)
+		for (const storylets::PropertyRow& Row : Core->listProperties())
 		{
+			if (Row.path.rfind("world.", 0) == 0) Before.set(Row.name, Row.value);
+		}
+	}
+	auto Apply = [Bound, Core](const storylets::OrderedMap<std::string, storylets::StoryletValue>& Values)
+	{
+		for (const auto& Pair : Values)
+		{
+			if (Bound) { Bound->HostSet(Pair.first, Pair.second); continue; }
 			try { Core->setProperty("world." + Pair.first, Pair.second); }
 			catch (const std::exception&) { /* an orphaned key: dropped */ }
 		}
+	};
+	FString Error;
+	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
+	if (!StoryletLoadStateWorld(*Core, Json, World, Error, &OutReportJson, Apply))
+	{
+		Apply(Before);
+		Engine->NoteRefusal(TEXT("LoadStateFromJson"), Error);
+		return false;
 	}
 	// loadGame rebuilt every flow; re-point the wrappers the game holds at the
 	// flow of the same name, so a Blueprint variable keeps working.

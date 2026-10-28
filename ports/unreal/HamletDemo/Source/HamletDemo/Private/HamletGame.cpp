@@ -9,10 +9,6 @@
 using namespace storylets;
 
 static std::string S(const FString& In) { return std::string(TCHAR_TO_UTF8(*In)); }
-// A JSON object's key as an FString on 5.7 (FString keys) and 5.8 (a shared string
-// type with ToView()); the overload wins wherever it applies.
-static FString KeyString(const FString& Key) { return Key; }
-template <typename K> static FString KeyString(const K& Key) { return FString(Key.ToView()); }
 static FString F(const std::string& In) { return FString(UTF8_TO_TCHAR(In.c_str())); }
 
 // --- the world ---------------------------------------------------------------
@@ -205,17 +201,10 @@ void FHamletGame::Wait()
 FString FHamletGame::Save() const
 {
 	TSharedPtr<FJsonObject> env = MakeShared<FJsonObject>();
-	env->SetStringField(TEXT("storylets"), UStoryletSave::SaveStateToJson(Storylets.Get()));   // our .storyletsave text, @world beside the envelope
+	// Our .storyletsave text, which carries the bound @world once, beside (not inside) the engine's
+	// envelope, so its load can put the world back before the engine checks the hand.
+	env->SetStringField(TEXT("storylets"), UStoryletSave::SaveStateToJson(Storylets.Get()));
 	env->SetStringField(TEXT("patter"), UPatterSave::SaveStateToJson(Patter.Get()));   // Patter's patter/save@0 text
-	TSharedPtr<FJsonObject> w = MakeShared<FJsonObject>();
-	for (const FString& Name : World.Store->Names())
-	{
-		FStoryletValue v; World.Store->GetValue(Name, v);
-		if (v.Kind == EStoryletValueKind::Boolean) w->SetBoolField(Name, v.bBool);
-		else if (v.Kind == EStoryletValueKind::Number) w->SetNumberField(Name, v.Number);
-		else w->SetStringField(Name, v.String);
-	}
-	env->SetObjectField(TEXT("world"), w);
 	env->SetStringField(TEXT("at"), At);
 	if (Playing)
 	{
@@ -242,26 +231,10 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 	if (!FJsonSerializer::Deserialize(reader, env) || !env) { OutError = TEXT("not a JSON envelope"); return false; }
 	try
 	{
-		// The saved world goes in first, since the load checks the hand it puts back against it; a
-		// refused load puts the old world back, so the game is left as it was.
-		TArray<TPair<std::string, StoryletValue>> before;
-		for (const FString& Name : World.Store->Names())
-		{
-			StoryletValue v;
-			if (World.Store->Get(S(Name), v)) before.Emplace(S(Name), v);
-		}
-		const TSharedPtr<FJsonObject>* w;
-		if (env->TryGetObjectField(TEXT("world"), w))
-			for (const auto& kv : (*w)->Values)
-			{
-				if (kv.Value->Type == EJson::Boolean) World.Host(S(KeyString(kv.Key)), StoryletValue::Bool(kv.Value->AsBool()));
-				else if (kv.Value->Type == EJson::Number) World.Host(S(KeyString(kv.Key)), StoryletValue::Num(kv.Value->AsNumber()));
-				else World.Host(S(KeyString(kv.Key)), StoryletValue::Str(S(kv.Value->AsString())));
-			}
-		// The wrapper's load restores the file's @world into the bound container too (the same values).
+		// The wrapper puts the saved world into the bound container first, since the load checks the
+		// hand it puts back against it, and a refused load leaves the world as it was.
 		if (!UStoryletSave::LoadStateFromJson(Storylets.Get(), env->GetStringField(TEXT("storylets"))))
 		{
-			for (const auto& kv : before) World.Host(kv.Key, kv.Value);
 			OutError = TEXT("the storylets half did not load");
 			return false;
 		}

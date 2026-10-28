@@ -68,6 +68,11 @@ section for it.
 
 ### Fixed
 
+- **A load checks the hand against the saved world, not the old one.** `loadState` and `deserializeState` take
+  `{ world }`, the host's @world container (`createWorldContainer`, or anything with `values` and `load`), and put
+  the file's @world values into it before the engine loads, so a held card gated on @world isn't dropped for a
+  world the save no longer has. A refused load leaves the container as it was. Without the option the values are
+  only returned, as before, and a game should apply them before loading.
 - **A refitting load keeps "none chosen".** When a game loads the shared registry itself with refit on
   (`registry.load(blob, { refit: true })`), as a game that also runs Patterplay may, a saved `""` on an enum whose own
   default is `""` (none chosen) now comes back as saved, instead of being reported as a misfit that never happened.

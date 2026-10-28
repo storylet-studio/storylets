@@ -146,12 +146,16 @@ describe("the Hamlet client", () => {
     const hand = buttons(first.doc, ".card").map((b) => b.textContent);
     const saved = (first.doc.defaultView as unknown as Window).localStorage.getItem("the-hamlet/save@1")!;
 
-    // One envelope: each engine's own state, plus @world, which the HOST saves
-    // because neither engine puts it in its own envelope.
+    // One envelope: each engine's own state, and @world once, which the HOST
+    // saves because neither engine puts it in its own envelope. It rides in the
+    // storylet half's save file, beside (not inside) that engine's envelope, so
+    // the load can put it back before the engine checks the hand.
     const envelope = JSON.parse(saved);
-    expect(Object.keys(envelope).sort()).toEqual(["at", "patter", "performing", "storylets", "world"]);
+    expect(Object.keys(envelope).sort()).toEqual(["at", "patter", "performing", "storylets"]);
     expect(envelope.performing, "nothing in flight between cards").toBeNull();
-    expect(envelope.world).toMatchObject({ time_of_day: expect.any(String) });
+    const file = JSON.parse(envelope.storylets);
+    expect(file.world).toMatchObject({ time_of_day: expect.any(String) });
+    expect(JSON.stringify(file.engine)).not.toContain("time_of_day");
 
     const second = open({ "the-hamlet/save@1": saved });
     await settled(second.doc);

@@ -265,6 +265,45 @@ func _reports_and_bytes(bundle: Dictionary, saved: String) -> void:
 		and (live["report"] as Dictionary).has("exact"), str(live.keys()))
 
 
+## The save helpers' @world order (2026-10-28, foundation 7 left open), as
+## play-helpers' save.test.ts has it: given the host's world, load_state puts the
+## saved one in BEFORE the engine checks the hand it restores, so a card gated on
+## it stays; without it the check reads the game's own world and drops the card;
+## a refused load puts the world back. The bundles are the JS test's, expanded by
+## the conformance scaffold.
+const OWL_BUNDLE := "{\"schema\":\"storylets/bundle@0\",\"content\":{\"project\":\"conf\",\"version\":\"0.0.0\",\"hash\":\"\"},\"metadata\":\"full\",\"settings\":{\"playAdvancesTurns\":1},\"world\":{\"properties\":[{\"name\":\"night\",\"type\":\"boolean\",\"default\":false}]},\"story\":{\"properties\":[]},\"boxes\":[{\"id\":\"b_x\",\"gameId\":\"box\",\"ranking\":{\"specificity\":true},\"fields\":[],\"properties\":[],\"tagGroups\":[{\"id\":\"d_zone\",\"gameId\":\"zone\",\"tags\":[{\"id\":\"v_docks\",\"gameId\":\"docks\",\"properties\":[{\"name\":\"danger\",\"type\":\"number\",\"default\":0}]},{\"id\":\"v_market\",\"gameId\":\"market\"}]}],\"decks\":[{\"id\":\"k_main\",\"gameId\":\"main\",\"properties\":[],\"cards\":[{\"id\":\"c_owl\",\"gameId\":\"owl\",\"condition\":{\"src\":\"@world.night\",\"ast\":[\"sv\",\"world\",\"night\"]},\"priority\":0,\"redraw\":\"always\",\"outcomes\":[]}]}],\"handTemplates\":[],\"hands\":[{\"id\":\"h_q\",\"gameId\":\"q\",\"rule\":{\"slots\":\"unbounded\"}}]}]}"
+const ELSEWHERE_BUNDLE := "{\"schema\":\"storylets/bundle@0\",\"content\":{\"project\":\"elsewhere\",\"version\":\"0.0.0\",\"hash\":\"\"},\"metadata\":\"full\",\"settings\":{\"playAdvancesTurns\":1},\"world\":{\"properties\":[{\"name\":\"night\",\"type\":\"boolean\",\"default\":false}]},\"story\":{\"properties\":[]},\"boxes\":[{\"id\":\"b_x\",\"gameId\":\"box\",\"ranking\":{\"specificity\":true},\"fields\":[],\"properties\":[],\"tagGroups\":[{\"id\":\"d_zone\",\"gameId\":\"zone\",\"tags\":[{\"id\":\"v_docks\",\"gameId\":\"docks\",\"properties\":[{\"name\":\"danger\",\"type\":\"number\",\"default\":0}]},{\"id\":\"v_market\",\"gameId\":\"market\"}]}],\"decks\":[{\"id\":\"k_main\",\"gameId\":\"main\",\"properties\":[],\"cards\":[{\"id\":\"c_x\",\"gameId\":\"x\",\"priority\":0,\"redraw\":\"always\",\"outcomes\":[]}]}],\"handTemplates\":[],\"hands\":[{\"id\":\"h_q\",\"gameId\":\"q\",\"rule\":{\"slots\":\"unbounded\"}}]}]}"
+
+func _world_before_load() -> void:
+	var owl: Dictionary = StoryletBundle.load_from_string(OWL_BUNDLE)["bundle"]
+	var over := func(b: Dictionary, w: Dictionary) -> StoryletEngine:
+		return StoryletEngine.create(b, {"seed": 0, "host_scopes": {"world": {"get": func(n): return w.get(n), "set": func(n, v): w[n] = v}}})
+	var saving := {"night": true}
+	var a: StoryletEngine = over.call(owl, saving)
+	var dealt: Array = a.open_flow("main").deal("q")
+	_check("the owl is dealt at night", dealt.size() == 1 and dealt[0]["gameId"] == "owl", str(dealt))
+	var saved := StoryletSave.serialize_state(a, saving.duplicate())
+
+	var loading := {"night": false}
+	var b: StoryletEngine = over.call(owl, loading)
+	var reports: Array = []
+	StoryletSave.deserialize_state(b, saved, {"world": loading, "on_report": func(r: Dictionary) -> void: reports.append(r)})
+	_check("the world took the saved one, in place", loading["night"] == true, str(loading))
+	_check("the load kept the owl: it read the saved world", reports.size() == 1 and (reports[0]["evicted"] as Array).is_empty(), str(reports))
+
+	var plain := {"night": false}
+	var c: StoryletEngine = over.call(owl, plain)
+	var costly: Array = []
+	StoryletSave.deserialize_state(c, saved, {"on_report": func(r: Dictionary) -> void: costly.append(r)})
+	_check("without it the check reads the game's own world and drops the owl",
+		costly.size() == 1 and (costly[0]["evicted"] as Array).size() == 1 and costly[0]["evicted"][0]["card"] == "owl", str(costly))
+
+	var kept := {"night": false}
+	var other: StoryletEngine = over.call(StoryletBundle.load_from_string(ELSEWHERE_BUNDLE)["bundle"], kept)
+	var refused = StoryletSave.deserialize_state(other, saved, {"world": kept})
+	_check("a save for another project is refused, and the world is as it was", refused == null and kept["night"] == false, str(kept))
+
+
 ## Durable state as a feature (ruling H, 2026-10-06): the host API's edges the
 ## corpus cannot reach, as the JS runtime's durable.test.ts has them. The shape of
 ## a half as a game stores it, the refusals made before anything moves, a memory
@@ -759,6 +798,7 @@ func _initialize() -> void:
 	_last_errors(bundle)
 	_handlers(bundle)
 	_reports_and_bytes(bundle, saved)
+	_world_before_load()
 	_durable_halves()
 	_host_scopes()
 

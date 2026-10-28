@@ -2445,6 +2445,43 @@ static std::vector<std::pair<std::string, std::function<std::vector<std::string>
         deserializeState(fresh, text);   // and without one, as before
         return out;
     });
+    // The save helpers' @world order (2026-10-28, foundation 7 left open), as
+    // play-helpers' save.test.ts has it: beforeLoad hands the host the saved
+    // world BEFORE the engine checks the hand it restores, so a card gated on it
+    // stays; without it the check reads the game's own world and drops the card.
+    checks.emplace_back("beforeLoad hands the saved @world over before the load checks the hand", []
+    {
+        std::vector<std::string> out;
+        static const char* const json = R"JSON({"schema":"storylets/bundle@0","content":{"project":"conf","version":"0.0.0","hash":""},"metadata":"full","settings":{"playAdvancesTurns":1},"world":{"properties":[{"name":"night","type":"boolean","default":false}]},"story":{"properties":[]},"boxes":[{"id":"b_x","gameId":"box","ranking":{"specificity":true},"fields":[],"properties":[],"tagGroups":[{"id":"d_zone","gameId":"zone","tags":[{"id":"v_docks","gameId":"docks","properties":[{"name":"danger","type":"number","default":0}]},{"id":"v_market","gameId":"market"}]}],"decks":[{"id":"k_main","gameId":"main","properties":[],"cards":[{"id":"c_owl","gameId":"owl","condition":{"src":"@world.night","ast":["sv","world","night"]},"priority":0,"redraw":"always","outcomes":[]}]}],"handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]})JSON";
+        auto over = [](std::map<std::string, StoryletValue>& vals)
+        {
+            HostScope world;
+            world.get = [&vals](const std::string& n) -> std::optional<StoryletValue> {
+                auto it = vals.find(n); if (it == vals.end()) return std::nullopt; return it->second; };
+            world.set = [&vals](const std::string& n, const StoryletValue& v) { vals[n] = v; };
+            EngineOptions opts; opts.hostScopes["world"] = world;
+            return std::make_unique<Engine>(ParseBundle(JsonParser(json).parse()), opts);
+        };
+        std::map<std::string, StoryletValue> saving{{"night", StoryletValue::Bool(true)}};
+        auto a = over(saving);
+        if (a->openFlow("main")->deal("q").size() != 1) out.push_back("the owl was not dealt at night");
+        OrderedMap<std::string, StoryletValue> worldNow; worldNow.set("night", StoryletValue::Bool(true));
+        const std::string text = serializeState(*a, worldNow);
+
+        std::map<std::string, StoryletValue> loading{{"night", StoryletValue::Bool(false)}};
+        auto b = over(loading);
+        std::optional<LoadReport> kept;
+        deserializeState(*b, text, [&kept](const LoadReport& r) { kept = r; },
+            [&loading](const OrderedMap<std::string, StoryletValue>& w) { for (const auto& p : w) loading[p.first] = p.second; });
+        if (!kept.has_value() || !kept->evicted.empty()) out.push_back("with beforeLoad the load dropped the owl");
+
+        std::map<std::string, StoryletValue> plain{{"night", StoryletValue::Bool(false)}};
+        auto c = over(plain);
+        std::optional<LoadReport> costly;
+        deserializeState(*c, text, [&costly](const LoadReport& r) { costly = r; });
+        if (!costly.has_value() || costly->evicted.size() != 1) out.push_back("without beforeLoad the check did not read the game's own world");
+        return out;
+    });
     return checks;
 }
 

@@ -30,7 +30,8 @@ FString StoryletSaveStateToJson(const storylets::Engine& Engine)
 
 bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
 	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError,
-	FString* OutReportJson)
+	FString* OutReportJson,
+	const std::function<void(const storylets::OrderedMap<std::string, storylets::StoryletValue>&)>& BeforeLoad)
 {
 	if (OutReportJson) OutReportJson->Reset();
 	// Parsed with Unreal's own JSON reader (the plugin already carries it) and
@@ -46,7 +47,7 @@ bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
 		OutWorld = storylets::loadState(Engine, Tree, [OutReportJson](const storylets::LoadReport& Report)
 		{
 			if (OutReportJson) *OutReportJson = FString(UTF8_TO_TCHAR(storylets::reportToJson(Report).c_str()));
-		});
+		}, BeforeLoad);
 		OutError.Reset();
 		return true;
 	}
@@ -59,16 +60,29 @@ bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
 
 bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, FString& OutError)
 {
-	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
-	if (!StoryletLoadStateWorld(Engine, Json, World, OutError)) return false;
-	// The file's @world values land over the reseeded container - the HOST
-	// applies them; the envelope never carries them. On a bound engine this
-	// goes through the resolver's set (the story's path); UStoryletSave
-	// restores a bound container directly instead, so use that from a wrapper.
-	for (const auto& Pair : World)
+	// The file's @world values go in BEFORE the load, since it checks each held
+	// card against the world it will play in, and come back out if the load is
+	// refused. On a bound engine this goes through the resolver's set (the
+	// story's path); UStoryletSave restores a bound container directly
+	// instead, so use that from a wrapper.
+	storylets::OrderedMap<std::string, storylets::StoryletValue> Before;
+	for (const storylets::PropertyRow& Row : Engine.listProperties())
 	{
-		try { Engine.setProperty("world." + Pair.first, Pair.second); }
-		catch (const std::exception&) { /* an orphaned key: dropped */ }
+		if (Row.path.rfind("world.", 0) == 0) Before.set(Row.name, Row.value);
+	}
+	auto Apply = [&Engine](const storylets::OrderedMap<std::string, storylets::StoryletValue>& Values)
+	{
+		for (const auto& Pair : Values)
+		{
+			try { Engine.setProperty("world." + Pair.first, Pair.second); }
+			catch (const std::exception&) { /* an orphaned key: dropped */ }
+		}
+	};
+	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
+	if (!StoryletLoadStateWorld(Engine, Json, World, OutError, nullptr, Apply))
+	{
+		Apply(Before);
+		return false;
 	}
 	return true;
 }

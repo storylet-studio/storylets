@@ -74,6 +74,11 @@
 
 ### Fixed
 
+- **A load checks the hand against the saved world, not the old one.** `StoryletSave.LoadState` and
+  `DeserializeState` take a `world`, the host's `IWorldContainer` (`Snapshot()` and `Load(values)`;
+  `StoryletSave.WorldOf(bag)` wraps a kernel `PropertyBag`), and put the file's @world values into it before the
+  engine loads, so a held card gated on @world isn't dropped for a world the save no longer has. A refused load
+  leaves the container as it was.
 - **A refitting load keeps "none chosen".** When a game loads the shared registry itself with refit on
   (`registry.Load(blob, refit: true)`), as a game that also runs Patterplay may, a saved `""` on an enum whose own
   default is `""` (none chosen) now comes back as saved, instead of being reported as a misfit that never happened.

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { Engine } from "@storylet-studio/runtime";
 import { expandBundle } from "@storylet-studio/conformance";
-import { deserializeState, saveState, loadState, serializeState } from "../src/index.js";
+import { createWorldContainer, deserializeState, saveState, loadState, serializeState } from "../src/index.js";
 
 const bundle = expandBundle({
   story: [{ name: "gold", type: "number", default: 0 }],
@@ -78,6 +78,44 @@ describe("serialize / load round trip", () => {
     let fromText: typeof report;
     deserializeState(new Engine(bundle, { seed: 0 }), JSON.stringify(file), { onReport: (r) => { fromText = r; } });
     expect(fromText).toEqual(report);
+  });
+
+  // A held card is checked on load against the world the game will play in
+  // (foundation 7): given the container, the saved world goes in FIRST, so the
+  // check reads it, and a refused load leaves the container as it was.
+  it("puts the saved @world into a container it is given before the engine loads", () => {
+    const worldBundle = expandBundle({
+      world: [{ name: "night", type: "boolean", default: false }],
+      cards: [{ id: "c_owl", condition: "@world.night" }],
+      hands: [{ id: "h_q", rule: {} }],
+    });
+    const saving = createWorldContainer(worldBundle);
+    saving.load({ night: true });
+    const a = new Engine(worldBundle, { seed: 0, hostScopes: { world: saving.resolver } });
+    expect(a.openFlow("main").deal("q").map((c) => c.gameId)).toEqual(["owl"]);
+    const file = saveState(a, { ...saving.values() });
+
+    const loading = createWorldContainer(worldBundle); // night is false here
+    const b = new Engine(worldBundle, { seed: 0, hostScopes: { world: loading.resolver } });
+    let report: ReturnType<Engine["loadGame"]> | undefined;
+    loadState(b, file, { world: loading, onReport: (r) => { report = r; } });
+    expect(loading.values()).toEqual({ night: true });
+    expect(report?.evicted).toEqual([]);
+    expect(b.getFlow("main")!.board()).toMatchObject({ q: [{ gameId: "owl" }] });
+
+    // Without it, the check reads the game's own world, and the owl goes.
+    const plain = createWorldContainer(worldBundle);
+    const c = new Engine(worldBundle, { seed: 0, hostScopes: { world: plain.resolver } });
+    let costly: typeof report;
+    loadState(c, file, { onReport: (r) => { costly = r; } });
+    expect(costly?.evicted.map((e) => e.card)).toEqual(["owl"]);
+
+    // A refused load puts the container back.
+    const kept = createWorldContainer(worldBundle);
+    const other = new Engine(expandBundle({ content: { project: "elsewhere" }, world: [{ name: "night", type: "boolean", default: false }],
+      cards: [{ id: "c_x" }], hands: [{ id: "h_q", rule: {} }] }), { seed: 0, hostScopes: { world: kept.resolver } });
+    expect(() => loadState(other, file, { world: kept })).toThrow();
+    expect(kept.values()).toEqual({ night: false });
   });
 
   it("carries the host's @world container beside the envelope, and hands it back on load", () => {

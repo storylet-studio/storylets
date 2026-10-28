@@ -300,7 +300,10 @@ in the save. A game running Patter and the Storylet Engine side by side keeps ev
 its host scopes included, in one registry and saves it once, so nothing is written twice. The
 `.storyletsave` file format carries a bound world's values beside the envelope, and `play-helpers`
 ships a ready-made container for games with no world state of their own (see
-[JavaScript, Save and load](/play/javascript/#save-and-load)).
+[JavaScript, Save and load](/play/javascript/#save-and-load)). Put the saved world back before
+the engine loads, not after: the load checks every card it puts back in a hand against the
+world, and drops one whose condition no longer holds. Each runtime's load helper does this for
+you when you hand it your world.
 
 ## Next
 

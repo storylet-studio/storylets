@@ -43,15 +43,21 @@ static func save_state(engine: StoryletEngine, world = null) -> Dictionary:
 ## Options load_state and deserialize_state take: "on_report" is a
 ## Callable(report: Dictionary) handed the LoadReport the engine's load_game
 ## produced (what the load dropped, defaulted or evicted), which these helpers
-## otherwise have no way to return beside the @world values.
-const LOAD_OPTION_KEYS := ["on_report"]
+## otherwise have no way to return beside the @world values. "world" is the
+## host's @world container: a Dictionary, updated in place, or an object with
+## values() -> Dictionary and load(values: Dictionary). Given, the file's @world
+## values go into it BEFORE the engine loads, so the load's check of each held
+## card reads the saved world rather than the one the game had, and a refused
+## load puts it back as it was. Without it, apply the returned values before
+## loading for the same check.
+const LOAD_OPTION_KEYS := ["on_report", "world"]
 
 
 ## Restore a save-file Dictionary into an engine (every flow is rebuilt;
 ## re-take Flow handles afterwards). Returns the file's @world values (a
-## Dictionary, possibly empty) for the HOST to apply, or null (with
-## push_error) on a foreign blob or a project mismatch. `opts` takes
-## {"on_report": Callable}: see LOAD_OPTION_KEYS.
+## Dictionary, possibly empty), or null (with push_error) on a foreign blob or
+## a project mismatch. `opts` takes {"on_report": Callable, "world": container}:
+## see LOAD_OPTION_KEYS.
 static func load_state(engine: StoryletEngine, file, opts: Dictionary = {}) -> Variant:
 	engine._last_error = ""
 	for key in opts:
@@ -70,13 +76,34 @@ static func load_state(engine: StoryletEngine, file, opts: Dictionary = {}) -> V
 	if refusal != "":
 		engine._refuse("StoryletSave.load_state", refusal)
 		return null
+	var container = opts.get("world")
+	var before = _world_values(container)
+	if container != null and file.get("world") is Dictionary:
+		_world_load(container, file["world"])
 	var report := engine.load_game(file["engine"])
 	if engine.last_error() != "":
+		if container != null: _world_load(container, before)
 		return null   # load_game refused it (and said why): nothing was loaded
 	var on_report = opts.get("on_report")
 	if on_report is Callable and (on_report as Callable).is_valid():
 		(on_report as Callable).call(report)
 	return file.get("world", {})
+
+
+## A copy of what a "world" container holds (see LOAD_OPTION_KEYS).
+static func _world_values(container) -> Dictionary:
+	if container is Dictionary: return (container as Dictionary).duplicate(true)
+	if container is Object and container.has_method("values"): return (container.values() as Dictionary).duplicate(true)
+	return {}
+
+
+## Put values into a "world" container: a Dictionary takes them in place.
+static func _world_load(container, values: Dictionary) -> void:
+	if container is Dictionary:
+		var d: Dictionary = container
+		d.clear(); d.merge(values.duplicate(true))
+	elif container is Object and container.has_method("load"):
+		container.load(values)
 
 
 ## Serialise to a JSON string - drop into a .storyletsave file. Key order

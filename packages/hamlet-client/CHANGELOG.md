@@ -15,6 +15,10 @@ job reads the section for the tagged version out of this file.
 
 ### Fixed
 
+- **The save carries @world in the Storylet half's file, and the helper puts it back.** The Hamlet saved @world
+  beside both engines' halves and restored it by hand; it now rides in the `.storyletsave` text and the load hands
+  the helper its world, so the example shows the call a game should make. The same on all four hosts, and the
+  cross-host saves were regenerated. A save from an earlier version loads without its @world.
 - **A save holds the hand on screen.** Every host dealt the place's hand each time it drew the screen, after the
   game had saved, so a save never held the hand the player was looking at and a load dealt a different one. The
   hand is now read from the board, and only the game's actions deal (arriving, a card played, time passing), in all

@@ -449,9 +449,16 @@ namespace storylets
      *
      *  `onReport`, when given, is handed the LoadReport loadGame returned (the
      *  JS loadState's `{ onReport }`): what the load cost, which the return
-     *  value has no room for since it stays the @world values. */
+     *  value has no room for since it stays the @world values.
+     *
+     *  `beforeLoad`, when given, is handed the file's @world values once the
+     *  file is known to be a save and BEFORE the engine loads, so the host can
+     *  put them into its container first: the load checks each held card
+     *  against the world it will play in (the JS loadState's `{ world }`). A
+     *  load refused after it ran is the caller's to put back. */
     inline OrderedMap<std::string, StoryletValue> loadState(Engine& engine, const JsonValue& tree,
-        const std::function<void(const LoadReport&)>& onReport = {})
+        const std::function<void(const LoadReport&)>& onReport = {},
+        const std::function<void(const OrderedMap<std::string, StoryletValue>&)>& beforeLoad = {})
     {
         const JsonValue* engineTree = tree.find("engine");
         const std::string envelopeSchema = engineTree && engineTree->isObject() ? engineTree->strOr("schema") : std::string();
@@ -461,11 +468,13 @@ namespace storylets
         {
             throw StoryletError(std::string("not a storylets save (expected schema \"") + SAVEFILE_SCHEMA + "\")");
         }
+        const JsonValue* world = tree.find("world");
+        OrderedMap<std::string, StoryletValue> saved = world && world->isObject() ? savedetail::ParseBag(world)
+            : OrderedMap<std::string, StoryletValue>{};
+        if (beforeLoad) beforeLoad(saved);
         const LoadReport report = engine.loadGame(savedetail::EnvelopeFromTree(*engineTree));
         if (onReport) onReport(report);
-        const JsonValue* world = tree.find("world");
-        return world && world->isObject() ? savedetail::ParseBag(world)
-            : OrderedMap<std::string, StoryletValue>{};
+        return saved;
     }
 
     /** ONE flow's blob as JSON, the shape the envelope carries per flow plus
@@ -728,9 +737,10 @@ namespace storylets
 
     /** Parse + restore .storyletsave TEXT: the text twin of loadState. Throws
      *  StoryletError on malformed text, exactly as loadState does on a
-     *  malformed file. `onReport` is loadState's. */
+     *  malformed file. `onReport` and `beforeLoad` are loadState's. */
     inline OrderedMap<std::string, StoryletValue> deserializeState(Engine& engine, const std::string& json,
-        const std::function<void(const LoadReport&)>& onReport = {})
+        const std::function<void(const LoadReport&)>& onReport = {},
+        const std::function<void(const OrderedMap<std::string, StoryletValue>&)>& beforeLoad = {})
     {
         JsonValue tree;
         try
@@ -741,6 +751,6 @@ namespace storylets
         {
             throw StoryletError("not valid JSON");
         }
-        return loadState(engine, tree, onReport);
+        return loadState(engine, tree, onReport, beforeLoad);
     }
 }

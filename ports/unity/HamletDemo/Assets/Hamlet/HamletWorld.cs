@@ -5,7 +5,9 @@
 // HostScopes, as "world"); this holds plain C# values once and converts at the
 // door.
 // The GAME's read-only policy lives here too: a story that tries to move a
-// read-only value is refused loudly.
+// read-only value is refused loudly. And it is the save helpers' container
+// (IWorldContainer), so a load puts the saved world in before the engine checks
+// the hand it restores against it.
 using System;
 using System.Collections.Generic;
 using StoryletStudio.StoryletEngine;
@@ -14,7 +16,7 @@ using Wildwinter.Expr;
 
 namespace StoryletStudio.Hamlet
 {
-    public sealed class HamletWorld : StoryletStudio.StoryletEngine.IHostScope, Patterkit.Patterplay.IHostScope
+    public sealed class HamletWorld : StoryletStudio.StoryletEngine.IHostScope, Patterkit.Patterplay.IHostScope, IWorldContainer
     {
         public readonly Dictionary<string, object> Values = new Dictionary<string, object>();
         private readonly HashSet<string> _readOnly;
@@ -33,6 +35,19 @@ namespace StoryletStudio.Hamlet
 
         // --- the host's own writes, which the read-only policy does not bind ---
         public void Host(string name, object value) { Values[name] = value; Changed?.Invoke(); }
+
+        // --- the save helpers' door (StoryletSave.LoadState's world) ---
+        public OrderedMap<string, ExprValue> Snapshot()
+        {
+            var copy = new OrderedMap<string, ExprValue>();
+            foreach (var kv in Values) copy.Set(kv.Key, ToValue(kv.Value));
+            return copy;
+        }
+        public void Load(OrderedMap<string, ExprValue> values)
+        {
+            foreach (var pair in values) Values[pair.Key] = FromValue(pair.Value);
+            Changed?.Invoke();
+        }
 
         private void Write(string name, object value)
         {

@@ -249,9 +249,14 @@ Both reports say what no longer fits the build, as a load's does. `Durable` can'
 JSON, the same text every runtime writes.
 
 For files, `StoryletSave` is the string boundary. `SerializeState(engine, worldValues)` gives
-you the `.storyletsave` text, and `DeserializeState(engine, text)` reads one back, either
-envelope version, and hands you the file's values for a `@world` you bind to apply
-([why the engine never saves those](/play/world-state/#saving-it)). A foreign or malformed
+you the `.storyletsave` text, and `DeserializeState(engine, text, world: myWorld)` reads one
+back, either envelope version
+([why the engine never saves a `@world` you bind](/play/world-state/#saving-it)). Your world
+implements `IWorldContainer` (`Snapshot()` and `Load(values)`; `StoryletSave.WorldOf(bag)` wraps
+a kernel `PropertyBag`), and the saved values go into it before the engine loads, because the
+load checks every card it puts back in a hand against the world as it will be. A refused load
+leaves your world as it was. Without it, the call hands the values back, and you should apply
+them before loading. A foreign or malformed
 blob throws, so a bad file can't corrupt a run.
 
 ## The Runtime State window

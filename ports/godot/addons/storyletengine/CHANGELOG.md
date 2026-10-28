@@ -93,6 +93,10 @@ the same version number always means the same runtime behaviour.
 
 ### Fixed
 
+- **A load checks the hand against the saved world, not the old one.** `StoryletSave.load_state` and
+  `deserialize_state` take `{"world": world}`, a Dictionary updated in place or an object with `values()` and
+  `load(values)`, and put the file's @world values into it before the engine loads, so a held card gated on @world
+  isn't dropped for a world the save no longer has. A refused load leaves the world as it was.
 - **An exported game can `load()` an imported bundle again.** The export hook skipped the imported product and
   its import remap, so in a build `load("res://story.storyletsc")` returned null and a scene holding the bundle as
   a resource failed to load (the editor had both files, so only builds broke). It now ships a small stand-in that

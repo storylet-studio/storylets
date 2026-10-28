@@ -9,10 +9,13 @@
 // It is also why a joint save works. Neither engine puts `@world` in its own
 // save envelope - ours excludes it by design, and Patter's `saveGame()`
 // serialises `shared`, `sharedVisits`, `sharedSelectors`, `stageBags` and
-// `flows` and nothing else - so the host saves it exactly once, here.
+// `flows` and nothing else - so the host saves it exactly once. It rides in the
+// storylet half's save file, and because this class has the container's two
+// verbs (`values` and `load`), the save helpers put it back before the Storylet
+// Engine checks the hand it restores against it.
 // ---------------------------------------------------------------------------
 class World {
-    values = new Map();
+    state = new Map();
     /** Fires whenever the game moves the world, so the UI can redraw. */
     onChange = null;
     /** The GAME's policy, as opposed to either story's stated intent: names
@@ -22,27 +25,27 @@ class World {
     readOnly;
     constructor(initial = {}, readOnly = []) {
         for (const [k, v] of Object.entries(initial))
-            this.values.set(k, v);
+            this.state.set(k, v);
         this.readOnly = new Set(readOnly);
     }
     /** The resolver shape both engines accept. `set` is present because this
      *  game lets time pass; a world the story may only READ omits it. */
     resolver = {
-        get: (name) => this.values.get(name),
+        get: (name) => this.state.get(name),
         set: (name, value) => {
             if (this.readOnly.has(name))
                 throw new Error(`@world.${name} is the game's alone: a story tried to set it to ${JSON.stringify(value)}`);
-            this.values.set(name, value);
+            this.state.set(name, value);
             this.onChange?.();
         },
     };
-    get(name) { return this.values.get(name); }
+    get(name) { return this.state.get(name); }
     /** The host's own write, which the read-only policy does not bind: it is the host. */
-    set(name, value) { this.values.set(name, value); this.onChange?.(); }
-    /** The host's half of the joint save. */
-    save() { return Object.fromEntries(this.values); }
+    set(name, value) { this.state.set(name, value); this.onChange?.(); }
+    /** A copy of the world, for the save. */
+    values() { return Object.fromEntries(this.state); }
     load(saved) {
-        this.values = new Map(Object.entries(saved));
+        this.state = new Map(Object.entries(saved));
         this.onChange?.();
     }
 }

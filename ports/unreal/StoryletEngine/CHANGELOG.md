@@ -123,6 +123,11 @@
 
 ### Fixed
 
+- **A load checks the hand against the saved world, not the old one.** `UStoryletSave::LoadStateFromJson` put
+  the file's @world values into the bound `UStoryletWorld` after the engine loaded, so the load's check of each
+  held card read the old world and could drop a card the save still held. They go in first now, and a refused
+  load puts back what was there. The core's `loadState` and `deserializeState` take a `beforeLoad` callback for
+  the same.
 - **A refitting load keeps "none chosen".** When a game loads the shared registry itself with refit on
   (`Registry.load(Blob, false, true)`), as a game that also runs Patterplay may, a saved `""` on an enum whose own
   default is `""` (none chosen) now comes back as saved, instead of being reported as a misfit that never happened.

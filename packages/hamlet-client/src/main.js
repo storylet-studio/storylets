@@ -179,16 +179,15 @@ const storyletBundle_boxGameId = () => story.listBoxes()[0].gameId;
 // --- the joint save ---------------------------------------------------------
 // One host-composed save, which falls straight out of the owned/foreign split:
 // each engine serialises only what IT owns, and the host saves @world once,
-// itself. Neither engine puts @world in its own envelope, so nothing is
-// written twice and nothing can disagree on reload.
+// itself, in the storylet half's save file. Neither engine puts @world in its
+// own envelope, so nothing is written twice and nothing can disagree on reload.
 function save() {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-        storylets: serializeState(storylets),
+        storylets: serializeState(storylets, world.values()),
         // Patter's half as ITS OWN text envelope (patter/save@0, via its play-helpers),
         // exactly as the storylet half above is ours. Never the raw saveGame() object:
         // the family's serializer is what the other runtimes load.
         patter: patterSerialize(patter),
-        world: world.save(),
         at,
         // A save taken MID-SCENE is the one that matters, and the one a first cut
         // gets wrong: `patter.saveGame()` already holds the flow's position, so the
@@ -206,12 +205,10 @@ function restore() {
         return false;
     try {
         const s = JSON.parse(raw);
-        // The saved world goes in first, since the load checks the hand it puts
-        // back against it; a refused load puts the old world back.
-        const before = Object.fromEntries(world.values);
-        world.load(s.world ?? {});
-        try { deserializeState(storylets, s.storylets); }
-        catch (e) { world.load(before); throw e; }
+        // Given the world, the helper puts the saved one in first, since the load
+        // checks the hand it puts back against it, and a refused load leaves the
+        // world as it was.
+        deserializeState(storylets, s.storylets, { world });
         if (typeof s.patter === "string")
             patterDeserialize(patter, s.patter);
         else
@@ -266,7 +263,7 @@ function fromEnvelope(p) {
 // --- drawing ----------------------------------------------------------------
 function render() {
     // The whole shared @world, as one line: what BOTH engines currently see.
-    $("clock").textContent = Object.entries(world.save())
+    $("clock").textContent = Object.entries(world.values())
         .map(([k, v]) => (typeof v === "boolean" ? (v ? k : "") : String(v))).filter(Boolean).join(", ");
     $("places").replaceChildren(...places.map((p) => {
         const b = document.createElement("button");

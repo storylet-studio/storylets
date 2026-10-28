@@ -11,6 +11,7 @@
 import { SAVEFILE_SCHEMA, SAVE_SCHEMA, SAVE_SCHEMA_V1, SAVE_SCHEMA_V2 } from "@storylet-studio/model";
 import type { LoadReport, PropertyBag, SaveFile } from "@storylet-studio/model";
 import type { Engine } from "@storylet-studio/runtime";
+import type { WorldContainer } from "./world.js";
 
 /** The current engine state (and the host's @world values, if given) as
  *  pretty-printed .storyletsave JSON. */
@@ -47,6 +48,13 @@ export interface LoadStateOptions {
    *  `engine.previewLoad` return. A callback rather than a return value
    *  because these functions already return the file's @world values. */
   onReport?: (report: LoadReport) => void;
+  /** The host's @world container (`createWorldContainer`, or anything with
+   *  the same `values` and `load`). Given, the file's @world values go into it
+   *  BEFORE the engine loads, so the load's check of each held card reads the
+   *  saved world rather than the one the game had; a refused load puts the
+   *  container back as it was. Without it the values are only returned, and
+   *  the game must apply them before loading for the same check. */
+  world?: Pick<WorldContainer, "values" | "load">;
 }
 
 /** Restore a {@link saveState} file into an engine. EVERY FLOW IS REBUILT, so
@@ -56,7 +64,8 @@ export interface LoadStateOptions {
  *  the failure lands later, as `play()` refusing a card as "not dealt". (The
  *  engine's `onReplacedFlow` hook reports exactly this.) Throws on a foreign or malformed
  *  file, and the runtime's own project check still applies. Returns the file's
- *  @world values, if any - the HOST applies them to its container; the engine
+ *  @world values, if any. Pass the host's container as `opts.world` and they
+ *  are applied before the load (see LoadStateOptions.world); the engine itself
  *  never touches them. */
 export function loadState(engine: Engine, file: SaveFile, opts: LoadStateOptions = {}): PropertyBag | undefined {
   if (!file || typeof file !== "object"
@@ -64,7 +73,17 @@ export function loadState(engine: Engine, file: SaveFile, opts: LoadStateOptions
     || (file.engine?.schema !== SAVE_SCHEMA && file.engine?.schema !== SAVE_SCHEMA_V2 && file.engine?.schema !== SAVE_SCHEMA_V1)) {
     throw new Error(`not a storylets save (expected schema "${SAVEFILE_SCHEMA}")`);
   }
-  const report = engine.loadGame(file.engine);
+  const container = opts.world;
+  // A copy: a container's values can be its live record, which the load below writes.
+  const before = container !== undefined ? structuredClone(container.values()) : undefined;
+  if (container !== undefined && file.world !== undefined) container.load(file.world);
+  let report: LoadReport;
+  try {
+    report = engine.loadGame(file.engine);
+  } catch (e) {
+    if (container !== undefined && before !== undefined) container.load(before);
+    throw e;
+  }
   opts.onReport?.(report);
   return file.world;
 }

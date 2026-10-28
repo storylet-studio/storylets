@@ -224,7 +224,9 @@ touch stays as it was.
 `UStoryletSave::SaveStateToJson(Engine)` and `LoadStateFromJson(Engine, Json)` are the
 `.storyletsave` string boundary, in the runtime module and Blueprint-callable (the shape of
 Patterplay's `UPatterSave`). The file carries the engine's envelope, `storylets/save@3`, with
-every live flow inside it, plus a bound `UStoryletWorld`'s values, and a load applies all of it. The
+every live flow inside it, plus a bound `UStoryletWorld`'s values, and a load applies all of it,
+the world first, because the load checks every card it puts back in a hand against the world as
+it will be. A refused load leaves the world as it was. The
 envelope holds what isn't a property: boards, clocks, cooldowns, random streams, play logs, and
 spent cards. An engine made with `Create` also carries its registry's values in the envelope, a
 self-backed `@world` included, so a round trip preserves the whole run. The registry section is

@@ -238,10 +238,14 @@ const engine = new Engine(bundle, { seed: 7, hostScopes: { world: world.resolver
 let flow = engine.openFlow("main");
 
 const text = serializeState(engine, world.values());   // write this to a .storyletsave
-const savedWorld = deserializeState(engine, text);     // read one back...
-if (savedWorld) world.load(savedWorld);                // ...and apply the world half yourself
+deserializeState(engine, text, { world });            // read one back, the world half first
 flow = engine.getFlow("main");                         // and RE-TAKE your handles: a load rebuilds every flow
 ```
+
+Passing `world` puts the saved world into your container before the engine loads, because the load
+checks every card it puts back in a hand against the world as it will be, and drops one whose
+condition no longer holds. A refused load leaves the container as it was. If you keep @world
+yourself, apply the returned values before loading instead: `deserializeState` returns them.
 
 Two things about that last line. The `flow` you held before the load is now inert, so
 you must take a fresh one. And take it with `getFlow`, **not `openFlow`**, because `openFlow`

@@ -34,7 +34,7 @@ if (mid) {
     if (s.type === "line") shown.push({ kind: "line", character: s.characterName ?? s.character ?? "", text: s.text });
     if (s.type === "choice") break; }
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patterSerialize(patter), world: Object.fromEntries(world), at: "the-inn",
+  writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets, Object.fromEntries(world)), patter: patterSerialize(patter), at: "the-inn",
     performing: { card: { id: settle.id, gameId: settle.gameId, title: settle.title }, shown, outcome: null, labelled: null }, _expect_choices: 2 }, null, 2));
   console.log(`wrote ${out}: mid-scene at the inn, 2 choices pending`); process.exit(0);
 }
@@ -53,5 +53,5 @@ const declared = story.outcomes(settle.id, "the-inn").map((o) => o.gameId);
 story.play(settle.id, outcome ?? labelled ?? (declared.length === 1 ? declared[0] : null), "the-inn"); story.dealMany();
 const at = "the-mystic-tree"; const hand = story.deal(at).map((c) => c.gameId);
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patterSerialize(patter), world: Object.fromEntries(world), at, performing: null, _expect_hand: hand }, null, 2));
+writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets, Object.fromEntries(world)), patter: patterSerialize(patter), at, performing: null, _expect_hand: hand }, null, 2));
 console.log(`wrote ${out}: at ${at}, hand [${hand}], knows_road ${world.get("knows_road")}`);
