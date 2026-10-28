@@ -133,21 +133,29 @@ export function createComments(ctx: CommentsContext) {
     at?: { canvas: string; x: number; y: number }; fresh?: boolean; prefer?: "centre";
   }): void {
     const fixedId = opts.fresh === true ? newThreadId() : undefined;
+    // The threads the panel is about, read back from main after each change so it shows them as they now
+    // stand (it holds copies): the ones it opened with, and a new one once its first message is posted.
+    const about = new Set(opts.threads.map((t) => t.id));
+    const current = async (): Promise<CommentDto[]> =>
+      (await studio.commentsFor(opts.subjectId)).filter((t) => about.has(t.id));
     openComments({
       anchor: opts.anchor, subject: opts.subject, threads: opts.threads,
       showResolved: session.state.showResolved,
       newThreadId: () => fixedId ?? newThreadId(),
-      post: (threadId, body) => void (async () => {
+      post: async (threadId, body) => {
         if (!ctx.applied(await studio.postComment(opts.subjectId, threadId, body, opts.at))) return;
+        about.add(threadId);
         afterComment();
-        if (opts.fresh === true) closeAnchoredPanel();
-      })(),
+        if (opts.fresh === true) { closeAnchoredPanel(); return; }
+        return current();
+      },
       setResolved: opts.fresh === true
         ? () => { /* a thread that does not exist yet cannot be resolved */ }
-        : (threadId, resolved) => void (async () => {
+        : async (threadId, resolved) => {
             if (!ctx.applied(await studio.setCommentResolved(threadId, resolved))) return;
             afterComment();
-          })(),
+            return current();
+          },
       deleteMessage,
       ...(opts.prefer !== undefined ? { prefer: opts.prefer } : {}),
     });

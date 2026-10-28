@@ -63,6 +63,9 @@ here is part of shipping, not a courtesy.
 - **Delete only deletes cards when you're on the cards.** Delete or Backspace with a button focused (+ New card, a
   tab) deleted the selected cards, and so did Delete, Enter or an arrow key with a dialog or menu open. Those keys
   now act on the selection only from the cards themselves, the table, or the canvas, and never past a dialog.
+- **A comment appears as soon as you post it.** A reply posted with the Reply button didn't show until the comment
+  panel was closed and opened again, a second post on a new comment started a second thread, and Reopen showed the
+  thread as it was before. The panel now shows each thread as it stands after every change.
 
 ## [0.26.0] - 2026-10-22
 

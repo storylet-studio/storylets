@@ -21,7 +21,7 @@ import { History, UNDO_LIMIT } from "@wildwinter/app-shell/history";
 import type { FileState, StepOutcome } from "@wildwinter/app-shell/history";
 import type { ProjectStep } from "../shared/api.js";
 
-export { History, UNDO_LIMIT, applyStates, captureBefore, writeFailure } from "@wildwinter/app-shell/history";
+export { DiskStamps, History, UNDO_LIMIT, applyStates, captureBefore, writeFailure } from "@wildwinter/app-shell/history";
 export type { Applied, FileRestorer, FileState, HistoryOptions, StepOutcome } from "@wildwinter/app-shell/history";
 
 interface StepMark { id: number; key: string }

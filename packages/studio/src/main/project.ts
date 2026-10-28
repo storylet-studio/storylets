@@ -24,7 +24,7 @@ import type {
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../shared/api.js";
 import { declDto, fieldDeclDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
-import { StepHistory, applyStates } from "./history.js";
+import { DiskStamps, StepHistory, applyStates } from "./history.js";
 import { extensionDtos, extensionNodeChoices } from "./extensions.js";
 import { pinVcProvider, pinnedVcs, resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
@@ -34,8 +34,9 @@ export interface ProjectSession {
   dto: ProjectDto;
   history: StepHistory;
   /** What the files said when the project was last read (`diskStamp`), so a
-   *  revalidate on focus can tell that nothing has changed and say so. */
-  stamp?: string;
+   *  revalidate on focus can tell that nothing has changed and say so, and a
+   *  write can refuse to overwrite a file changed since (`changedSinceRead`). */
+  stamp?: DiskStamp;
 }
 
 /**
@@ -502,7 +503,10 @@ export function validate(session: ProjectSession): Problem[] {
  * control on focus; this lets the editor do the same unless a file changed.
  */
 export function diskUnchanged(session: ProjectSession): boolean {
-  return session.stamp !== undefined && session.stamp === diskStamp(session.loaded);
+  const stamp = session.stamp;
+  if (stamp === undefined) return false;
+  const files = projectFiles(session.loaded);
+  return files !== undefined && stamp.files.matches(files) && stamp.patter === patterStamp(session.loaded);
 }
 
 /**
@@ -514,17 +518,13 @@ export function diskUnchanged(session: ProjectSession): boolean {
  * outside edit away: a synced folder, a teammate's pull, another window (the
  * hands-on review, 2026-10, foundation 1). Focus re-reads the project when the
  * disk moved (`diskUnchanged`), but a write can come first; this is asked
- * before every one. The answer is the stamp's own (modification time and
- * size), so it costs a stat per file. A file the stamp does not cover (outside
- * the project's folders, or under a dot folder) is not asked about.
+ * before every one. The answer is the shell's disk stamps (modification time
+ * and size), so it costs a stat per file. A file the stamps do not cover
+ * (outside the project's folders, or under a dot folder) is not asked about;
+ * one inside them that has appeared since counts as changed.
  */
 export function changedSinceRead(session: ProjectSession, paths: readonly string[]): string | undefined {
   if (session.stamp === undefined) return undefined;
-  const recorded = new Map<string, string>();
-  for (const line of session.stamp.split("\n")) {
-    const [file, mtime, size] = line.split("\u0000");
-    if (file !== undefined && size !== undefined) recorded.set(file, `${mtime}\u0000${size}`);
-  }
   const roots = [session.loaded.dir];
   const scopes = session.loaded.source?.gameScopes?.dir;
   if (scopes !== undefined && relative(session.loaded.dir, scopes).startsWith("..")) roots.push(scopes);
@@ -532,35 +532,37 @@ export function changedSinceRead(session: ProjectSession, paths: readonly string
     const rel = relative(root, file);
     return rel !== "" && !rel.startsWith("..") && !rel.split(/[\\/]/).some((part) => part.startsWith("."));
   });
-  for (const path of paths) {
-    const file = resolve(path);
-    if (!covered(file)) continue;
-    let now = "gone";
-    try { const st = statSync(file); now = `${st.mtimeMs}\u0000${st.size}`; } catch { /* not there: "gone" */ }
-    if (now !== (recorded.get(file) ?? "gone")) return file;
-  }
-  return undefined;
+  // Only the paths the stamps cover are asked about: the rest pass.
+  return session.stamp.files.changedSince(paths.filter((path) => covered(resolve(path))), covered);
 }
 
-/** Every file the project reads, by path, modification time and size: its own
- *  folder, the game's shared scopes when they live outside it, and the paired
- *  Patter bundle. Cheap (a stat per file, no reads), which is what lets focus
- *  ask it every time. */
-function diskStamp(loaded: LoadedProject): string {
+/** What the project's files said when it was last read: each file's
+ *  modification time and size (the shell's disk stamps), and the paired Patter
+ *  bundle's own stamp. */
+export interface DiskStamp { files: DiskStamps; patter: string }
+
+/** Every file the project reads: its own folder, and the game's shared scopes
+ *  when they live outside it. Undefined when the folder can't be walked. */
+function projectFiles(loaded: LoadedProject): string[] | undefined {
   const dir = loaded.dir;
-  const lines: string[] = [];
-  const add = (root: string): void => {
-    for (const file of walkProjectFiles(root, [""])) {
-      try { const st = statSync(file); lines.push(`${file}\u0000${st.mtimeMs}\u0000${st.size}`); } catch { /* gone mid-walk: the next stamp says so */ }
-    }
-  };
-  try { add(dir); } catch { return `unreadable ${Date.now()}`; }
+  const files: string[] = [];
+  try { files.push(...walkProjectFiles(dir, [""])); } catch { return undefined; }
   const scopes = loaded.source?.gameScopes?.dir;
   if (scopes !== undefined && relative(dir, scopes).startsWith("..")) {
-    try { add(scopes); } catch { /* the folder went: loading says so */ }
+    try { files.push(...walkProjectFiles(scopes, [""])); } catch { /* the folder went: loading says so */ }
   }
-  lines.push(`patter\u0000${patterStamp(loaded)}`);
-  return lines.join("\n");
+  return files;
+}
+
+/** Stamp every file the project reads, and the paired Patter bundle. Cheap (a
+ *  stat per file, no reads), which is what lets focus ask it every time.
+ *  Undefined when the folder can't be walked, so the next focus reads again. */
+function diskStamp(loaded: LoadedProject): DiskStamp | undefined {
+  const files = projectFiles(loaded);
+  if (files === undefined) return undefined;
+  const stamps = new DiskStamps();
+  stamps.note(files);
+  return { files: stamps, patter: patterStamp(loaded) };
 }
 
 /** The kits New Project offers: ops' game kits, and the starter with a Patter project beside
