@@ -312,7 +312,9 @@ export function createCommands(ctx: CommandsContext) {
       case "review-prev": comments.stepReview(-1); break;
       case "duplicate": if (project) void duplicateSelection(); break;
       case "edit-in-patterpad": if (project) void editInPatterpad(); break;
-      case "toggle-nav": if (project) ctx.shell().togglePane("nav"); break;
+      // Cmd+1 (app-shell 0.71.0): opens the navigator and moves focus in, or moves
+      // focus into an open one; closes it only when focus is already inside.
+      case "toggle-nav": if (project) ctx.shell().focusOrToggle("nav"); break;
       case "reset-view": if (project) { const shell = ctx.shell(); shell.resetWidths(); shell.setPaneOpen("nav", true); void studio.resetWindows(); } break;
       case "toggle-auto-rebuild": if (project) void saves.toggleAutoRebuild(); break;
       case "live-link": if (project) ctx.toggleLiveLink(); break;

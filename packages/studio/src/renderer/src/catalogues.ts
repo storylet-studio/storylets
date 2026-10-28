@@ -82,6 +82,19 @@ export function createCatalogues(ctx: CataloguesContext) {
       return [];
     },
 
+    /** A property just declared from an editor on this page (the Changes
+     *  picker's "+ New property"): added to the catalogues in hand, so the next
+     *  draw knows it, without the fetch and redraw a forgotten catalogue costs,
+     *  which would rebuild the editor the author is still typing its value in.
+     *  An `@story` property is in every deck's and box's catalogue. */
+    adopt(p: ConditionProperty): void {
+      const add = (list: ConditionProperty[]): void => {
+        if (!list.some((q) => q.scope === p.scope && q.name === p.name)) list.push(p);
+      };
+      if (catalogueDeck !== undefined || catalogueBox !== undefined) add(catalogue);
+      for (const list of boxCatalogues?.byDeck.values() ?? []) add(list);
+    },
+
     /** The deck's catalogue is stale (the project's properties changed, or it
      *  closed): the next draw fetches again. */
     forgetDeck(): void { catalogueDeck = undefined; },

@@ -3,7 +3,7 @@
 // it, matched by its focus key, or by its words and its place among twins.
 
 import { describe, expect, it } from "vitest";
-import { focusKey, keepFocus } from "./focus.js";
+import { focusKey, focusReturn, keepFocus } from "./focus.js";
 
 function button(text: string, key?: string): HTMLButtonElement {
   const b = document.createElement("button");
@@ -48,5 +48,26 @@ describe("keepFocus", () => {
     within.querySelector<HTMLButtonElement>("button")!.focus();
     keepFocus(within, () => within.replaceChildren(button("Continue")));
     expect(document.activeElement).toBe(document.body);
+  });
+});
+
+describe("focusReturn (a Board confirm's returnFocus, app-shell 0.71.0)", () => {
+  it("answers the control that asked, or its replacement after a render", () => {
+    const within = document.createElement("div");
+    document.body.replaceChildren(within);
+    within.append(button("Put back", "card:put-back"), button("Play"));
+    const asked = within.querySelector<HTMLButtonElement>("button")!;
+    asked.focus();
+    const back = focusReturn(within);
+    expect(back()).toBe(asked);
+    within.replaceChildren(button("Play"), button("Put back", "card:put-back"));
+    expect(back()?.textContent).toBe("Put back");
+    expect(back()).not.toBe(asked);
+  });
+
+  it("answers nothing when nothing had the focus", () => {
+    document.body.replaceChildren();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(focusReturn()()).toBeUndefined();
   });
 });

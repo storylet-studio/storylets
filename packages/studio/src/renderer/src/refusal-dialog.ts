@@ -13,6 +13,7 @@
 
 import { dialogFrame } from "@wildwinter/app-shell/dialog";
 import { el } from "@wildwinter/app-shell";
+import { returnToOpener } from "./focus-return.js";
 
 /** Say why not, and offer to open the thing in the way. Resolves true when the
  *  author chose to open it; without `openLabel` there is only OK. */
@@ -25,7 +26,11 @@ export function refusalDialog(opts: { title: string; body: string; openLabel?: s
       resolve(open);
       frame.close();
     };
-    const frame = dialogFrame({ title: opts.title, className: "refusal-dialog", onClose: () => finish(false) });
+    // It's asked for after a round trip to main (the save flushed, the write
+    // refused), and the page behind can be redrawn while it's open, the control
+    // that asked with it: the focus goes back to that control, found again by
+    // its look, rather than to whatever holds it (app-shell 0.71.0).
+    const frame = dialogFrame({ title: opts.title, className: "refusal-dialog", onClose: () => finish(false), returnFocus: returnToOpener() });
     frame.body.append(el("div", "confirm-body", opts.body));
     const ok = el("button", opts.openLabel === undefined ? "btn primary" : "btn", "OK");
     ok.type = "button";

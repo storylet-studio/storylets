@@ -15,6 +15,7 @@ import { setPulsed } from "./board-state.js";
 import type { Board, BoardState } from "./board-state.js";
 import { watchPatterpad } from "./patterpad.js";
 import { loadMap } from "./map-stage.js";
+import { focusReturn } from "../tool-window/focus.js";
 
 export async function build(b: Board): Promise<void> {
   const s = b.state;
@@ -205,6 +206,9 @@ const atStake = (s: BoardState, closing: boolean): boolean =>
  * Restart, and closing the Board (ruling Q). One wording, so the two never
  * drift. Elided when nothing is at stake: an untouched session goes silently.
  * Escape answers the dialog while it is up, never the Board's own layers.
+ * The Board renders while one is up (a Live Link frame, a project change), so
+ * each of its confirms gives the focus back to the control that asked, found
+ * again in the rebuilt page (focusReturn).
  */
 async function discardSession(s: BoardState, title: string, confirmLabel: string, closing = false): Promise<boolean> {
   if (!atStake(s, closing)) return true;
@@ -213,7 +217,7 @@ async function discardSession(s: BoardState, title: string, confirmLabel: string
     const body = closing && s.snapshots.length > 0
       ? "The session, its journal, and its snapshots are discarded."
       : "The session and its journal are discarded.";
-    return await confirmDialog({ title, body, confirmLabel });
+    return await confirmDialog({ title, body, confirmLabel, returnFocus: focusReturn() });
   } finally {
     s.asking = false;
   }
@@ -239,6 +243,7 @@ export async function putBack(b: Board): Promise<void> {
         title: "Put the card back?",
         body: `Its Patter scene has already changed ${plural(wrote, "value")}. Those changes stay, and the card isn't played.`,
         confirmLabel: "Put it back",
+        returnFocus: focusReturn(),
       });
       if (!yes) return;
     } finally {
@@ -294,6 +299,7 @@ export function forgetEveryone(b: Board): void {
     body: "The session and its journal are discarded, and so is everything durable "
       + "(every pocket and the installation's own memory). The next run is the first day again.",
     confirmLabel: "Forget everyone",
+    returnFocus: focusReturn(),
   }).then((ok) => { b.state.asking = false; if (ok) void build(b); });
 }
 

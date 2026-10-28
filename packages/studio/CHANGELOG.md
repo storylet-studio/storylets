@@ -12,6 +12,9 @@ here is part of shipping, not a courtesy.
 
 ### Added
 
+- **Make a property from Changes.** In an outcome's Changes, "+ set property" takes a name no property has yet and
+  offers + New property "gold" in story. Choosing it declares the Story property (a number from 0, with one Undo)
+  and goes straight on to its value, so you don't have to leave the card for the Story page first.
 - **Change by.** Setting a number property in an outcome's Changes now offers ＋ add or － take away and a
   "by" field, so adding 1 to reputation is a few clicks instead of building `reputation + 1` term by term. The
   Set it to row still sets a plain number, and says why when it's given something else.
@@ -44,6 +47,11 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **Cmd+1 moves into the navigator.** On an open navigator, Cmd+1 (View ▸ Show Navigator) now puts the keyboard on
+  its current row, and closes it only when you're already in it, handing the keyboard back to where it was. The
+  toggle button in the top bar still just opens and closes it.
+- **Comments say Resolve.** A comment's action reads Resolve (it said Mark complete), and a resolved thread says
+  Resolved in words as well as fading.
 - **The Board deals hands that are right.** Every deal now ranks everything eligible, so a better card that has
   just become eligible takes the place of a worse one in the hand, and the Journal says the other was outranked.
   A discard shows in the Journal too. Coverage no longer moves a clock only plays move, so a game that would stall
@@ -83,6 +91,10 @@ here is part of shipping, not a courtesy.
 
 ### Fixed
 
+- **The keyboard doesn't get lost after a dialog.** Closing a dialog whose button was redrawn while it was open (a
+  refusal, a Board confirm) gives the keyboard back to that button, and when there's nothing to go back to it goes
+  to the page you're working on, never to the top of the window. A closed navigator no longer takes Tab presses
+  through controls you can't see.
 - **A new Card template field waits for its name.** "+ Field" no longer puts "A card field on This has no name"
   in the problem bar before you can type one: the field is saved once it has a name. A box-level problem names
   the box instead of "This", and Go to issue opens the Card template for a field's problem.

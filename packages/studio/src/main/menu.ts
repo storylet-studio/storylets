@@ -416,7 +416,15 @@ export function refreshMenu(
         { type: "separator" },
         // The inspector pane is retired (ux-changes v3); its menu slot and Cmd+2
         // are reserved for a future genuinely-optional reference pane.
-        { label: PANE_MENU.showNav.label, type: "checkbox", checked: state.panes.nav, accelerator: PANE_MENU.showNav.accelerator, click: send({ cmd: "toggle-nav" }) },
+        // Cmd+1 is the shell's focusOrToggle (app-shell 0.71.0): on an open
+        // navigator it only moves focus in, and the pane stays open. Electron
+        // flips a checkbox's tick on every press, so the tick goes back to what
+        // the menu was built with; a press that really opens or closes the pane
+        // rebuilds the menu through setPanes, with the new state.
+        {
+          label: PANE_MENU.showNav.label, type: "checkbox", checked: state.panes.nav, accelerator: PANE_MENU.showNav.accelerator,
+          click: (menuItem: Electron.MenuItem) => { menuItem.checked = state.panes.nav; send({ cmd: "toggle-nav" })(); },
+        },
         { ...PANE_MENU.resetView, click: send({ cmd: "reset-view" }) },
         { type: "separator" },
         // No accelerator, deliberately. Patterpad has no analogue to copy a key

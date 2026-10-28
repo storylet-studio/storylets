@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { mountEffectsEditor, mountExpressionEditor, renderConditionPreview, renderEffectsPreview } from "@wildwinter/expr-editor";
-import type { EditorEffect, EffectsEditorHandle, ExpressionEditorHandle, StringArgChoices } from "@wildwinter/expr-editor";
+import type { CatalogueEntry, EditorEffect, EffectsEditorHandle, ExpressionEditorHandle, StringArgChoices } from "@wildwinter/expr-editor";
 import type { Dialect } from "@wildwinter/expr";
 import { storyletsDialect, storyletsDialectWith, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
 import type { ConditionProperty, GameScopesDto, HostTokensDto, ProjectDto } from "../../shared/api.js";
@@ -88,6 +88,27 @@ const propertyActions = (ref: { scope: string; name: string }): { label: string;
     { label: "Find usages", run: () => propertyNav!.findUsages(ref) },
   ];
 
+/**
+ * Making a property from the Changes picker (expr-editor 0.18.0, the hands-on
+ * review of 2026-10): typing a name no property has offers `+ New property
+ * "<name>"`, and choosing it declares the property and goes straight on to its
+ * value. Registered once by the renderer, which owns the write (the problems
+ * bar's Declare, through main and its version control, undoable), like the
+ * navigator above. Null: it didn't land, and the picker stays as it was.
+ */
+export type PropertyCreator = (name: string, scope: string) => Promise<CatalogueEntry | null>;
+let propertyCreator: PropertyCreator | undefined;
+export function setPropertyCreator(create: PropertyCreator | undefined): void { propertyCreator = create; }
+
+/**
+ * Where a new property can go: `@story` alone, the story's own memory and the
+ * one scope that is Storyletter's in every project (as `@patter` is
+ * Patterpad's). `@world` and the game's other host scopes are the game's
+ * contract, declared in Project Settings; `@box` and `@deck` are a document's
+ * own, declared on its Properties tab.
+ */
+export const NEW_PROPERTY_SCOPES: readonly string[] = ["story"];
+
 export function mountCondition(host: HTMLElement, opts: {
   src: string;
   properties: ConditionProperty[];
@@ -132,5 +153,6 @@ export function mountChanges(host: HTMLElement, opts: {
     ),
     propertyActions,
     stringArgChoices: cardChoices,
+    ...(propertyCreator !== undefined ? { onCreateProperty: propertyCreator, newPropertyScopes: NEW_PROPERTY_SCOPES } : {}),
   });
 }

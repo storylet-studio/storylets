@@ -57,7 +57,8 @@ import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import {
   askIdentity, el, feedUpdaterDownloadProgress, historyNav, iconNode, initTooltips, keyLabel, mountLinkStatus, mountPaneShell,
-  openCommandPalette, openWhatsNew, whatsNewAfterUpdate, type WhatsNewOptions, revealRowWhenReady, saveIndicator, showUpdateReady, showUpdaterDialog, tipWithKey,
+  openCommandPalette, openWhatsNew, whatsNewAfterUpdate, type WhatsNewOptions, revealRowWhenReady, saveIndicator, setDialogFocusFallback, showUpdateReady,
+  showUpdaterDialog, tipWithKey,
 } from "@wildwinter/app-shell";
 import type { LinkStatus, LinkStatusChip, PaletteItem, PaneShell, ToastKind } from "@wildwinter/app-shell";
 import { applyTheme } from "./theme.js";
@@ -73,13 +74,14 @@ import {
 } from "./inspector.js";
 import { keepPlace } from "./keep-place.js";
 import { watchFocusReturn } from "./focus-return.js";
+import { centreHome, navFocusTarget } from "./pane-focus.js";
 import { listenMenuKey } from "./menu-key.js";
 import { createProjectSettings } from "./project-settings.js";
 import { setSettingsOpener } from "./solo-pointer.js";
 import { setPlayRung } from "./play-ladder.js";
-import { setCardChoices, setGameScopes, setPropertyNavigator } from "./expr-panels.js";
+import { setCardChoices, setGameScopes, setPropertyCreator, setPropertyNavigator } from "./expr-panels.js";
 import { askLeave, settleLeave } from "./server-dialog.js";
-import { flash, flashError, ok } from "./results.js";
+import { flash, flashError, ok, sentence } from "./results.js";
 import { INITIAL_STATE, remember } from "./session.js";
 import { createNavigation } from "./navigation.js";
 import { createSaveQueue } from "./save-queue.js";
@@ -538,6 +540,12 @@ function mountShell(): void {
         ...(state.panes.inspW !== undefined ? { inspector: state.panes.inspW } : {}),
       },
     },
+    // Cmd+1 (focusOrToggle, app-shell 0.71.0) lands on the navigator's current
+    // row, its one tab stop, rather than the pane's first control; and a closing
+    // navigator that held the focus gives it to the centre's working area when
+    // the place it came from has gone.
+    focusTarget: { nav: () => navFocusTarget(shell.nav) },
+    focusHome: () => centreHome(shell.centre),
     onChange: (s) => void studio.setPanes({
       nav: s.open.nav, inspector: false,
       ...(s.width.nav !== undefined ? { navW: s.width.nav } : {}),
@@ -858,6 +866,23 @@ function landOn(within: ParentNode, name: string): void {
   void revealRowWhenReady(within, name);
 }
 
+// The Changes picker's "+ New property" (expr-editor 0.18.0): declared as the
+// problems bar's Declare does it, through main and version control as one
+// undoable step, then taken into the open catalogue in place. A number from 0,
+// the type the bar's Declare falls back on: the name is all there is to read
+// one from, and the author goes straight on to the value, with the type a
+// click away on the Story page. A refusal ("already declared", a drifted file)
+// is said under the row in the picker rather than flashed.
+setPropertyCreator(async (name, scope) => {
+  const result = await studio.declareProperty(scope, name, "");
+  if ((result as { reread?: true }).reread === true) void lifecycle.refreshProject();
+  if ("error" in result) throw new Error(sentence(result.error));
+  applyResult(result);
+  const entry = { scope, name, type: "number" as const };
+  catalogues.adopt(entry);
+  return entry;
+});
+
 setPropertyNavigator({
   goToDefinition(ref) {
     // Any host scope (@world, @player, ...) is declared in Project Settings > Game scopes.
@@ -982,7 +1007,13 @@ async function boot(): Promise<void> {
   // focus given back to whatever opened a picker once it closes, or to a new
   // thing's title that was waiting for it.
   listenMenuKey();
-  watchFocusReturn({ claim: takeTitleFocus });
+  const focusWatch = watchFocusReturn({ claim: takeTitleFocus });
+  // After any dialog, when neither its returnFocus, its opener nor an ancestor
+  // can take the focus (app-shell 0.71.0): the opener found again by its look,
+  // if a redraw replaced it, else the centre's working area, so the focus never
+  // drops to <body>. Before a project is open there's no shell, and the shell's
+  // own order stands.
+  setDialogFocusFallback(() => focusWatch.opener() ?? (shell === undefined ? undefined : centreHome(shell.centre)));
   // Persist pending edits when leaving or closing the editor window (so the
   // Board reads current disk, and a close never drops the last keystrokes).
   window.addEventListener("blur", () => { if (session.project) void saves.flush(); });

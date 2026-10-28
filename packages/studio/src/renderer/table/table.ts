@@ -31,7 +31,7 @@ import "../tool-window/base.css";
 import "./table.css";
 import "@wildwinter/app-shell/tooltip.css";
 import "@wildwinter/app-shell/toast.css";
-import { el } from "@wildwinter/app-shell";
+import { el, firstFocusable, setDialogFocusFallback } from "@wildwinter/app-shell";
 import { bootToolWindow } from "../tool-window/boot.js";
 import { keepFocus } from "../tool-window/focus.js";
 import { createBoardState, effectiveView } from "./board-state.js";
@@ -166,6 +166,9 @@ async function boot(): Promise<void> {
   s.view = state.boardView;
   s.rememberedBox = state.boardBox;
   root.replaceChildren(head.el, content);
+  // After a dialog whose opener has gone and nothing nearer can take the focus,
+  // the Board's first control rather than <body> (app-shell 0.71.0).
+  setDialogFocusFallback(() => firstFocusable(content) ?? firstFocusable(head.el));
   // Live Link: a game may already be connected when the Board opens.
   s.liveStatus = await board.studio.liveLinkStatus();
   await build(board);

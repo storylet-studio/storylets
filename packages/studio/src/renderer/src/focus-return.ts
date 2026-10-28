@@ -59,11 +59,33 @@ export interface FocusReturnOptions {
   claim?: () => boolean;
 }
 
+/** The running watch: call it to stop watching. `opener()` is the opener of
+ *  the pickers open now, found again if a redraw replaced it, for the shell's
+ *  dialog to give the focus to as it closes (setDialogFocusFallback): the
+ *  dialog hands the focus back itself, before this watcher would. */
+export interface FocusReturnWatch {
+  (): void;
+  opener(): HTMLElement | undefined;
+}
+
+/**
+ * What a dialog should give the focus back to: what has it now, or, when a
+ * redraw has replaced that while the dialog was open, the redrawn one, found by
+ * its look (the shell dialog's `returnFocus`, app-shell 0.71.0). Call it as the
+ * dialog opens; the answer is asked for as it closes.
+ */
+export function returnToOpener(doc: Document = document): () => HTMLElement | undefined {
+  const active = doc.activeElement;
+  if (!(active instanceof HTMLElement) || active === doc.body) return () => undefined;
+  const at = locate(active, doc);
+  return () => (active.isConnected ? active : relocate(at, doc));
+}
+
 /**
  * Watch for pickers opening and closing, and give the focus back when one
  * closes. Returns the function that stops watching. Once, at start-up.
  */
-export function watchFocusReturn(opts: FocusReturnOptions = {}): () => void {
+export function watchFocusReturn(opts: FocusReturnOptions = {}): FocusReturnWatch {
   const doc = opts.doc ?? document;
   /** The last thing focused outside every picker, for a picker that moves the
    *  focus into itself as it opens (a deck picker focuses its last deck). */
@@ -107,8 +129,12 @@ export function watchFocusReturn(opts: FocusReturnOptions = {}): () => void {
     opener = undefined;
   });
   observer.observe(doc.body, { childList: true, subtree: true });
-  return () => {
+  const stop = (): void => {
     observer.disconnect();
     doc.removeEventListener("focusin", onFocusIn, true);
   };
+  return Object.assign(stop, {
+    opener: (): HTMLElement | undefined =>
+      opener === undefined ? undefined : opener.el.isConnected ? opener.el : relocate(opener.at, doc),
+  });
 }

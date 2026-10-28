@@ -46,3 +46,21 @@ export function keepFocus(within: HTMLElement, rebuild: () => void): void {
   const same = [...within.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => signature(e) === key!.sig);
   (same[key.nth] ?? same[same.length - 1])?.focus({ preventScroll: true });
 }
+
+/**
+ * What a dialog should give the focus back to when it closes (the shell
+ * dialog's `returnFocus`, app-shell 0.71.0): the control that has the focus as
+ * it opens, or, when a render has rebuilt that control while the dialog was
+ * up, its replacement, known the same way keepFocus knows it.
+ */
+export function focusReturn(within: ParentNode = document): () => HTMLElement | undefined {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || active === document.body) return () => undefined;
+  const sig = signature(active);
+  const nth = Math.max(0, [...within.querySelectorAll(FOCUSABLE)].filter((e) => signature(e) === sig).indexOf(active));
+  return () => {
+    if (active.isConnected) return active;
+    const same = [...within.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => signature(e) === sig);
+    return same[nth] ?? same[same.length - 1];
+  };
+}

@@ -182,3 +182,16 @@ describe("view extensions (patterkit design/view-extensions.md)", () => {
     expect(shape(submenu(await menuOn("win32"), "Window"))).toEqual(["role:minimize", "role:close"]);
   });
 });
+
+describe("View > Show Navigator (app-shell 0.71.0's focusOrToggle)", () => {
+  it("puts its own tick back on a press, since Cmd+1 on an open navigator only moves focus in", async () => {
+    const view = submenu(await menuOn("darwin"), "View");
+    const show = item(view, "Show Navigator")!;
+    expect(show.checked).toBe(true);
+    // Electron flips a checkbox before its click runs; the click restores what
+    // the menu was built with, and a real open or close rebuilds it via setPanes.
+    const menuItem = { checked: false } as Electron.MenuItem;
+    (show.click as (m: Electron.MenuItem) => void)(menuItem);
+    expect(menuItem.checked).toBe(true);
+  });
+});
