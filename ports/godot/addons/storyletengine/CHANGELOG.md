@@ -93,6 +93,10 @@ the same version number always means the same runtime behaviour.
 
 ### Fixed
 
+- **An exported game can `load()` an imported bundle again.** The export hook skipped the imported product and
+  its import remap, so in a build `load("res://story.storyletsc")` returned null and a scene holding the bundle as
+  a resource failed to load (the editor had both files, so only builds broke). It now ships a small stand-in that
+  reads the raw file, and the remap, so `load()` gives a `StoryletBundleResource` and the bundle ships once.
 - **A refitting load keeps "none chosen".** When a game loads the shared registry itself with refit on
   (`registry.load(blob, {"refit": true})`), as a game that also runs Patterplay may, a saved `""` on an enum whose own
   default is `""` (none chosen) now comes back as saved, instead of being reported as a misfit that never happened.

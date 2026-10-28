@@ -314,7 +314,8 @@ Nothing running needed. See
 With the plugin enabled there's nothing to configure, because the addon's export hook puts the raw
 `.storyletsc` into the exported build at its original path, so
 `FileAccess.get_file_as_string("res://story.storyletsc")` reads the same bytes in the editor
-and in the export, on every platform.
+and in the export, on every platform. `load("res://story.storyletsc")` works in the export too, and
+so does a scene that holds the bundle as a resource: the bundle still ships only once.
 
 If you run with the plugin disabled, Godot treats a `.storyletsc` as a non-resource file and
 leaves it out of the export. In that case add `*.storyletsc` to your export preset's

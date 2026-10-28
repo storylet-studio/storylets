@@ -10,13 +10,15 @@
 # Skips (exit 0) when Godot or its export templates are missing, so it can sit in a script that runs
 # anywhere; it is a MAINTAINER gate, not a CI one, until a runner has an engine on it.
 #
-# Two assertions, and the first is the one that would have caught #45 on any machine:
+# One note and two assertions:
 #
-#   1. The addon must NOT turn a bundle into an imported resource. `.storyletsc` is a plain file that
-#      games read with FileAccess; an importer changes how it ships and what `res://x.storyletsc`
-#      resolves to. If a .storyletsc.import appears, or ResourceLoader claims the path, that is the fault.
-#   2. With the documented export setting (`*.storyletsc` in "filters to export non-resource files"), an
-#      exported pack must contain the bundle and the game must play its first beat from it.
+#   1. Whether the addon imports the bundle (it does: a .storyletsc.import appears) is reported, not
+#      judged. The export plugin ships the raw bundle at its own path and, in place of the imported
+#      product, a small stand-in resource and the import remap that read that same file, so the bundle
+#      ships once and both routes below work.
+#   2. An exported pack must contain the bundle, and the game must play its first beat from it.
+#   3. In that pack, `load("res://game.storyletsc")` must give a StoryletBundleResource whose json_text is
+#      the raw file. skip() alone dropped the remap, so load() returned null in every build (expr 1eee7cd).
 #
 # The pack is run from a directory with NO project.godot above it. Getting that wrong makes the test
 # read the source tree instead of the pack, which is how three of my earlier results said "fine" about
@@ -75,6 +77,14 @@ func _ready() -> void:
 		print("EXPORT CHECK: FAIL - the exported build cannot read ", path)
 		get_tree().quit(1)
 		return
+	# The imported route, which a scene holding the bundle as a Resource takes: the stand-in the
+	# export plugin ships must load, and read the same bytes.
+	var res = load(path)
+	if not (res is StoryletBundleResource) or res.json_text != text:
+		print("EXPORT CHECK: FAIL - load() in the exported build gave ", res, " not the bundle resource")
+		get_tree().quit(1)
+		return
+	print("EXPORT CHECK: LOADED the bundle resource, json_text chars=", res.json_text.length())
 	var loaded := StoryletBundle.load_from_string(text)
 	if not loaded["ok"]:
 		print("EXPORT CHECK: FAIL - the bundle did not parse: ", loaded["error"])
@@ -152,7 +162,7 @@ fi
 echo "EXPORT CHECK: pack size $(du -h "$proj/build/check.pck" | cut -f1), bundle $(du -h "$proj/game.storyletsc" | cut -f1)"
 cp "$proj/build/check.pck" "$run/check.pck"
 out="$("$godot" --headless --main-pack "$run/check.pck" 2>&1 || true)"
-echo "$out" | grep -E "EXPORT CHECK: FileAccess" || true
+echo "$out" | grep -E "EXPORT CHECK: (FileAccess|LOADED)" || true
 if echo "$out" | grep -q "EXPORT CHECK: PLAYED"; then
   echo "$out" | grep "EXPORT CHECK: PLAYED"
 else
