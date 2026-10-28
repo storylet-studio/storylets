@@ -99,9 +99,14 @@ export function planCardPositions(
  * recorded, so "reset" on an untouched canvas is not a write.
  */
 export function planForgetCanvas(dir: string, box: SourceBox, deckId: string): PlannedWrite | undefined {
-  if (box.view?.canvases?.[deckId] === undefined) return undefined;
-  const canvases = { ...box.view.canvases };
-  delete canvases[deckId];
+  const before = box.view?.canvases?.[deckId];
+  if (before === undefined) return undefined;
+  const canvases = { ...box.view!.canvases };
+  // The deck's stored colour is not arrangement to reset: it stays.
+  if (before.colour !== undefined) {
+    if (Object.keys(before).length === 1) return undefined;
+    canvases[deckId] = { colour: before.colour };
+  } else delete canvases[deckId];
   const shard: ViewShard = { ...box.view, schema: VIEW_SCHEMA, canvases };
   if (Object.keys(canvases).length === 0) delete shard.canvases;
   return { path: viewPath(dir, box), content: canonicalStringify(shard) };
@@ -189,5 +194,34 @@ export function planBoxColour(dir: string, box: SourceBox, colour: number | unde
   if (box.view?.colour === colour) return undefined;
   const shard: ViewShard = { ...box.view, schema: VIEW_SCHEMA };
   if (colour === undefined) delete shard.colour; else shard.colour = colour;
+  return { path: viewPath(dir, box), content: canonicalStringify(shard) };
+}
+
+// --- a deck's colour ---------------------------------------------------------------
+//
+// A deck is coloured by a hash of its title until it is renamed; the rename
+// stores the old title's slot here (model `DeckCanvas.colour`), so the deck keeps
+// its colour. Editor-only, beside the deck's canvas, never compiled.
+
+/** The colour stored for a deck, or undefined when it has none (its title's hash
+ *  colours it). Anything that is not a whole number in the palette's range reads
+ *  as none. */
+export function deckColourOf(box: SourceBox, deckId: string, paletteSize = 12): number | undefined {
+  const c = box.view?.canvases?.[deckId]?.colour;
+  return typeof c === "number" && Number.isInteger(c) && c >= 0 && c < paletteSize ? c : undefined;
+}
+
+/** Plan the write that stores a deck's colour (or forgets it, for undefined).
+ *  Merges into the sidecar like every other write here; undefined when nothing
+ *  would change. */
+export function planDeckColour(dir: string, box: SourceBox, deckId: string, colour: number | undefined): PlannedWrite | undefined {
+  const before = box.view?.canvases?.[deckId];
+  if (before?.colour === colour) return undefined;
+  const canvas: DeckCanvas = { ...before };
+  if (colour === undefined) delete canvas.colour; else canvas.colour = colour;
+  const canvases = { ...box.view?.canvases };
+  if (Object.keys(canvas).length === 0) delete canvases[deckId]; else canvases[deckId] = canvas;
+  const shard: ViewShard = { ...box.view, schema: VIEW_SCHEMA, canvases };
+  if (Object.keys(canvases).length === 0) delete shard.canvases;
   return { path: viewPath(dir, box), content: canonicalStringify(shard) };
 }

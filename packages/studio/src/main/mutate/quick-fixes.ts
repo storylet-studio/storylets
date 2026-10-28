@@ -33,14 +33,17 @@ import { boxWrite, deckWrite, gone, groupHome, handsWrite, locate, mapGroupHome,
  */
 export async function declareProperty(
   session: ProjectSession, scope: string, name: string, owner: string,
-  guess?: { type: PropertyDecl["type"]; default: ScalarValue },
+  guess?: { type: PropertyDecl["type"]; default?: ScalarValue },
 ): Promise<Written> {
   const source = session.loaded.source;
   if (!source) return { error: "no project open" };
   // The type read off the value being written, where the compiler could read
   // it; a number defaulting to 0 where it could not, which is the old guess.
+  // A type with no default (the Changes picker's new property, whose author
+  // chose the type and nothing else) takes the type's own, as any
+  // declaration with none does.
   const decl: PropertyDecl = guess !== undefined
-    ? { name, type: guess.type, default: guess.default }
+    ? { name, type: guess.type, ...(guess.default !== undefined ? { default: guess.default } : {}) }
     : { name, type: "number", default: 0 };
 
   if (scope === "story") {

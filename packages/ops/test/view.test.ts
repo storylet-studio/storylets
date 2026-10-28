@@ -24,7 +24,7 @@ import type { Comment, NotesShard, ViewPoint, ViewShard } from "@storylet-studio
 import { parseSource } from "@storylet-studio/compiler";
 import { planComments } from "../src/comments.js";
 import type { PlannedWrite } from "../src/write.js";
-import { boxColourOf, canvasFurniture, cardPositions, planBoxColour, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "../src/view.js";
+import { boxColourOf, canvasFurniture, cardPositions, deckColourOf, planBoxColour, planCanvasFurniture, planCardPositions, planDeckColour, planForgetCanvas, viewPath } from "../src/view.js";
 
 const box = (view?: ViewShard): SourceBox => ({
   path: "village",
@@ -174,6 +174,13 @@ describe("forgetting an arrangement", () => {
   it("plans no write when there was nothing to forget", () => {
     expect(planForgetCanvas("/p", box(), "k_arrival")).toBeUndefined();
   });
+
+  it("keeps the deck's stored colour, which is not arrangement", () => {
+    const view: ViewShard = { schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 5, cards: { c_gate: { x: 1, y: 1 } } } } };
+    expect(written(planForgetCanvas("/p", box(view), "k_arrival")).canvases).toEqual({ k_arrival: { colour: 5 } });
+    // A canvas holding nothing but the colour has nothing to forget.
+    expect(planForgetCanvas("/p", box({ schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 5 } } }), "k_arrival")).toBeUndefined();
+  });
 });
 
 describe("the sidecar never reaches the bundle", () => {
@@ -232,6 +239,37 @@ describe("the sidecar never reaches the bundle", () => {
     };
     const plain = compileProject(withMap(box()));
     const coloured = compileProject(withMap(box({ schema: VIEW_SCHEMA, colour: 7 })));
+    expect(coloured.issues).toEqual(plain.issues);
+    expect(JSON.stringify(coloured.bundle)).toBe(JSON.stringify(plain.bundle));
+  });
+});
+
+describe("a deck's colour", () => {
+  it("reads a stored slot, and nothing that is not one", () => {
+    expect(deckColourOf(box(), "k_arrival")).toBeUndefined();
+    expect(deckColourOf(box({ schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 9 } } }), "k_arrival")).toBe(9);
+    expect(deckColourOf(box({ schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 12 } } }), "k_arrival")).toBeUndefined();
+    expect(deckColourOf(box({ schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 9 } } }), "k_other")).toBeUndefined();
+  });
+
+  it("is written on the deck's canvas, beside its cards and the box's colour, which survive it", () => {
+    const view: ViewShard = { schema: VIEW_SCHEMA, colour: 2, canvases: { k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } } };
+    const shard = written(planDeckColour("/p", box(view), "k_arrival", 7));
+    expect(shard.canvases?.["k_arrival"]).toEqual({ colour: 7, cards: { c_gate: { x: 1, y: 2 } } });
+    expect(shard.colour).toBe(2);
+    // A box with no sidecar yet gets one holding just the colour.
+    expect(written(planDeckColour("/p", box(), "k_arrival", 7))).toEqual({ schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 7 } } });
+  });
+
+  it("plans no write for the colour it already has, and forgets one on undefined, leaving no husk", () => {
+    const coloured = box({ schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 7 } } });
+    expect(planDeckColour("/p", coloured, "k_arrival", 7)).toBeUndefined();
+    expect(written(planDeckColour("/p", coloured, "k_arrival", undefined))).toEqual({ schema: VIEW_SCHEMA });
+  });
+
+  it("never reaches the bundle", () => {
+    const plain = compileProject(project(box()));
+    const coloured = compileProject(project(box({ schema: VIEW_SCHEMA, canvases: { k_arrival: { colour: 7 } } })));
     expect(coloured.issues).toEqual(plain.issues);
     expect(JSON.stringify(coloured.bundle)).toBe(JSON.stringify(plain.bundle));
   });

@@ -1680,6 +1680,14 @@ export type FurnitureColour = typeof FURNITURE_COLOURS[number];
 export interface DeckCanvas extends CanvasFurniture {
   /** Keyed by CARD id. */
   cards?: Record<string, ViewPoint>;
+  /** The deck's colour: its stripe on a node canvas and its chip on a card
+   *  face. A slot of the 12-colour identity palette (0-11), as a box's
+   *  `ViewShard.colour` is. Absent, the colour is a hash of the deck's title,
+   *  which is every deck until it is first renamed: the rename stores the
+   *  colour the old title had, so the deck keeps it (Ian's ruling,
+   *  2026-10-28). Editor-only, like everything in this shard: it never
+   *  reaches the bundle. */
+  colour?: number;
 }
 
 /** The box's map: where its hands stand on the PROJECT map, and nothing else.

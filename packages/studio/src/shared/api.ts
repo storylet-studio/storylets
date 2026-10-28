@@ -435,6 +435,10 @@ export interface DeckDto {
   /** Every `never` card in this pile is spent past the end of the run unless
    *  the card says otherwise (design/engine-server.md 4.2). */
   durable?: boolean;
+  /** The deck's stored colour, a palette slot (model `DeckCanvas.colour`),
+   *  once it has one: a deck's first rename stores the slot its old title
+   *  hashed to, so it keeps its colour. Absent, the title's hash colours it. */
+  colour?: number;
   /** @deck state declarations. */
   properties: PropertyDeclDto[];
   cards: CardDto[];
@@ -1195,6 +1199,8 @@ export interface LinkCard {
   deck: string;
   /** The deck's display title, for the card's face. */
   deckTitle: string;
+  /** The deck's stored colour (DeckDto `colour`), when it has one. */
+  deckColour?: number;
   box: string;
 }
 
@@ -2116,8 +2122,10 @@ export interface StudioApi {
   // The problems bar's quick-fixes. Ordinary undoable mutations that return the
   // fresh project, so the bar re-validates like any other edit.
   /** `guess` is the type read off the value being written, where the compiler
-   *  could read it; without it the declaration falls back to a number. */
-  declareProperty(scope: string, name: string, owner: string, guess?: { type: PropertyType; default: ScalarValue }): Promise<OpenResult | { error: string }>;
+   *  could read it, or the type the author chose (the Changes picker's new
+   *  property), with no default: the type's own holds. Without it the
+   *  declaration falls back to a number from 0. */
+  declareProperty(scope: string, name: string, owner: string, guess?: { type: PropertyType; default?: ScalarValue }): Promise<OpenResult | { error: string }>;
   repointTag(holder: string, group: string, from: string, to: string): Promise<OpenResult | { error: string }>;
   /** Put a quality field's value on a stage of its ladder (the pick-stage quick fix);
    *  `outcome` is null for a card field. */

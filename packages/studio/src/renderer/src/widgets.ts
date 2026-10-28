@@ -14,15 +14,16 @@ import { colourIndex } from "../../shell/colour.js";
 import { boxColour } from "./box-tint.js";
 import type { BoxDto } from "../../shared/api.js";
 
-/** A tag's colour, as the dot every chip of it leads with. */
-export function chipDot(name: string): HTMLElement {
+/** A tag's colour, as the dot every chip of it leads with. `stored` is a slot
+ *  the name keeps whatever it's called (a renamed deck's), over the hash. */
+export function chipDot(name: string, stored?: number): HTMLElement {
   const dot = el("i");
-  dot.style.background = `var(--char-${colourIndex(name)})`;
+  dot.style.background = `var(--char-${colourIndex(name, stored)})`;
   return dot;
 }
 
 /** A tag (or any name with a colour) as a pill. */
-export const chip = (name: string): HTMLElement => el("span", { className: "pill" }, chipDot(name), name);
+export const chip = (name: string, stored?: number): HTMLElement => el("span", { className: "pill" }, chipDot(name, stored), name);
 
 /** A box as a pill, tinted the way its sites are on the map. */
 export function boxChip(b: Pick<BoxDto, "id" | "gameId" | "title">): HTMLElement {

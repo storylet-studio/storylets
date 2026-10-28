@@ -87,10 +87,12 @@ function resolveColour(value: string): string {
 /** A name's identity colour, resolved. The SAME hash the identity dots in the
  *  nav and the inspector use (app-shell's `colourIndex`), so a deck is the same
  *  colour on a canvas as it is in the list the canvas was opened from. Never
- *  hash it again locally: two hashes would drift the moment one changed. */
-export function charColour(tokens: CanvasTokens, name: string): string {
+ *  hash it again locally: two hashes would drift the moment one changed.
+ *  `stored` is a slot the name keeps whatever it's called (a renamed deck's,
+ *  DeckDto `colour`), which wins over the hash. */
+export function charColour(tokens: CanvasTokens, name: string, stored?: number): string {
   const ramp = tokens.chars;
-  return ramp[colourIndex(name) % ramp.length] ?? tokens.accent;
+  return ramp[colourIndex(name, stored) % ramp.length] ?? tokens.accent;
 }
 
 /** A token colour at partial alpha. Tokens are hex or rgb(); Konva takes rgba. */

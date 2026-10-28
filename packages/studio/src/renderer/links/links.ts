@@ -159,6 +159,7 @@ function mountCanvas(host: HTMLElement, strip: HTMLElement, first: FocusedView):
       id: card.id,
       title: nameOf(card),
       deck: card.deckTitle, showDeck: true, // the Links canvas mixes decks, so each card names its own
+      ...(card.deckColour !== undefined ? { deckColour: card.deckColour } : {}),
       x: 0, y: 0, width: NODE_W, height: NODE_H, cornerRadius: NODE_RADIUS,
       ...(emphasis ? { emphasis: true } : {}),
     });

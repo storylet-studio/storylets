@@ -80,8 +80,9 @@ import { createProjectSettings } from "./project-settings.js";
 import { setSettingsOpener } from "./solo-pointer.js";
 import { setPlayRung } from "./play-ladder.js";
 import { setCardChoices, setGameScopes, setPropertyCreator, setPropertyNavigator } from "./expr-panels.js";
+import { newPropertyCreator } from "./new-property.js";
 import { askLeave, settleLeave } from "./server-dialog.js";
-import { flash, flashError, ok, sentence } from "./results.js";
+import { flash, flashError, ok } from "./results.js";
 import { INITIAL_STATE, remember } from "./session.js";
 import { createNavigation } from "./navigation.js";
 import { createSaveQueue } from "./save-queue.js";
@@ -866,22 +867,18 @@ function landOn(within: ParentNode, name: string): void {
   void revealRowWhenReady(within, name);
 }
 
-// The Changes picker's "+ New property" (expr-editor 0.18.0): declared as the
-// problems bar's Declare does it, through main and version control as one
-// undoable step, then taken into the open catalogue in place. A number from 0,
-// the type the bar's Declare falls back on: the name is all there is to read
-// one from, and the author goes straight on to the value, with the type a
-// click away on the Story page. A refusal ("already declared", a drifted file)
-// is said under the row in the picker rather than flashed.
-setPropertyCreator(async (name, scope) => {
-  const result = await studio.declareProperty(scope, name, "");
-  if ((result as { reread?: true }).reread === true) void lifecycle.refreshProject();
-  if ("error" in result) throw new Error(sentence(result.error));
-  applyResult(result);
-  const entry = { scope, name, type: "number" as const };
-  catalogues.adopt(entry);
-  return entry;
-});
+// The Changes picker's "+ New property" (expr-editor 0.18.0): asks the kind of
+// value it holds, as Patterpad does (new-property.ts), then declares it as the
+// problems bar's Declare does, through main and version control as one undoable
+// step, and takes it into the open catalogue in place. Backing out of the
+// question writes nothing. A refusal ("already declared", a drifted file) is
+// said under the row in the picker rather than flashed.
+setPropertyCreator(newPropertyCreator({
+  declare: (scope, name, guess) => studio.declareProperty(scope, name, "", guess),
+  reread: () => void lifecycle.refreshProject(),
+  apply: (result) => applyResult(result),
+  adopt: (entry) => catalogues.adopt(entry),
+}));
 
 setPropertyNavigator({
   goToDefinition(ref) {

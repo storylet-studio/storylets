@@ -177,6 +177,29 @@ describe("a card face following the zoom", () => {
   });
 });
 
+describe("a deck's stripe keeps its colour when the deck is renamed", () => {
+  // Ian's ruling, 2026-10-28: a deck's first rename stores the slot its old
+  // title hashed to (DeckDto `colour`), and that wins over the new title's hash.
+  const ramp = Array.from({ length: 12 }, (_, i) => `#c${i}`);
+  const tokens = { card: "#fff", line: "#ccc", ink: "#000", muted: "#888", chars: ramp, fontRead: "serif", fontMono: "mono" } as unknown as CanvasTokens;
+  const stripeFill = async (deck: string, deckColour?: number): Promise<string> => {
+    const { drawCardNode, TITLE_FLOOR } = await import("./node-art.js");
+    const group = drawCardNode({
+      id: "c", title: "T", deck, ...(deckColour !== undefined ? { deckColour } : {}), x: 0, y: 0, width: NODE_W, height: NODE_H,
+    }, { tokens, scale: TITLE_FLOOR / 2 });
+    return (group.find("Rect").find((r) => r.height() === NODE_H && r.width() < NODE_W) as Konva.Rect).fill() as string;
+  };
+
+  it("draws a renamed deck in its old title's colour, and an unrenamed one in its title's", async () => {
+    const { hashColour } = await import("@wildwinter/app-shell");
+    const old = "Docks";
+    const renamed = ["Harbour", "Waterfront", "Quays", "Wharf"].find((n) => hashColour(n) !== hashColour(old))!;
+    expect(await stripeFill(old)).toBe(ramp[hashColour(old)]);
+    expect(await stripeFill(renamed, hashColour(old))).toBe(ramp[hashColour(old)]);
+    expect(await stripeFill(renamed)).toBe(ramp[hashColour(renamed)]);
+  });
+});
+
 describe("Arrange's gaps", () => {
   it("make every step a whole number of grid squares, so an arrangement is on the grid", async () => {
     const { ARRANGE_GAP } = await import("./node-art.js");

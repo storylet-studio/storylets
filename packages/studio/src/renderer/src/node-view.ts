@@ -149,6 +149,7 @@ export function mountNodeView(
     id: c.id,
     title: c.title ?? c.gameId,
     deck: deckTitle,
+    ...(deck.colour !== undefined ? { deckColour: deck.colour } : {}),
   })), graph.positions);
   /** Re-read the coverage reading onto the faces. Called on every repaint rather
    *  than baked in at mount, because the overlay is a mode that can come and go

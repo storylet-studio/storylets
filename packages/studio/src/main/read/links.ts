@@ -4,7 +4,7 @@
 // analyser predicts (design/graphical-views.md 4).
 // ---------------------------------------------------------------------------
 
-import { cardNeighbourhood } from "@storylet-studio/ops";
+import { cardNeighbourhood, deckColourOf } from "@storylet-studio/ops";
 import type { CoverageReport, InfluenceEdge } from "@storylet-studio/ops";
 import { effectiveGameId } from "@storylet-studio/model";
 import { linkReasons } from "../link-graph.js";
@@ -35,14 +35,21 @@ export function linksFor(
   if (!source) return base;
   // Deck titles for the faces: the analyser reports a deck's internal id, and
   // the canvas draws titles (never ids or gameIds).
+  // And each deck's stored colour, where it has one (a renamed deck keeps its own).
   const deckTitles = new Map<string, string>();
+  const deckColours = new Map<string, number>();
   for (const box of source.boxes) {
     for (const deck of box.decks) {
       deckTitles.set(deck.shard.deck.id, deck.shard.deck.title ?? deck.shard.deck.gameId ?? deck.shard.deck.id);
+      const colour = deckColourOf(box, deck.shard.deck.id);
+      if (colour !== undefined) deckColours.set(deck.shard.deck.id, colour);
     }
   }
-  const withDeck = (card: CardRef | undefined): LinksView["card"] =>
-    card === undefined ? undefined : { ...card, deckTitle: deckTitles.get(card.deck) ?? card.deck };
+  const withDeck = (card: CardRef | undefined): LinksView["card"] => {
+    if (card === undefined) return undefined;
+    const colour = deckColours.get(card.deck);
+    return { ...card, deckTitle: deckTitles.get(card.deck) ?? card.deck, ...(colour !== undefined ? { deckColour: colour } : {}) };
+  };
 
   const n = cardNeighbourhood(source, which);
   const asNeighbour = (x: { edge: InfluenceEdge; node: CardRef | undefined }): LinksView["predecessors"][number] => ({

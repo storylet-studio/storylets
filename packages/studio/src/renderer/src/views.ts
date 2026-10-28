@@ -577,7 +577,9 @@ function wireCardGestures(el: HTMLElement, cardId: string, gestures: CardGesture
 /** What a grouped view adds to a face: the other headings it is also under,
  *  the deck it lives in (a box's Contents mixes decks), and whether it can be
  *  dragged (only an ungrouped deck, whose order IS the deck's). */
-interface FaceExtras { also?: string[]; deck?: string; drag?: boolean }
+/** `deck` names the card's deck on the face, in `deckColour` when the deck
+ *  has one stored (a renamed deck keeps its colour). */
+interface FaceExtras { also?: string[]; deck?: string; deckColour?: number; drag?: boolean }
 
 function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boolean, gestures: CardGestures, onContext: (e: MouseEvent) => void, extras: FaceExtras = {}): HTMLElement {
   // Title, then the eligibility condition (when this card fires), then the
@@ -612,7 +614,7 @@ function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boole
   // anchor it says nothing. The card page shows the outcomes themselves.
   if (card.tags.length > 0 || extras.deck !== undefined) {
     const chips = el("div", { className: "chips" });
-    if (extras.deck !== undefined) chips.append(chip(extras.deck));
+    if (extras.deck !== undefined) chips.append(chip(extras.deck, extras.deckColour));
     for (const m of card.tags) for (const v of m.values) chips.append(chip(v));
     face.append(chips);
   }
@@ -805,7 +807,7 @@ function groupedCards(box: BoxDto, groups: CardGroup[], o: GroupedOptions): HTML
       const others = also(e.card.id, g.key);
       const face = cardFace(e.card, o.catalogue(e.deck.id), o.selectedCards.has(e.card.id), o.gestures(e), o.menu(e), {
         ...(others.length > 0 ? { also: others } : {}),
-        ...(o.showDeck === true ? { deck: e.deck.title ?? e.deck.gameId } : {}),
+        ...(o.showDeck === true ? { deck: e.deck.title ?? e.deck.gameId, ...(e.deck.colour !== undefined ? { deckColour: e.deck.colour } : {}) } : {}),
         drag: o.move !== undefined,
       });
       if (o.move) wireDrop(face, e.card.id, "x", o.move);

@@ -5,10 +5,12 @@
 
 import { join } from "node:path";
 import { canonicalStringify } from "@storylet-studio/compiler";
-import { boxFolderWrites, newId, runNewBox } from "@storylet-studio/ops";
+import { boxFolderWrites, deckColourOf, newId, planDeckColour, runNewBox } from "@storylet-studio/ops";
 import { DECK_SCHEMA, PLACE_GROUP, effectiveGameId, freeGameId, freeTitle, gameIdify, isValidGameId } from "@storylet-studio/model";
 import type { BoxShard, DeckShard, HandsShard, ScalarValue, Tag, TagGroup, TagsShard } from "@storylet-studio/model";
 import { plural } from "@wildwinter/app-shell/util";
+// The palette hash itself, so the slot stored is the one the renderer showed.
+import { hashColour } from "@wildwinter/app-shell";
 import type { FileState } from "../history.js";
 import type { ProjectSession } from "../project.js";
 import { coerceDefault, declFromDto, declsFromDtos, fieldDeclFromDto } from "../decls.js";
@@ -259,6 +261,8 @@ export async function renameDeck(session: ProjectSession, deckId: string, edit: 
   const deck = found.deck.shard.deck;
   const oldPath = join(session.loaded.dir, found.deck.path);
   const oldEffective = effectiveGameId(deck);
+  // The name the deck's colour is hashed from (the renderer's `title ?? gameId`).
+  const oldName = deck.title ?? oldEffective;
   applyIdentity(deck, edit);
   if (edit.gate !== undefined) {
     if (blank(edit.gate)) delete deck.condition;
@@ -285,6 +289,14 @@ export async function renameDeck(session: ProjectSession, deckId: string, edit: 
   const writes: FileState[] = moved
     ? [{ path: target.path, content }, { path: oldPath, content: null }]
     : [{ path: oldPath, content }];
+  // A deck keeps its colour when renamed (Ian's ruling, 2026-10-28): one with
+  // none stored is coloured by its name's hash, so the first rename stores the
+  // OLD name's slot in the box's view sidecar, in this same undo step. A deck
+  // never renamed has nothing stored.
+  if ((deck.title ?? newEffective) !== oldName && deckColourOf(found.box, deckId) === undefined) {
+    const stamp = planDeckColour(session.loaded.dir, found.box, deckId, hashColour(oldName));
+    if (stamp !== undefined) writes.push({ path: stamp.path, content: stamp.content });
+  }
   return commit(session, "Rename deck", `rename:${deckId}`, writes);
 }
 

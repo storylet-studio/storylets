@@ -7,7 +7,7 @@
 
 import { plannedColours } from "./box-colours.js";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { boxColourOf, contractNotes, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
+import { boxColourOf, contractNotes, deckColourOf, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { planProject } from "@patterkit/core";
 import { planCardScene } from "./patter-scene.js";
@@ -275,6 +275,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         ...(!blank(d.shard.deck.condition) ? { gate: d.shard.deck.condition } : {}),
         ...(d.shard.deck.shared !== undefined ? { shared: d.shard.deck.shared } : {}),
         ...(d.shard.deck.durable !== undefined ? { durable: d.shard.deck.durable } : {}),
+        ...(() => { const c = deckColourOf(box, d.shard.deck.id); return c !== undefined ? { colour: c } : {}; })(),
         properties: (d.shard.deck.properties ?? []).map(declDto),
         // Display order: the authored `order` field, id position as the fallback
         // (storage is id-sorted). A stable sort keeps ties in id order.

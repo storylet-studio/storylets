@@ -51,7 +51,7 @@ export interface GroupOption {
 /** A card with the deck it lives in: the box page shows several decks' cards. */
 export interface GroupEntry {
   card: CardDto;
-  deck: Pick<DeckDto, "id" | "gameId" | "title">;
+  deck: Pick<DeckDto, "id" | "gameId" | "title" | "colour">;
 }
 
 export interface CardGroup {

@@ -13,8 +13,10 @@ here is part of shipping, not a courtesy.
 ### Added
 
 - **Make a property from Changes.** In an outcome's Changes, "+ set property" takes a name no property has yet and
-  offers + New property "gold" in story. Choosing it declares the Story property (a number from 0, with one Undo)
-  and goes straight on to its value, so you don't have to leave the card for the Story page first.
+  offers + New property "gold" in story. Choosing it asks what kind of value it holds, as Patterpad does: Number
+  (the default), Text, or True or false. It then declares the Story property as that kind, with one Undo, and goes
+  straight on to its value, so you don't have to leave the card for the Story page first. Cancel adds nothing;
+  lists, flags, and qualities are made on the Story page.
 - **Change by.** Setting a number property in an outcome's Changes now offers ＋ add or － take away and a
   "by" field, so adding 1 to reputation is a few clicks instead of building `reputation + 1` term by term. The
   Set it to row still sets a plain number, and says why when it's given something else.
@@ -47,6 +49,9 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **A deck keeps its colour when renamed.** A deck's stripe on the node canvas and its chip on a card face used to
+  change colour with its title. Now the first rename keeps the colour the deck had, saved with the deck's layout
+  (never in the bundle), and undoing the rename undoes that too. Tags and zones are still coloured by their names.
 - **Cmd+1 moves into the navigator.** On an open navigator, Cmd+1 (View ▸ Show Navigator) now puts the keyboard on
   its current row, and closes it only when you're already in it, handing the keyboard back to where it was. The
   toggle button in the top bar still just opens and closes it.

@@ -32,6 +32,9 @@ export interface CardNode extends CanvasItem {
   title: string;
   /** The DECK's title, not its gameId. */
   deck: string;
+  /** The deck's stored colour (DeckDto `colour`), which wins over its title's
+   *  hash: a renamed deck keeps the colour it had. */
+  deckColour?: number;
   /** Name the deck in the card's foot: on a canvas that holds more than one deck (Links). A deck's own
    *  canvas leaves it off, since every card would repeat the heading above it. */
   showDeck?: boolean;
@@ -136,7 +139,7 @@ export function drawCardNode(item: CardNode, ctx: DrawContext): Konva.Group {
   const stripe = new Konva.Group({
     clipFunc: (c) => { c.beginPath(); c.roundRect(0, 0, item.width, item.height, NODE_RADIUS); },
   });
-  const stripeRect = new Konva.Rect({ height: item.height, fill: charColour(tokens, item.deck) });
+  const stripeRect = new Konva.Rect({ height: item.height, fill: charColour(tokens, item.deck, item.deckColour) });
   fits.push((s) => stripeRect.width(Math.max(STRIPE_PX, STRIPE_PX / s)));
   stripe.add(stripeRect);
   group.add(stripe);
