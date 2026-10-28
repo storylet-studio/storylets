@@ -54,6 +54,10 @@ export default {
       {
         "label": "GitHub",
         "href": "https://github.com/storylet-studio/storylets"
+      },
+      {
+        "label": "Contact",
+        "href": "contact/"
       }
     ]
   },
