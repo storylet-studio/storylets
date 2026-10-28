@@ -93,6 +93,9 @@ export function problemNames(p: Problem, boxes: Boxes): ProblemNames | undefined
     return { where: boxName, ...(group ? { title: group.gameId } : p.where ? { title: p.where } : {}) };
   }
   if (p.path.endsWith(".storyletbox")) return { title: boxName };
+  // The compiler's own address for the box's declaration (`<folder>/box`: its turn, its map use, its
+  // Card template's fields). Unnamed, the sentence read "A card field on This has no name".
+  if (p.path.endsWith("/box")) return { title: boxName };
   // The box's map shard (compile.ts W2 and W3): the box is what it is about.
   if (p.path.endsWith("/map")) return { title: boxName };
   return undefined;
@@ -169,6 +172,8 @@ export function problemTarget(p: Problem, boxes: Boxes): ProblemTarget | undefin
     return { kind: "boxTab", box: box.id, tab: "tags" };
   }
   if (p.path.endsWith(".storyletbox")) return { kind: "boxTemplate", box: box.id };
+  // A Card template field's problem goes where the fields are; the box's turn and map use stay on the box.
+  if (p.path.endsWith("/box") && (p.field === "fields" || p.field === "outcomeFields")) return { kind: "boxTemplate", box: box.id };
   if (p.path.endsWith(".storyletproj")) return { kind: "settings" };
   // A Storylet extension's data or manifest: the node the message names (`entries.card.c_7k2: ...`), on the
   // page where its values are drawn; the project's own values and the manifest are in Settings.

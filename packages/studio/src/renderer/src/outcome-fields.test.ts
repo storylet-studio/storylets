@@ -52,13 +52,18 @@ describe("the box's Card template tab", () => {
     expect(centre.textContent).toContain("The fields every outcome in this box can carry.");
   });
 
-  it("offers a + Field for each list, and the outcome one saves outcomeFields", () => {
+  it("offers a + Field for each list, and the outcome one saves outcomeFields once the field is named", () => {
     const saveBox = vi.fn();
     const centre = document.createElement("div");
     renderBoxTabBody(centre, declaring([{ name: "after", type: "string", default: "" }]), "template", host({ saveBox }));
     const adds = [...centre.querySelectorAll("button")].filter((b) => b.textContent === "+ Field");
     expect(adds).toHaveLength(2);
     adds[1]!.click();
+    // Saved with no name it raised "has no name" before one could be typed (the hands-on review, 2026-10).
+    expect(saveBox).not.toHaveBeenCalled();
+    const name = [...centre.querySelectorAll<HTMLInputElement>("input.set-name")].find((i) => i.value === "")!;
+    name.value = "mood";
+    name.dispatchEvent(new Event("input", { bubbles: true }));
     expect(saveBox).toHaveBeenCalledTimes(1);
     const [id, edit] = saveBox.mock.calls[0]!;
     expect(id).toBe("b_1");

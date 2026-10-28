@@ -83,6 +83,9 @@ here is part of shipping, not a courtesy.
 
 ### Fixed
 
+- **A new Card template field waits for its name.** "+ Field" no longer puts "A card field on This has no name"
+  in the problem bar before you can type one: the field is saved once it has a name. A box-level problem names
+  the box instead of "This", and Go to issue opens the Card template for a field's problem.
 - **An edit never overwrites a file changed outside Storyletter.** A deck, box or settings file changed on disk since
   Storyletter read it (a synced folder, a pull, another window) used to be written over from memory, losing the
   other change. Storyletter now checks first: it leaves the file alone, shows it as it now is, and says so.

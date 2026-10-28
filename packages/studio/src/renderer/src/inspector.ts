@@ -1000,6 +1000,25 @@ function propList(
 
 /** A declaration list as a tab's whole panel, which reads as empty (a single
  *  quiet line) while it has nothing in it. */
+/** A template field with a name. "+ Field" adds a row with none, and saving it
+ *  as it stood put "A card field has no name" in the problem bar before a name
+ *  could be typed (the hands-on review, 2026-10); it is saved once it is named. */
+const named = (d: { name: string }): boolean => d.name.trim() !== "";
+
+/** Save a template's field list without its unnamed rows, and only when that
+ *  changes what is saved, so "+ Field" alone writes nothing (and leaves no
+ *  empty Undo step). */
+function saveNamed(decls: FieldDeclDto[], save: (named: FieldDeclDto[]) => void): () => void {
+  let last = JSON.stringify(decls.filter(named));
+  return () => {
+    const now = decls.filter(named);
+    const text = JSON.stringify(now);
+    if (text === last) return;
+    last = text;
+    save(now);
+  };
+}
+
 function propPanel(decls: PropertyDeclDto[], onChange: () => void, addLabel: string, opts: Parameters<typeof propList>[3] = {}): HTMLElement {
   return el("div", { className: `doc-panel${decls.length === 0 ? " empty" : ""}` }, propList(decls, onChange, addLabel, opts));
 }
@@ -1773,7 +1792,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // It has one now that a second list shares the page: an unlabelled list
     // above a labelled one reads as the labelled one's preamble.
     view.append(sectHead("Card fields"),
-      propPanel(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false, fieldTypes: true,
+      propPanel(fields, saveNamed(fields, (named) => h.saveBox(box.id, { fields: named })), "+ Field", { sharingSwitches: false, fieldTypes: true,
         stages: stagesOf(h, (name) => ({ kind: "field", box: box.id, template: "fields", name })) }),
       el("p", { className: "doc-tab-note", text: "The fields every card in this box can carry." }));
     // The outcome half, on the SAME tab (2026-09-13). The tab vocabulary is
@@ -1784,7 +1803,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // 6), same sharing answer: field data carries no state.
     const outcomeFields: FieldDeclDto[] = box.outcomeFields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
     view.append(sectHead("Outcome fields"),
-      propPanel(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false, fieldTypes: true,
+      propPanel(outcomeFields, saveNamed(outcomeFields, (named) => h.saveBox(box.id, { outcomeFields: named })), "+ Field", { sharingSwitches: false, fieldTypes: true,
         stages: stagesOf(h, (name) => ({ kind: "field", box: box.id, template: "outcomeFields", name })) }),
       el("p", { className: "doc-tab-note", text: "The fields every outcome in this box can carry. They're handed to the game with the press." }));
     view.append(sectHead("Dealing"), dealingDefaults(box, h),

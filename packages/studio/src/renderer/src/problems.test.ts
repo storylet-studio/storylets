@@ -76,6 +76,8 @@ describe("the names a problem is spoken in", () => {
   it("names the box for its own shard and its map, and Project settings for the project file", () => {
     expect(problemNames(problem("news/box.storyletbox"), boxes)).toEqual({ title: "News" });
     expect(problemNames(problem("news/map"), boxes)).toEqual({ title: "News" });
+    // The compiler's `<folder>/box` address, which a Card template field's problem carries.
+    expect(problemNames(problem("news/box", { field: "fields" }), boxes)).toEqual({ title: "News" });
     expect(problemNames(problem("saltmarsh.storyletproj"), boxes)).toEqual({ where: "Project settings" });
     expect(problemNames(problem("elsewhere/readme.txt"), boxes)).toBeUndefined();
   });
@@ -123,6 +125,8 @@ describe("where a problem takes the author", () => {
     expect(problemTarget(problem("news/box.storyletbox"), boxes)).toEqual({ kind: "boxTemplate", box: "b_2" });
     expect(problemTarget(problem("saltmarsh.storyletproj"), boxes)).toEqual({ kind: "settings" });
     expect(problemTarget(problem("news/map"), boxes)).toEqual({ kind: "box", box: "b_2" });
+    expect(problemTarget(problem("news/box", { field: "outcomeFields" }), boxes)).toEqual({ kind: "boxTemplate", box: "b_2" });
+    expect(problemTarget(problem("news/box", { field: "turn" }), boxes)).toEqual({ kind: "box", box: "b_2" });
   });
 
   it("has nowhere to go in a project with no boxes", () => {
