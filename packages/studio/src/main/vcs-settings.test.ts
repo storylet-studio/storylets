@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSource } from "@storylet-studio/compiler";
 import { vcsConfigWrites } from "@storylet-studio/ops";
-import { createProject, openProject, projectSettings } from "./project.js";
+import { createProject, openProject, projectSettings, validate } from "./project.js";
 import type { ProjectSession } from "./project.js";
 import { saveProjectSettings, undo } from "./mutate.js";
 import { pinnedVcs } from "./vc.js";
@@ -101,6 +101,9 @@ describe("Project Settings' version control", () => {
     expect("error" in await saveProjectSettings(session, { ...projectSettings(session), vcs: "git" })).toBe(false);
     // As `init --bundle ignore` would have left it.
     for (const w of vcsConfigWrites(dir, "git", "ignore")) writeFileSync(w.path, w.content);
+    // Read, as focus reads a project changed on disk: a save over files changed
+    // since they were read is refused (the hands-on review, foundation 1).
+    validate(session);
     expect("error" in await saveProjectSettings(session, { ...projectSettings(session), vcs: "plastic" })).toBe(false);
     expect(readFileSync(join(dir, "ignore.conf"), "utf8")).toMatch(/^\*\.storyletsc$/m);
   });

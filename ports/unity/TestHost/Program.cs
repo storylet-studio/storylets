@@ -549,6 +549,46 @@ namespace StoryletStudio.StoryletEngine.TestHost
             }
         }
 
+        /// <summary>The `scribble` op on one view: its fields and every
+        /// extension's values. A field value is an immutable ExprValue, so only
+        /// the map itself can be defaced.</summary>
+        private static void ScribbleView(OrderedMap<string, ExprValue> fields, OrderedMap<string, OrderedMap<string, object>> extensions)
+        {
+            if (fields != null)
+            {
+                foreach (var k in fields.Keys.ToList()) fields.Set(k, ExprValue.Str("scribbled"));
+                fields.Set("scribbled", ExprValue.Str("scribbled"));
+            }
+            if (extensions != null)
+            {
+                foreach (var pair in extensions.ToList()) ScribbleMap(pair.Value);
+                extensions.Set("scribbled", new OrderedMap<string, object>());
+            }
+        }
+
+        /// <summary>Deface a map in place, deepest first: nested maps gain the
+        /// key, nested lists the item, then every top-level value is replaced.</summary>
+        private static void ScribbleMap(OrderedMap<string, object> map)
+        {
+            foreach (var pair in map.ToList()) ScribbleDeep(pair.Value);
+            foreach (var k in map.Keys.ToList()) map.Set(k, "scribbled");
+            map.Set("scribbled", "scribbled");
+        }
+
+        private static void ScribbleDeep(object value)
+        {
+            if (value is List<object> list)
+            {
+                foreach (var item in list.ToList()) ScribbleDeep(item);
+                list.Add("scribbled");
+            }
+            else if (value is OrderedMap<string, object> map)
+            {
+                foreach (var pair in map.ToList()) ScribbleDeep(pair.Value);
+                map.Set("scribbled", "scribbled");
+            }
+        }
+
         private static string ShowJsonFields(JObject fields)
         {
             var parts = fields.Properties().OrderBy(p => p.Name, StringComparer.Ordinal)
@@ -708,6 +748,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 case "assertCardExtensions":
                 case "assertOutcomeExtensions":
                 case "assertBoxExtensions":
+                case "scribble":
                 case "assertState":
                     return true;
                 default:
@@ -1670,6 +1711,22 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         var want = ShowJson(StoryletJson.ToJsonTree(op["expect"]));
                         var got = ShowJson(actual);
                         if (want != got) failures.Add($"{at}: expected {want}, got {got}");
+                        break;
+                    }
+
+                    case "scribble":
+                    {
+                        // A careless host: deface everything the engine handed
+                        // over, in place. Nothing is asserted here; the asserts
+                        // that follow must read the bundle unchanged.
+                        var from = op.Value<string>("from");
+                        var key = names.TryGetValue(from, out var mapped) ? mapped : from;
+                        foreach (var card in session.Board().GetOrDefault(key) ?? new List<DealtCard>())
+                        {
+                            ScribbleView(card.Fields, card.Extensions);
+                            foreach (var outcome in session.Outcomes(card.Id, from)) ScribbleView(outcome.Fields, outcome.Extensions);
+                        }
+                        foreach (var box in session.ListBoxes()) ScribbleView(null, box.Extensions);
                         break;
                     }
 

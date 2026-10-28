@@ -891,6 +891,58 @@ namespace StoryletStudio.StoryletEngine
     }
 
     /// <summary>
+    /// Copies of the bundle's own maps, for handing to a host. A view's fields
+    /// and extension values (and an extension field's structured default) are
+    /// the bundle's, shared by every deal and every engine on it, so a game that
+    /// changed what it was handed would change it for all of them (the hands-on
+    /// review, 2026-10, foundation 6). An ExprValue is immutable, so fields need
+    /// only a new map; extension values are a JSON tree, so they copy deep.
+    /// Null stays null, so a view with none costs nothing; an empty map is still
+    /// a new one, since a host may add to it.
+    /// </summary>
+    internal static class Handed
+    {
+        public static OrderedMap<string, ExprValue> Fields(OrderedMap<string, ExprValue> values)
+        {
+            if (values == null) return null;
+            var output = new OrderedMap<string, ExprValue>();
+            foreach (var pair in values) output.Set(pair.Key, pair.Value);
+            return output;
+        }
+
+        public static OrderedMap<string, OrderedMap<string, object>> Extensions(OrderedMap<string, OrderedMap<string, object>> values)
+        {
+            if (values == null) return null;
+            var output = new OrderedMap<string, OrderedMap<string, object>>();
+            foreach (var pair in values) output.Set(pair.Key, (OrderedMap<string, object>)Deep(pair.Value));
+            return output;
+        }
+
+        /// <summary>A JSON tree value copied deep: maps and lists are new, a
+        /// scalar (immutable) is itself.</summary>
+        public static object Deep(object value)
+        {
+            switch (value)
+            {
+                case OrderedMap<string, object> map:
+                {
+                    var output = new OrderedMap<string, object>();
+                    foreach (var pair in map) output.Set(pair.Key, Deep(pair.Value));
+                    return output;
+                }
+                case List<object> list:
+                {
+                    var output = new List<object>(list.Count);
+                    foreach (var item in list) output.Add(Deep(item));
+                    return output;
+                }
+                default:
+                    return value;
+            }
+        }
+    }
+
+    /// <summary>
     /// A box's card and outcome fields, and any node's Storylet extension
     /// values, as a host reads them. The engine hands a card's fields (and an
     /// outcome's) over exactly as the bundle wrote them: sparse, so "the card
@@ -957,7 +1009,10 @@ namespace StoryletStudio.StoryletEngine
             foreach (var f in decls)
             {
                 if (f.Name != name) continue;
-                value = f.Default;
+                // The declaration's default is the bundle's, shared by every
+                // node that leaves the field out: a structured one is handed out
+                // as a copy (the hands-on review, 2026-10, foundation 6).
+                value = Handed.Deep(f.Default);
                 return f.HasDefault;
             }
             value = null;
@@ -1046,9 +1101,7 @@ namespace StoryletStudio.StoryletEngine
 
         private static OrderedMap<string, OrderedMap<string, object>> Copy(OrderedMap<string, OrderedMap<string, object>> values)
         {
-            var output = new OrderedMap<string, OrderedMap<string, object>>();
-            if (values != null) foreach (var pair in values) output.Set(pair.Key, pair.Value);
-            return output;
+            return values == null ? new OrderedMap<string, OrderedMap<string, object>>() : Handed.Extensions(values);
         }
 
         /// <summary>The first item whose gameId (or, with none, id) is the name:

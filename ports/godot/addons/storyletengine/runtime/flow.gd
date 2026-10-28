@@ -1023,10 +1023,19 @@ func _view(entry: Dictionary) -> Dictionary:
 	if card.has("purpose"):
 		v["purpose"] = card["purpose"]
 	if card.has("fields"):
-		v["fields"] = card["fields"]
+		v["fields"] = _copy(card["fields"])
 	if card.has("extensions"):
-		v["extensions"] = card["extensions"]
+		v["extensions"] = _copy(card["extensions"])
 	return v
+
+
+# A deep copy of what a view hands out. The bundle's own maps are shared by
+# every deal and every engine on it, so a game changing what it was handed
+# must never change them (the hands-on review, 2026-10, foundation 6).
+static func _copy(value: Variant) -> Variant:
+	if value is Dictionary or value is Array:
+		return value.duplicate(true)
+	return value
 
 
 func _hand_capacity(hand: Dictionary) -> float:
@@ -1362,9 +1371,9 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 		if o.has("purpose"):
 			view["purpose"] = o["purpose"]
 		if o.has("fields"):
-			view["fields"] = o["fields"]
+			view["fields"] = _copy(o["fields"])
 		if o.has("extensions"):
-			view["extensions"] = o["extensions"]
+			view["extensions"] = _copy(o["extensions"])
 		view["available"] = _passes(o.get("condition"), ctx)
 		out.append(view)
 	return out
@@ -1656,7 +1665,7 @@ func list_boxes() -> Array:
 		if b.has("title"):
 			row["title"] = b["title"]
 		if b.has("extensions"):
-			row["extensions"] = b["extensions"]
+			row["extensions"] = _copy(b["extensions"])
 		row["turn"] = _turn_counts.get(b["id"], 0.0)
 		out.append(row)
 	return out

@@ -58,8 +58,12 @@ import type {
  *  earlier expectation changed.
  *  16: extension settings removed (2026-10-20, with claims): the op `assertExtensionSettings` goes, and the
  *  extensions case's bundle keeps an old bundle's `settings`, which every loader ignores. No other
- *  expectation changed. */
-export const CORPUS_VERSION = 16;
+ *  expectation changed.
+ *  17: what the engine hands a host is a copy (the hands-on review, 2026-10, foundation 6): the op
+ *  `scribble` defaces every dealt card's, outcome's and box's fields and extension values in place, and
+ *  the card-field, outcome-field and extensions cases assert the bundle's values again after it. No
+ *  earlier expectation changed. */
+export const CORPUS_VERSION = 17;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>

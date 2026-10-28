@@ -55,6 +55,15 @@ here is part of shipping, not a courtesy.
 - **A quieter navigator and title.** Rows are listed at an even weight, the open one marked by a soft fill,
   and the top bar shows just the project's name.
 
+### Fixed
+
+- **An edit never overwrites a file changed outside Storyletter.** A deck, box or settings file changed on disk since
+  Storyletter read it (a synced folder, a pull, another window) used to be written over from memory, losing the
+  other change. Storyletter now checks first: it leaves the file alone, shows it as it now is, and says so.
+- **Delete only deletes cards when you're on the cards.** Delete or Backspace with a button focused (+ New card, a
+  tab) deleted the selected cards, and so did Delete, Enter or an arrow key with a dialog or menu open. Those keys
+  now act on the selection only from the cards themselves, the table, or the canvas, and never past a dialog.
+
 ## [0.26.0] - 2026-10-22
 
 ### Added

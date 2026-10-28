@@ -1131,8 +1131,8 @@ namespace StoryletStudio.StoryletEngine
                 GameId = Model.EffectiveGameId(card),
                 Title = card.Title,
                 Purpose = card.Purpose,
-                Fields = card.Fields,
-                Extensions = card.Extensions,
+                Fields = Handed.Fields(card.Fields),
+                Extensions = Handed.Extensions(card.Extensions),
             };
         }
 
@@ -1436,8 +1436,8 @@ namespace StoryletStudio.StoryletEngine
                 GameId = Model.EffectiveGameId(o),
                 Title = o.Title,
                 Purpose = o.Purpose,
-                Fields = o.Fields,
-                Extensions = o.Extensions,
+                Fields = Handed.Fields(o.Fields),
+                Extensions = Handed.Extensions(o.Extensions),
                 Available = Passes(o.Condition, ctx),
             }).ToList();
         }
@@ -1745,7 +1745,7 @@ namespace StoryletStudio.StoryletEngine
                     GameId = Model.EffectiveGameId(box),
                     Title = box.Title,
                     Turn = _turnCounts.GetOrDefault(box.Id),
-                    Extensions = box.Extensions,
+                    Extensions = Handed.Extensions(box.Extensions),
                 });
             }
             return boxes;

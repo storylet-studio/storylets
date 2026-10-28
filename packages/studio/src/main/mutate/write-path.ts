@@ -8,15 +8,16 @@
 
 import { applyStates, captureBefore } from "../history.js";
 import type { FileState } from "../history.js";
+import { relative } from "node:path";
 import { readRemote, refuseWrite } from "../remote.js";
 import { withGameScopes } from "../game-scopes.js";
 import { missingColours } from "../box-colours.js";
-import { openResult, validate } from "../project.js";
+import { changedSinceRead, openResult, validate } from "../project.js";
 import type { ProjectSession } from "../project.js";
 import type { OpenResult } from "../../shared/api.js";
 
 /** What a mutation answers: the fresh project, or why it was refused. */
-export type Written = OpenResult | { error: string };
+export type Written = OpenResult | { error: string; reread?: true };
 
 /**
  * One write at a time, from the mutation to its reload.
@@ -63,6 +64,8 @@ export async function commit(session: ProjectSession, label: string, key: string
   const current = captureBefore(writes.map((w) => w.path));
   const changing = writes.filter((w, i) => w.content !== current[i]!.content);
   if (changing.length === 0) return reload(session);
+  const drifted = refuseDrift(session, changing.map((w) => w.path));
+  if (drifted !== undefined) return drifted;
   const before = captureBefore(changing.map((w) => w.path));
   const applied = await applyStates(changing);
   if (!applied.ok) {
@@ -103,6 +106,25 @@ export async function commitMaking<T extends object>(
 export function refuse(session: ProjectSession, error: string): { error: string } {
   validate(session);
   return { error };
+}
+
+/**
+ * Refuse a write that would overwrite a file changed outside Storyletter since
+ * it was read (`changedSinceRead`). The project is read again, so main holds
+ * what the disk says, and the answer tells the window to show it (`reread`):
+ * the outside edit appears. A field the author is still typing in keeps its
+ * text and saves it again over the new file; an edit made any other way has
+ * to be made again, which is why the message asks them to check. Nothing on
+ * disk is lost either way.
+ */
+function refuseDrift(session: ProjectSession, paths: readonly string[]): { error: string; reread: true } | undefined {
+  const file = changedSinceRead(session, paths);
+  if (file === undefined) return undefined;
+  const name = relative(session.loaded.dir, file);
+  return {
+    ...refuse(session, `couldn't save: ${name.startsWith("..") ? file : name} changed outside Storyletter since it was read, and saving would have overwritten that. Storyletter has read it again: check your last edit is still there`),
+    reread: true,
+  };
 }
 
 /** Live Link: told after every write that lands through here (a commit, an
@@ -166,7 +188,13 @@ export async function ensureBoxColours(session: ProjectSession): Promise<void> {
   const writes = missingColours(session);
   if (writes.length === 0) return;
   if (refuseWrite(readRemote(session.loaded.dir)?.role, writes.map((w) => w.path)) !== undefined) return;
+  // Built from the project as read, like any write: a box file changed since
+  // keeps its outside edit, and the colours wait for the next draw.
+  if (changedSinceRead(session, writes.map((w) => w.path)) !== undefined) return;
   const before = captureBefore(writes.map((w) => w.path));
   if (!(await applyStates(writes)).ok) return;
   session.history.fold(before, writes);
+  // Read back, so the stamp knows these writes are the editor's own and the
+  // next write of the same box is not taken for an outside edit.
+  validate(session);
 }

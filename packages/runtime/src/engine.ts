@@ -2924,8 +2924,11 @@ export class Flow {
       gameId: effectiveGameId(card),
       ...(card.title !== undefined ? { title: card.title } : {}),
       ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
-      ...(card.fields !== undefined ? { fields: card.fields } : {}),
-      ...(card.extensions !== undefined ? { extensions: card.extensions } : {}),
+      // Copies: the game may change what it is handed, and the bundle's own
+      // maps are every later deal's, in every engine on it (the hands-on
+      // review, 2026-10, foundation 6).
+      ...(card.fields !== undefined ? { fields: structuredClone(card.fields) } : {}),
+      ...(card.extensions !== undefined ? { extensions: structuredClone(card.extensions) } : {}),
     };
   }
 
@@ -3145,8 +3148,9 @@ export class Flow {
       gameId: effectiveGameId(o),
       ...(o.title !== undefined ? { title: o.title } : {}),
       ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
-      ...(o.fields !== undefined ? { fields: o.fields } : {}),
-      ...(o.extensions !== undefined ? { extensions: o.extensions } : {}),
+      // Copies, as a dealt card's (`view`).
+      ...(o.fields !== undefined ? { fields: structuredClone(o.fields) } : {}),
+      ...(o.extensions !== undefined ? { extensions: structuredClone(o.extensions) } : {}),
       available: this.passes(o.condition, ctx),
     }));
   }
@@ -3359,7 +3363,8 @@ export class Flow {
       gameId: effectiveGameId(b),
       ...(b.title !== undefined ? { title: b.title } : {}),
       turn: this.turnCounts.get(b.id) ?? 0,
-      ...(b.extensions !== undefined ? { extensions: b.extensions } : {}),
+      // A copy, as a dealt card's (`view`).
+      ...(b.extensions !== undefined ? { extensions: structuredClone(b.extensions) } : {}),
     }));
   }
 

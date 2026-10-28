@@ -9,7 +9,7 @@
 // cannot write puts its step back.
 
 import { afterEach, describe, expect, it } from "vitest";
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -250,5 +250,50 @@ describe("bookkeeping beside the project (undoing a pull, found 2026-10-07)", ()
     const applied = await applyStates([{ path: shard, content: "old" }, { path: record, content: "revision 1", local: true }]);
     expect(applied.ok).toBe(false);
     expect(readFileSync(record, "utf8")).toBe("revision 2");
+  });
+});
+
+// The hands-on review (2026-10, foundation 1): a deck written from memory over
+// a file changed outside Storyletter threw the outside edit away. A write is
+// refused instead, the project is read again, and the window is told to show it.
+describe("a file changed outside Storyletter since it was read", () => {
+  afterEach(() => clearProvider());
+
+  it("refuses the write, keeps the outside edit, and reads the project again", async () => {
+    const session = scratchProject();
+    const ambush = ambushId(session);
+    const file = docksFile(session);
+    const outside = readFileSync(file, "utf8").replace("Ambush at the ford", "Ambush at the old ford");
+    expect(outside).not.toBe(readFileSync(file, "utf8"));
+    writeFileSync(file, outside, "utf8");
+
+    const refused = await saveCard(session, docks, ambush, { title: "Mine" });
+    expect(refused).toMatchObject({ reread: true });
+    expect("error" in refused && refused.error).toMatch(/docks\.storyletdeck changed outside Storyletter/);
+    expect(readFileSync(file, "utf8")).toBe(outside);
+    expect(titleOf(session, ambush)).toBe("Ambush at the old ford");
+
+    // Made again, on the file as it now is, the edit lands.
+    const saved = await saveCard(session, docks, ambush, { title: "Mine" });
+    expect("error" in saved).toBe(false);
+    expect(titleOf(session, ambush)).toBe("Mine");
+  });
+
+  it("lets the editor's own writes follow one another", async () => {
+    const session = scratchProject();
+    const ambush = ambushId(session);
+    for (const title of ["One", "Two", "Three"]) {
+      const saved = await saveCard(session, docks, ambush, { title });
+      expect("error" in saved).toBe(false);
+    }
+    expect(titleOf(session, ambush)).toBe("Three");
+  });
+
+  it("leaves alone a write whose own files are unchanged, when another file changed", async () => {
+    const session = scratchProject();
+    const other = readdirSync(decksDir(session)).map((f) => join(decksDir(session), f)).find((f) => f !== docksFile(session) && f.endsWith(".storyletdeck"))!;
+    writeFileSync(other, `${readFileSync(other, "utf8")}\n`, "utf8");
+    const saved = await saveCard(session, docks, ambushId(session), { title: "Mine" });
+    expect("error" in saved).toBe(false);
   });
 });

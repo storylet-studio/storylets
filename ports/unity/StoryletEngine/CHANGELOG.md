@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **What a game is handed is its own.** A dealt card's fields and extension values, an outcome's, a box's, a field's
+  structured default and `ExtensionsOf`'s values are copies: a game that changed one used to change it in the bundle
+  for every later deal, in every engine on that bundle, and in Unity in the cached asset across play sessions. The conformance corpus (version 17) checks it in every
+  runtime.
+
 ## [0.14.0] - 2026-10-21
 
 ### Removed

@@ -2288,9 +2288,16 @@ static func outcome_field_decls(bundle: Dictionary, box: String) -> Array:
 static func field_value(decls: Array, values: Dictionary, name: String) -> Variant:
 	if values.has(name):
 		return values[name]
+	# The declaration's own default is the bundle's, shared by every card that
+	# leaves the field out: a structured one is handed out as a copy, or a game
+	# changing it would change it for all of them (the hands-on review, 2026-10,
+	# foundation 6).
 	for f in decls:
 		if f.get("name") == name:
-			return f.get("default")
+			var fallback = f.get("default")
+			if fallback is Dictionary or fallback is Array:
+				return fallback.duplicate(true)
+			return fallback
 	return null
 
 
@@ -2342,7 +2349,8 @@ static func extensions_of(bundle: Dictionary, kind: String, address: String = ""
 			if exts is Dictionary:
 				for id in exts:
 					if exts[id] is Dictionary and exts[id].has("project"):
-						out[id] = exts[id]["project"]
+						var project = exts[id]["project"]
+						out[id] = project.duplicate(true) if project is Dictionary or project is Array else project
 			return out
 		"box":
 			return _ext_values(_ext_named(boxes, address))
@@ -2404,10 +2412,11 @@ static func _ext_cards(boxes: Array) -> Array:
 	return out
 
 
-# A shallow copy, so a host editing what it was handed never edits the bundle.
+# A deep copy, as the engine's views are: the game holds the bundle, but what it
+# is handed here is its own to change.
 static func _ext_values(node: Dictionary) -> Dictionary:
 	var values = node.get("extensions")
-	return (values as Dictionary).duplicate() if values is Dictionary else {}
+	return (values as Dictionary).duplicate(true) if values is Dictionary else {}
 
 
 static func _field_box(bundle: Dictionary, box: String) -> Dictionary:

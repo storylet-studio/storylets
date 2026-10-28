@@ -676,7 +676,68 @@ static bool needsFlow(const std::string& kind)
     return kind == "setState" || kind == "peek" || kind == "deal" || kind == "assertBoard"
         || kind == "play" || kind == "advanceTurns" || kind == "assertOutcomes"
         || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertCardFields" || kind == "assertState"
-        || kind == "assertCardExtensions" || kind == "assertOutcomeExtensions" || kind == "assertBoxExtensions";
+        || kind == "assertCardExtensions" || kind == "assertOutcomeExtensions" || kind == "assertBoxExtensions"
+        || kind == "scribble";
+}
+
+// The `scribble` op (corpus version 17): a careless host defacing, in place,
+// everything the engine handed it. The asserts after it must still read the
+// bundle's values, since a view is a copy (the hands-on review, 2026-10,
+// foundation 6). Mirrors scribbleView / scribbleMap / scribbleDeep in the JS
+// reference runner.
+
+/** Set `key` on a JSON object, replacing an existing key in place. */
+static void scribbleSet(JsonValue& map, const std::string& key, JsonValue value)
+{
+    for (auto& kv : map.obj)
+    {
+        if (kv.first == key) { kv.second = std::move(value); return; }
+    }
+    map.obj.emplace_back(key, std::move(value));
+}
+
+/** Nested maps gain the key, nested lists the item, deepest first. */
+static void scribbleDeep(JsonValue& value)
+{
+    if (value.isArray())
+    {
+        for (auto& item : value.arr) scribbleDeep(item);
+        value.arr.push_back(JsonValue::MakeStr("scribbled"));
+    }
+    else if (value.isObject())
+    {
+        for (auto& kv : value.obj) scribbleDeep(kv.second);
+        scribbleSet(value, "scribbled", JsonValue::MakeStr("scribbled"));
+    }
+}
+
+/** One extension's values: nested first, then every top-level value replaced
+ *  and the map gains the key. */
+static void scribbleMap(OrderedMap<std::string, JsonValue>& map)
+{
+    const std::vector<std::string> keys = map.keys();
+    for (const auto& key : keys) scribbleDeep(*map.get(key));
+    for (const auto& key : keys) map.set(key, JsonValue::MakeStr("scribbled"));
+    map.set("scribbled", JsonValue::MakeStr("scribbled"));
+}
+
+/** A field map: a flags value is the one nested list a field can hold. */
+static void scribbleMap(OrderedMap<std::string, StoryletValue>& map)
+{
+    const std::vector<std::string> keys = map.keys();
+    for (const auto& key : keys)
+    {
+        StoryletValue& v = *map.get(key);
+        if (v.isFlags()) v.f.push_back("scribbled");
+    }
+    for (const auto& key : keys) map.set(key, StoryletValue::Str("scribbled"));
+    map.set("scribbled", StoryletValue::Str("scribbled"));
+}
+
+static void scribbleExtensions(NodeExtensions& extensions)
+{
+    for (const auto& id : extensions.keys()) scribbleMap(*extensions.get(id));
+    extensions.set("scribbled", OrderedMap<std::string, JsonValue>());
 }
 
 /** Execute the ops in order; every expect must match exactly, expectError ops
@@ -1192,6 +1253,29 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             {
                 failures.push_back(at + ": expected " + showJson(expect) + ", got " + showJson(actual));
             }
+        }
+        else if (kind == "scribble")
+        {
+            // Deface every view the engine hands back, in place; nothing is
+            // asserted here, the asserts that follow must read the bundle.
+            const std::string from = op.strOr("from");
+            auto board = session->board();
+            if (std::vector<DealtCard>* cards = board.get(mapped(names, from)))
+            {
+                for (DealtCard& card : *cards)
+                {
+                    scribbleMap(card.fields);
+                    scribbleExtensions(card.extensions);
+                    std::vector<OutcomeView> outcomes = session->outcomes(card.id, from);
+                    for (OutcomeView& outcome : outcomes)
+                    {
+                        scribbleMap(outcome.fields);
+                        scribbleExtensions(outcome.extensions);
+                    }
+                }
+            }
+            std::vector<BoxView> boxes = session->listBoxes();
+            for (BoxView& box : boxes) scribbleExtensions(box.extensions);
         }
         else if (kind == "assertNodeExtensions")
         {

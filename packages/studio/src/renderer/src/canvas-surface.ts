@@ -41,6 +41,7 @@ import {
   visibleRect, worldRectToScreen, worldToScreen, zoomAbout, type Camera, type Point, type Rect,
 } from "./canvas-geometry.js";
 import { canvasKey, cursorFor, escapeTakes, ownsKeys } from "./canvas-input.js";
+import { overlayOpen } from "./browse-keys.js";
 import { cameraMotion, startCameraTween, type CameraTween } from "./canvas-tween.js";
 
 export type { Camera } from "./canvas-geometry.js";
@@ -916,6 +917,9 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   opts.host.addEventListener("pointerenter", onEnter);
   opts.host.addEventListener("pointerleave", onLeave);
   const ownsKeysNow = (): boolean => {
+    // Nothing reaches past a dialog, menu or popover on top: a Delete there
+    // deleted the selected cards (the hands-on review, foundation 8).
+    if (overlayOpen()) return false;
     const active = document.activeElement;
     return ownsKeys({
       focusInside: active !== null && opts.host.contains(active),

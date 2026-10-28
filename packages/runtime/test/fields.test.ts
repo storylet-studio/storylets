@@ -27,6 +27,14 @@ describe("field helpers", () => {
     expect(fieldValue([], {}, "constructor")).toBeUndefined();
   });
 
+  it("hand out a structured default as a copy, so changing it changes no other card's (the hands-on review, 2026-10, foundation 6)", () => {
+    const TAGS = { name: "tags", type: "flags", default: ["night"], values: ["night", "rain"] } as unknown as FieldDecl;
+    const first = effectiveFields([TAGS], {})["tags"] as unknown as string[];
+    first.push("rain");
+    expect(TAGS.default).toEqual(["night"]);
+    expect(fieldValue([TAGS], undefined, "tags")).toEqual(["night"]);
+  });
+
   it("compare a quality field's stage through its declaration", () => {
     const card = effectiveFields([ACT], { act: "act-2" });
     expect(compareStages(ACT, card["act"], "act-1")).toBe(1);

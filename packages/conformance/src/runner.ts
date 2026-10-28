@@ -529,6 +529,17 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
         break;
       }
+      case "scribble": {
+        const flow = flowOf(op.flow);
+        const names = handGameIds(c.bundle);
+        const board = flow.board()[names.get(op.from) ?? op.from] ?? [];
+        for (const card of board) {
+          scribbleView(card);
+          for (const outcome of flow.outcomes(card.id, op.from)) scribbleView(outcome);
+        }
+        for (const box of flow.listBoxes()) scribbleView(box);
+        break;
+      }
       case "assertBoxExtensions": {
         const views = flowOf(undefined).listBoxes();
         const actual = Object.fromEntries(Object.keys(op.expect).map((g) =>
@@ -739,4 +750,32 @@ export function runLoadCase(c: LoadCase): string[] {
   return c.expectRefused
     .filter((want) => !error!.includes(want))
     .map((want) => `expected the refusal to name "${want}", got ${show(error)}`);
+}
+
+/** The `scribble` op on one view: its fields and every extension's values. */
+function scribbleView(view: { fields?: Record<string, unknown>; extensions?: Record<string, Record<string, unknown>> }): void {
+  if (view.fields) scribbleMap(view.fields);
+  if (view.extensions) {
+    for (const values of Object.values(view.extensions)) scribbleMap(values);
+    view.extensions["scribbled"] = {};
+  }
+}
+
+/** Deface a map in place, deepest first: nested maps gain the key, nested
+ *  lists the item, then every top-level value is replaced. */
+function scribbleMap(map: Record<string, unknown>): void {
+  for (const value of Object.values(map)) scribbleDeep(value);
+  for (const key of Object.keys(map)) map[key] = "scribbled";
+  map["scribbled"] = "scribbled";
+}
+
+function scribbleDeep(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) scribbleDeep(item);
+    value.push("scribbled");
+  } else if (value !== null && typeof value === "object") {
+    const map = value as Record<string, unknown>;
+    for (const item of Object.values(map)) scribbleDeep(item);
+    map["scribbled"] = "scribbled";
+  }
 }

@@ -25,7 +25,7 @@ extends SceneTree
 const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
 	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertOutcomeFields",
 	"assertCardFields", "assertCardExtensions", "assertOutcomeExtensions",
-	"assertBoxExtensions", "assertState"]
+	"assertBoxExtensions", "assertState", "scribble"]
 
 ## The load report's comparison separator: a UNIT SEPARATOR, because it cannot
 ## occur in an id, a gameId or a property name.
@@ -964,6 +964,18 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				if not _same_json(got_boxes, op["expect"]):
 					failures.append("%s: expected %s, got %s" % [at, _show_json(op["expect"]), _show_json(got_boxes)])
 
+			"scribble":
+				# A careless host: deface everything the engine handed it, IN
+				# PLACE (runner.ts, scribbleView). Nothing is asserted here; the
+				# asserts that follow must still read the bundle's values.
+				var scribble_key: String = names.get(op["from"], op["from"])
+				for card in session.board().get(scribble_key, []):
+					_scribble_view(card)
+					for outcome in session.outcomes(card["id"], op["from"]):
+						_scribble_view(outcome)
+				for row in session.list_boxes():
+					_scribble_view(row)
+
 			"assertNodeExtensions":
 				# A node no view carries, read off the bundle by the helper.
 				var node_raw := StoryletEngine.extensions_of(bundle, str(op["kind"]), str(op.get("address", "")))
@@ -1179,6 +1191,41 @@ func _run_scripted_case(c: Dictionary) -> Array:
 # four idioms for one of these entries. An absent "flow" (the shared half)
 # canonicalises to the empty string, which is why the separator is a character
 # no id, gameId or property name can hold.
+
+# --- scribble (corpus version 17) -------------------------------------------------
+# A view's fields and each extension's values defaced in place, then the
+# extensions map gains the extension "scribbled" (runner.ts, scribbleView).
+static func _scribble_view(view: Dictionary) -> void:
+	if view.get("fields") is Dictionary:
+		_scribble_map(view["fields"])
+	if view.get("extensions") is Dictionary:
+		var exts: Dictionary = view["extensions"]
+		for id in exts.keys():
+			if exts[id] is Dictionary:
+				_scribble_map(exts[id])
+		exts["scribbled"] = {}
+
+
+# Deepest first: nested maps gain the key, nested lists the item, then every
+# top-level value is replaced and the map gains the key too.
+static func _scribble_map(map: Dictionary) -> void:
+	for value in map.values():
+		_scribble_deep(value)
+	for key in map.keys():
+		map[key] = "scribbled"
+	map["scribbled"] = "scribbled"
+
+
+static func _scribble_deep(value: Variant) -> void:
+	if value is Array:
+		for item in value:
+			_scribble_deep(item)
+		value.append("scribbled")
+	elif value is Dictionary:
+		for item in value.values():
+			_scribble_deep(item)
+		value["scribbled"] = "scribbled"
+
 
 func _report_keys(list: Array, fields: Array) -> Array:
 	var keys: Array = []

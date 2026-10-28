@@ -505,6 +505,43 @@ export function diskUnchanged(session: ProjectSession): boolean {
   return session.stamp !== undefined && session.stamp === diskStamp(session.loaded);
 }
 
+/**
+ * The first of `paths` that has changed on disk since the project was last
+ * read, or undefined when none has.
+ *
+ * Every write is built from the project as it was read, a whole shard at a
+ * time, so writing over a file that changed since would silently throw the
+ * outside edit away: a synced folder, a teammate's pull, another window (the
+ * hands-on review, 2026-10, foundation 1). Focus re-reads the project when the
+ * disk moved (`diskUnchanged`), but a write can come first; this is asked
+ * before every one. The answer is the stamp's own (modification time and
+ * size), so it costs a stat per file. A file the stamp does not cover (outside
+ * the project's folders, or under a dot folder) is not asked about.
+ */
+export function changedSinceRead(session: ProjectSession, paths: readonly string[]): string | undefined {
+  if (session.stamp === undefined) return undefined;
+  const recorded = new Map<string, string>();
+  for (const line of session.stamp.split("\n")) {
+    const [file, mtime, size] = line.split("\u0000");
+    if (file !== undefined && size !== undefined) recorded.set(file, `${mtime}\u0000${size}`);
+  }
+  const roots = [session.loaded.dir];
+  const scopes = session.loaded.source?.gameScopes?.dir;
+  if (scopes !== undefined && relative(session.loaded.dir, scopes).startsWith("..")) roots.push(scopes);
+  const covered = (file: string): boolean => roots.some((root) => {
+    const rel = relative(root, file);
+    return rel !== "" && !rel.startsWith("..") && !rel.split(/[\\/]/).some((part) => part.startsWith("."));
+  });
+  for (const path of paths) {
+    const file = resolve(path);
+    if (!covered(file)) continue;
+    let now = "gone";
+    try { const st = statSync(file); now = `${st.mtimeMs}\u0000${st.size}`; } catch { /* not there: "gone" */ }
+    if (now !== (recorded.get(file) ?? "gone")) return file;
+  }
+  return undefined;
+}
+
 /** Every file the project reads, by path, modification time and size: its own
  *  folder, the game's shared scopes when they live outside it, and the paired
  *  Patter bundle. Cheap (a stat per file, no reads), which is what lets focus

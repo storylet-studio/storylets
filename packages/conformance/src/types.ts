@@ -230,6 +230,17 @@ export type ScriptOp =
   | { op: "assertOutcomeExtensions"; flow?: string; card: string; from: string; expect: Record<string, Record<string, unknown>> }
   /** The extension values on each box `listBoxes()` returns, by box gameId. */
   | { op: "assertBoxExtensions"; expect: Record<string, Record<string, unknown>> }
+  /** A careless host: deface everything the engine handed it, in place.
+   *  Every card on `board()[from]`, every outcome `outcomes(card, from)` hands
+   *  back for it, and every box `listBoxes()` returns: in each `fields` and in
+   *  each extension's values, every nested map gains the key "scribbled" and
+   *  every nested list gains the item "scribbled" (deepest first), then every
+   *  top-level value becomes "scribbled" and the map gains the key "scribbled"
+   *  too; `extensions` gains the extension "scribbled". Nothing is asserted:
+   *  the asserts that follow must read the bundle's values unchanged, since
+   *  what a host is handed is a copy (the hands-on review, 2026-10,
+   *  foundation 6). */
+  | { op: "scribble"; flow?: string; from: string }
   /** A node's extension values read off the bundle by the helper
    *  `extensionsOf(bundle, kind, address)`: `project` (no address), `box`,
    *  `deck`, `card` and `hand` by gameId, `handTemplate` as "box/template",

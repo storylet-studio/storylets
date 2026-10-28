@@ -730,6 +730,13 @@ export const fixtures: Fixtures = {
         // Availability and order are unchanged by fields riding along.
         { op: "assertOutcomes", card: "c_notice", from: "h_q", expect: { take: true, leave: true } },
         { op: "assertOutcomeOrder", card: "c_notice", from: "h_q", expect: ["take", "leave"] },
+        // What the game is handed is its own copy: defacing it changes nothing
+        // the engine hands out next (the hands-on review, 2026-10, foundation 6).
+        { op: "scribble", from: "h_q" },
+        { op: "assertOutcomeFields", card: "c_notice", from: "h_q", expect: {
+          take: { after: "The notice is in your pocket.", quiet: true, weight: 2 },
+          leave: {},
+        } },
       ] },
 
     // A card's fields reach the game with the card, raw (patterkit
@@ -773,6 +780,16 @@ export const fixtures: Fixtures = {
             weight: 2, loud: true, mood: "tense", tags: ["night", "rain"] },
           c_default: { act: "arrival", cue: "", body: "", label: "", weight: 0, loud: false, mood: "calm", tags: [] },
           c_bare: { act: "arrival", cue: "", body: "", label: "", weight: 0, loud: false, mood: "calm", tags: [] },
+        } },
+        // The game's copy: defacing a dealt card's fields, a flags list
+        // among them, changes nothing the engine hands out next (the
+        // hands-on review, 2026-10, foundation 6).
+        { op: "scribble", from: "h_q" },
+        { op: "assertCardFields", from: "h_q", expect: {
+          c_full: { act: "act-1", cue: "lights down", body: "First line.\nSecond line.", label: "Prologue",
+            weight: 2, loud: true, mood: "tense", tags: ["night", "rain"] },
+          c_default: { act: "arrival", weight: 0 },
+          c_bare: {},
         } },
       ] },
 
@@ -899,6 +916,35 @@ export const fixtures: Fixtures = {
         { op: "assertNodeExtensions", kind: "outcome", address: "full/take", expect: { probe: { line: "Taken." } } },
         // Values ride along: what is dealt, and in what order, is unchanged.
         { op: "assertOutcomeOrder", card: "c_full", from: "h_q", expect: ["take", "leave"] },
+        // The game's copy, nested records, maps and lists included: defacing
+        // them changes nothing the engine hands out next, or the helper reads
+        // off the bundle (the hands-on review, 2026-10, foundation 6).
+        { op: "scribble", from: "h_q" },
+        { op: "assertCardExtensions", from: "h_q", expect: {
+          c_full: {
+            other: { flag: true },
+            probe: {
+              act: "turn", beats: [{ at: 3, id: "b2" }, { at: 1, id: "b1" }], body: "First line.\nSecond line.",
+              cue: { gain: 0.5, sound: "bell" }, loud: true, marks: ["night", "rain"], next: "c_default", note: "lights down",
+              perf: { v_docks: "frown", v_market: "smile" }, tone: "tense", weight: 4, words: ["salt", "rope"],
+            },
+          },
+          c_default: { probe: { act: "setup", weight: 1 } },
+          c_bare: {},
+        } },
+        { op: "assertOutcomeExtensions", card: "c_full", from: "h_q", expect: {
+          take: { probe: { line: "Taken." } },
+          leave: {},
+        } },
+        { op: "assertBoxExtensions", expect: { box: { probe: { theme: "harbour" } } } },
+        { op: "assertNodeExtensions", kind: "card", address: "full", expect: {
+          other: { flag: true },
+          probe: {
+            act: "turn", beats: [{ at: 3, id: "b2" }, { at: 1, id: "b1" }], body: "First line.\nSecond line.",
+            cue: { gain: 0.5, sound: "bell" }, loud: true, marks: ["night", "rain"], next: "c_default", note: "lights down",
+            perf: { v_docks: "frown", v_market: "smile" }, tone: "tense", weight: 4, words: ["salt", "rope"],
+          },
+        } },
       ] },
 
     { name: "a bundle with no extensions hands back none, and the project map's nodes take them by bare name",

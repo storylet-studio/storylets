@@ -15,6 +15,7 @@ import { flash, flashError, ok } from "./results.js";
 import { showInPatterpad } from "./show-in-patterpad.js";
 import { trackFieldUndo } from "./field-undo.js";
 import { remember } from "./session.js";
+import { keyIsTheCards, overlayOpen } from "./browse-keys.js";
 import type { Navigation } from "./navigation.js";
 import type { SaveQueue } from "./save-queue.js";
 import type { Comments } from "./comments.js";
@@ -22,9 +23,6 @@ import type { Exchange } from "./exchange.js";
 import type { ViewActions } from "./views.js";
 import type { Session } from "./session.js";
 import type { MenuCommand, OpenResult, ThemeChoice } from "../../shared/api.js";
-
-/** Everything that can sit on top of the page and take an Esc for itself. */
-const OVERLAYS = "dialog[open], .shell-anchored, .popover, .ctxmenu, .exed-pop";
 
 export interface CommandsContext {
   session: Session;
@@ -329,7 +327,7 @@ export function createCommands(ctx: CommandsContext) {
    * map below they are on their way out.
    */
   function onKeyCapture(event: KeyboardEvent): void {
-    if (event.key === "Escape") escOverlay = document.querySelector(OVERLAYS) !== null;
+    if (event.key === "Escape") escOverlay = overlayOpen();
   }
 
   function onKey(event: KeyboardEvent): void {
@@ -382,6 +380,9 @@ export function createCommands(ctx: CommandsContext) {
       return;
     }
     if (editable) return;
+    // Every key below acts on the selected cards, so none of them may come
+    // from a focused button elsewhere or reach past a dialog (browse-keys).
+    if (!keyIsTheCards(event.target)) return;
     // The card editor: step through the deck (v3 3).
     if (inspected?.kind === "card" && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
       const box = nav.currentBox();

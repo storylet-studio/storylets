@@ -455,6 +455,10 @@ function applyResult(result: OpenResult): void {
 /** Take a mutation's answer whole: report it, or apply it. True when it
  *  landed, for a caller with more to do. */
 function applied(r: OpenResult | { error: string }): boolean {
+  // A write refused because its file changed outside Storyletter since it was
+  // read (main's write-path `refuseDrift`): main has read the project again,
+  // so show it as it now is.
+  if ((r as { reread?: true }).reread === true) void lifecycle.refreshProject();
   if (!ok(r)) return false;
   applyResult(r);
   return true;

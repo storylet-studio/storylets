@@ -50,7 +50,12 @@ export function fieldValue<V = ScalarValue>(
   decls: readonly Declared<V>[], values: Readonly<Record<string, V>> | undefined, name: string,
 ): V | undefined {
   if (values !== undefined && own(values, name)) return values[name];
-  return decls.find((f) => f.name === name)?.default;
+  // The declaration's own default is the bundle's, shared by every card that
+  // leaves the field out: a structured one is handed out as a copy, or a game
+  // changing it would change it for all of them (the hands-on review, 2026-10,
+  // foundation 6).
+  const fallback = decls.find((f) => f.name === name)?.default;
+  return fallback !== null && typeof fallback === "object" ? structuredClone(fallback) : fallback;
 }
 
 /** Every declared field resolved (the value set, else the default), plus any
@@ -84,7 +89,9 @@ export function extensionDecls(bundle: Pick<Bundle, "extensions">, extension: st
  * `tagGroup` and `tag` as "box/name", or the bare name for the project map's.
  */
 export function extensionsOf(bundle: Pick<Bundle, "boxes" | "map" | "extensions">, kind: string, address = ""): NodeExtensions {
-  const values = (node: { extensions?: NodeExtensions } | undefined): NodeExtensions => ({ ...(node?.extensions ?? {}) });
+  // A copy, as the engine's views are: the game holds the bundle, but what it
+  // is handed here is its own to change.
+  const values = (node: { extensions?: NodeExtensions } | undefined): NodeExtensions => structuredClone(node?.extensions ?? {});
   const [first, second] = address.includes("/") ? [address.slice(0, address.indexOf("/")), address.slice(address.indexOf("/") + 1)] : [address, undefined];
   const named = <T extends { id: string; gameId?: string }>(items: readonly T[], name: string): T | undefined =>
     items.find((x) => (x.gameId ?? x.id) === name);
@@ -92,7 +99,7 @@ export function extensionsOf(bundle: Pick<Bundle, "boxes" | "map" | "extensions"
   switch (kind) {
     case "project": {
       const out: NodeExtensions = {};
-      for (const [id, ext] of Object.entries(bundle.extensions ?? {})) if (ext.project !== undefined) out[id] = ext.project;
+      for (const [id, ext] of Object.entries(bundle.extensions ?? {})) if (ext.project !== undefined) out[id] = structuredClone(ext.project);
       return out;
     }
     case "box": return values(named(bundle.boxes, address));
