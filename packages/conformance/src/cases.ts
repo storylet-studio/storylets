@@ -985,6 +985,141 @@ export const fixtures: Fixtures = {
         { op: "loadEnvelope", envelope: { schema: "storylets/save@2" }, expectRefused: ["not a complete Storylets save", "no content"] },
       ] },
 
+    // --- Corpus 21: deals that make the hand right, weights, repeats, discard ---
+    // (the hands-on review, 2026-10, rulings 1, 2 and 4)
+
+    // A deal ranks everything eligible, the held cards included, and the hand
+    // becomes the top: a better card that has become eligible takes the place
+    // of a worse one, which goes back to the stock "outranked".
+    { name: "a deal re-ranks a full hand: a better card that became eligible displaces a worse one",
+      story: [{ name: "open", type: "boolean", default: false }],
+      cards: [
+        { id: "c_better", priority: 3, condition: "@story.open" },
+        { id: "c_low", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_low"] } },
+        { op: "setState", story: { open: true } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_better"] }, expectTrace: ["evict q low outranked"] },
+      ] },
+
+    // A held card wins a tie, so an equal card never displaces it, and the
+    // tie costs no draws.
+    { name: "a held card wins a tie against a card of equal rank",
+      // Both gated, so they are equally specific as well as equal in priority.
+      story: [{ name: "open", type: "boolean", default: false }, { name: "always", type: "boolean", default: true }],
+      cards: [
+        { id: "c_held", priority: 1, condition: "@story.always" },
+        { id: "c_equal", priority: 1, condition: "@story.open" },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_held"] } },
+        { op: "setState", story: { open: true } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_held"] } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_held"] } },
+      ] },
+
+    // Weights order a run of equal cards: drawn by weight when they differ.
+    // When every weight in the run is the same the run shuffles exactly as an
+    // unweighted one: the second hand's answer is the first's.
+    { name: "weights draw a run of equal cards by weight, and equal weights shuffle as before",   // PRNG-computed
+      seed: 1,
+      cards: [
+        { id: "c_light", priority: 1, weight: 1 },
+        { id: "c_mid", priority: 1, weight: 1 },
+        { id: "c_heavy", priority: 1, weight: 98 },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "peek", expect: ["c_heavy", "c_light", "c_mid"] },
+      ] },
+    { name: "equal weights shuffle a run exactly as no weights do",   // PRNG-computed
+      seed: 1,
+      cards: [
+        { id: "c_light", priority: 1, weight: 2 },
+        { id: "c_mid", priority: 1, weight: 2 },
+        { id: "c_heavy", priority: 1, weight: 2 },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "peek", expect: ["c_mid", "c_heavy", "c_light"] },
+      ] },
+    { name: "no weights: the baseline the equal-weights case matches",   // PRNG-computed
+      seed: 1,
+      cards: [
+        { id: "c_light", priority: 1 },
+        { id: "c_mid", priority: 1 },
+        { id: "c_heavy", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "peek", expect: ["c_mid", "c_heavy", "c_light"] },
+      ] },
+
+    // In one hand: a pickup may fill up to N slots of one hand; a play takes
+    // one copy.
+    { name: "a card may fill up to its In one hand slots, and a play takes one copy",
+      cards: [
+        { id: "c_coin", priority: 2, inOneHand: 3, outcomes: [{ id: "o_take" }] },
+        { id: "c_other", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 4 }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_coin", "c_coin", "c_coin", "c_other"] } },
+        { op: "play", card: "c_coin", outcome: "take", from: "h_q" },
+        { op: "assertBoard", expect: { h_q: ["c_coin", "c_coin", "c_other"] } },
+      ] },
+
+    // Across hands: one hand of a flow at a time by default; "any" lets every
+    // hand hold it.
+    { name: "a card is in one hand at a time unless it says any",   // PRNG-computed (the hands' order)
+      cards: [
+        { id: "c_any", priority: 3, acrossHands: "any" },
+        { id: "c_once", priority: 2 },
+        { id: "c_filler", priority: 1, acrossHands: "any" },
+      ],
+      hands: [{ id: "h_a", rule: {}, slots: 2 }, { id: "h_b", rule: {}, slots: 2 }],
+      script: [
+        { op: "deal", expectBoard: { h_a: ["c_any", "c_filler"], h_b: ["c_any", "c_once"] } },
+      ] },
+
+    // Discard: out of the hand unplayed. No play, no clock, no play count; its
+    // Redraw starts, so the next deal doesn't hand it straight back.
+    { name: "a discarded card leaves unplayed and waits out its Redraw",
+      cards: [
+        { id: "c_a", priority: 2, redraw: 3 },
+        { id: "c_b", priority: 1 },
+        { id: "c_counted", priority: 9, condition: 'count_played("a") >= 1' },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_a"] } },
+        { op: "discard", card: "c_b", from: "h_q", expectError: true },
+        { op: "discard", card: "c_a", from: "h_q", expectTrace: ["discard q a"] },
+        { op: "assertBoard", expect: { h_q: [] } },
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_b"] } },
+        { op: "advanceTurns", box: "b_x", n: 3 },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_a"] }, expectTrace: ["evict q b outranked"] },
+      ] },
+
+    // The three-way box clock: a box whose clock the game moves (`turn` with
+    // no seconds, a calendar) advances nothing on a play, as a timed box
+    // doesn't; the game ticks it.
+    { name: "a box whose clock the game moves advances nothing on a play",
+      turn: {},
+      cards: [{ id: "c_a", priority: 1, redraw: 2, outcomes: [{ id: "o_done" }] }, { id: "c_b" }],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_a"] } },
+        { op: "play", card: "c_a", outcome: "done", from: "h_q" },
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+        { op: "advanceTurns", box: "b_x", n: 1 },
+        { op: "assertState", expect: { "turn.b_x": 1 } },
+      ] },
+
     // A condition the engine cannot evaluate counts as false, and the game
     // hears of it through onError whether or not anything is tracing (the
     // hands-on review, 2026-10, foundation 5). A division by zero is content
@@ -3898,9 +4033,12 @@ export const fixtures: Fixtures = {
       ],
       script: [
         { op: "deal", expectBoard: { h_a: ["c_d", "c_a"], h_b: ["c_f", "c_c"] } },
-        // h_b's c_f fails its condition on the second draw and goes; c_c keeps
-        // its seat and c_b fills the space.
-        { op: "deal", expectBoard: { h_a: ["c_d", "c_a"], h_b: ["c_c", "c_b"] } },
+        // From corpus 21 a full hand is ranked again at every deal (the
+        // hands-on review, 2026-10, ruling 1), so the second deal evaluates
+        // every card for both hands and draws more: the boards below are the
+        // reference's answer under that rule. Held cards keep their places and
+        // newcomers follow.
+        { op: "deal", expectBoard: { h_a: ["c_a", "c_b"], h_b: ["c_c", "c_f"] } },
       ] },
   ],
 

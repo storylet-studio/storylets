@@ -768,10 +768,6 @@
           "verdict": "tags"
         },
         {
-          "id": "ring-of-the-anvil",
-          "verdict": "claimed"
-        },
-        {
           "id": "night-settles",
           "verdict": "condition"
         },
@@ -824,6 +820,12 @@
           "verdict": "dealt",
           "priority": 4,
           "specificity": 3
+        },
+        {
+          "id": "ring-of-the-anvil",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
         },
         {
           "id": "market-bustle",
@@ -885,10 +887,6 @@
           "verdict": "cooldown"
         },
         {
-          "id": "settle-at-the-inn",
-          "verdict": "claimed"
-        },
-        {
           "id": "the-moneylenders-men",
           "verdict": "condition"
         },
@@ -921,7 +919,109 @@
           "verdict": "tags"
         },
         {
+          "id": "settle-at-the-inn",
+          "verdict": "dealt",
+          "priority": 3,
+          "specificity": 1
+        },
+        {
           "id": "market-bustle",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [
+        "ring-of-the-anvil",
+        "gareth-looks-troubled"
+      ],
+      "the-inn": [
+        "settle-at-the-inn",
+        "market-bustle"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 3
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "deal",
+      "hand": "the-mystic-tree",
+      "cards": [
+        {
+          "id": "ring-of-the-anvil",
+          "verdict": "tags"
+        },
+        {
+          "id": "market-bustle",
+          "verdict": "tags"
+        },
+        {
+          "id": "night-settles",
+          "verdict": "tags"
+        },
+        {
+          "id": "arrive-at-the-gate",
+          "verdict": "cooldown"
+        },
+        {
+          "id": "answer-brynas-summons",
+          "verdict": "tags"
+        },
+        {
+          "id": "known-at-the-forge",
+          "verdict": "cooldown"
+        },
+        {
+          "id": "settle-at-the-inn",
+          "verdict": "tags"
+        },
+        {
+          "id": "the-moneylenders-men",
+          "verdict": "tags"
+        },
+        {
+          "id": "gareths-gratitude",
+          "verdict": "tags"
+        },
+        {
+          "id": "gareth-looks-troubled",
+          "verdict": "tags"
+        },
+        {
+          "id": "mira-seems-distracted",
+          "verdict": "tags"
+        },
+        {
+          "id": "the-sealed-letter",
+          "verdict": "tags"
+        },
+        {
+          "id": "the-forest-turns",
+          "verdict": "condition"
+        },
+        {
+          "id": "the-tree-blooms",
+          "verdict": "condition"
+        },
+        {
+          "id": "the-glowing-tree",
+          "verdict": "condition"
+        },
+        {
+          "id": "wind-in-the-leaves",
           "verdict": "dealt",
           "priority": 0,
           "specificity": 0

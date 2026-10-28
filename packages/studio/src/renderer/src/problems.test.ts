@@ -11,7 +11,7 @@ const deck: DeckDto = {
   id: "k_1", gameId: "docks", title: "Docks", properties: [],
   cards: [{
     id: "c_1", gameId: "ambush", title: "Ambush at the ford", condition: "", priority: 0, redraw: "never",
-    tags: [], copies: "", sharedCopies: "", fields: [],
+    tags: [], sharedCopies: "", fields: [],
     outcomes: [{ id: "o_1", gameId: "flee", changes: [], fields: [] }],
   }],
 };

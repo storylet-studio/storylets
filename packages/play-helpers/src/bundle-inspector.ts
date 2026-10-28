@@ -181,7 +181,7 @@ export function createBundleInspector(
     line(countsBody, `${box.gameId}: decks ${box.counts.decks}, cards ${box.counts.cards}, `
       + `hands ${box.counts.hands}, templates ${box.counts.templates}, `
       + `tag groups ${box.counts.tagGroups}, ranking.specificity ${box.ranking.specificity}`
-      + (box.turn !== undefined ? `, turn = ${box.turn.seconds}s` : "")
+      + (box.turn === undefined ? "" : box.turn.seconds !== undefined ? `, turn = ${box.turn.seconds}s` : ", turn moved by the game")
       // Only when there are any: a box whose cards all come back with the run
       // has nothing for a server to lift, and the zero would be noise.
       + (box.durableCards !== undefined ? `, durable cards ${box.durableCards}` : ""));

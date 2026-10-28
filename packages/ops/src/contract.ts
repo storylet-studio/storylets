@@ -131,7 +131,7 @@ export function contractIssues(source: SourceProject): Issue[] {
   for (const box of source.boxes) {
     for (const hand of box.hands.hands) hands.add(effectiveGameId(hand));
     boxes.set(effectiveGameId(box.box.box), {
-      ...(box.box.box.turn !== undefined ? { turn: box.box.box.turn.seconds } : {}),
+      ...(box.box.box.turn?.seconds !== undefined ? { turn: box.box.box.turn.seconds } : {}),
       path: `${box.path}/box`,
       gameId: effectiveGameId(box.box.box),
     });

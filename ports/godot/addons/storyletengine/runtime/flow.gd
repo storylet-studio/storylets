@@ -820,8 +820,70 @@ func _claims() -> Dictionary:
 	return counts
 
 
-static func _copies_of(card: Dictionary) -> float:
+## How many hands of one flow may hold a card at once: one, or any number
+## (`acrossHands`), or a bundle from before it, its `copies`.
+static func _across_limit(card: Dictionary) -> float:
+	var across = card.get("acrossHands")
+	if across is String and across == "any":
+		return INF
+	if across is String and across == "one":
+		return 1.0
 	return float(card.get("copies", 1))
+
+
+## How many slots of one hand a card may fill (`inOneHand`, default 1).
+static func _in_one_hand_of(card: Dictionary) -> int:
+	return int(card.get("inOneHand", 1))
+
+
+## A card's weight among cards of equal rank (default 1).
+static func _weight_of(s: Dictionary) -> float:
+	return float(s["entry"]["card"].get("weight", 1))
+
+
+## One run of equally ranked cards, in the order a deal takes them (the
+## hands-on review, 2026-10, rulings 1 and 4). Cards the hand already holds
+## come first, in the order they were scored, so a re-ranking deal never swaps
+## one for an equal. The rest are shuffled, as runs always were, when their
+## weights are all equal; otherwise drawn by weight, one draw per place but the
+## last: each place takes the card whose share of the remaining weight the draw
+## falls in, walking the remaining cards in scored order. Both forms draw
+## (rest - 1) numbers, held cards none, so unweighted content deals exactly
+## as it did. `held` is a Dictionary of card id -> count, or null.
+func _order_run(run: Array, held) -> Array:
+	var first: Array = []
+	var rest: Array = []
+	for s in run:
+		if held != null and (held as Dictionary).has(s["entry"]["card"]["id"]):
+			first.append(s)
+		else:
+			rest.append(s)
+	var weighted := false
+	if rest.size() > 1:
+		var w0 := _weight_of(rest[0])
+		for s in rest:
+			if _weight_of(s) != w0:
+				weighted = true
+				break
+	if weighted:
+		var drawn: Array = []
+		var left := rest.duplicate()
+		while left.size() > 1:
+			var total := 0.0
+			for s in left:
+				total += _weight_of(s)
+			var r: float = _prng.next() * total
+			var k := 0
+			while k < left.size() - 1 and r >= _weight_of(left[k]):
+				r -= _weight_of(left[k])
+				k += 1
+			drawn.append(left[k])
+			left.remove_at(k)
+		drawn.append(left[0])
+		return first + drawn
+	if rest.size() > 1:
+		StoryletMulberry32.shuffle_in_place(rest, _prng)
+	return first + rest
 
 
 ## Is this card scarce across flows (design/shared-scarcity.md)? The deck says
@@ -831,9 +893,10 @@ static func _card_is_shared(card: Dictionary, deck_shared: bool) -> bool:
 	return bool(card.get("shared", deck_shared))
 
 
-## How many hands ACROSS EVERY FLOW may hold this at once; defaults to copies.
+## How many hands ACROSS EVERY FLOW may hold this at once; defaults to the
+## per-flow limit (one hand, or `copies`).
 static func _shared_cap(card: Dictionary) -> float:
-	return float(card.get("sharedCopies", card.get("copies", 1)))
+	return float(card["sharedCopies"]) if card.has("sharedCopies") else _across_limit(card)
 
 
 ## Every card id on THIS flow's board, one entry per holding hand. The engine
@@ -848,14 +911,17 @@ func held_card_ids() -> Array:
 
 ## The claims step (3.1 step 6) for one card, as a verdict or "" for available.
 ## Two caps apply to a shared card and they are different statements, so they
-## get different verdicts: `copies` is your own board filling up,
-## `sharedCopies` is somebody else already holding it, and a participant told
-## "claimed" about a card on another person's table would read it as a fault.
-func _claim_verdict(card: Dictionary, shared: bool, mine: Dictionary, world: Dictionary) -> String:
+## get different verdicts: the across-hands limit is your own board filling
+## up, `sharedCopies` is somebody else already holding it, and a participant
+## told "claimed" about a card on another person's table would read it as a
+## fault. `mine` counts this flow's holdings, `world` every live flow's, and
+## `own` what the hand being dealt holds already: those are the hand's to keep
+## or give up as it re-ranks, so they claim nothing against it.
+func _claim_verdict(card: Dictionary, shared: bool, mine: Dictionary, world: Dictionary, own: float = 0.0) -> String:
 	var id: String = card["id"]
-	if float(mine.get(id, 0)) >= _copies_of(card):
+	if float(mine.get(id, 0)) - own >= _across_limit(card):
 		return "claimed"
-	if shared and float(world.get(id, 0)) >= _shared_cap(card):
+	if shared and float(world.get(id, 0)) - own >= _shared_cap(card):
 		return "claimed-elsewhere"
 	return ""
 
@@ -891,9 +957,11 @@ func _tags_match(card: Dictionary, bound_tags: Dictionary) -> bool:
 # Run one ask: availability filter then ranking. `claimed(card, shared)`
 # decides the claims step (step 6) per card, returning the verdict that
 # refused it or "" for available. `trace` (an Array when a
-# subscriber exists, else null) collects the per-card verdicts. Returns
+# subscriber exists, else null) collects the per-card verdicts. `held` (card
+# id -> count, or null) is what the hand being dealt holds: those cards win
+# ties, so a re-ranking deal never swaps one for an equal. Returns
 # {"ordered": Array of card entries, "hand_env"}.
-func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
+func _run_ask(ask: Dictionary, claimed: Callable, trace, held = null) -> Dictionary:
 	var box: Dictionary = ask["box"]
 	var hand_env := _build_hand_env(ask)
 
@@ -986,7 +1054,10 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 			return a["spec"] > b["spec"]
 		return a["index"] < b["index"]
 	scored.sort_custom(by_rank)
-	# Seeded shuffle of each maximal tie run; runs of 1 consume no draws.
+	# Each maximal tie run: held cards first, in the order they were scored;
+	# then the rest, shuffled, or drawn by weight when their weights differ.
+	# Held cards take no draws, so a deal draws what it always drew; runs of 1
+	# consume no draws.
 	var i := 0
 	while i < scored.size():
 		var j := i + 1
@@ -995,8 +1066,7 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 				and scored[j]["spec"] == scored[i]["spec"]:
 			j += 1
 		if j - i > 1:
-			var run := scored.slice(i, j)
-			StoryletMulberry32.shuffle_in_place(run, _prng)
+			var run := _order_run(scored.slice(i, j), held)
 			for k in run.size():
 				scored[i + k] = run[k]
 		i = j
@@ -1300,44 +1370,66 @@ func deal_many(hand_refs = null) -> Dictionary:
 	for f in dealt:
 		var hand: Dictionary = f["hand"]
 		var box: Dictionary = f["box"]
-		var contents: Array = _board_contents.get(hand["id"], [])
-		var free := _hand_capacity(hand) - float(contents.size())
-		if free <= 0.0:
-			continue
+		# A deal makes the hand right (the hands-on review, 2026-10, ruling 1):
+		# it ranks everything eligible, the cards it holds included, and the
+		# hand becomes the top of that ranking, full or not. A held card wins a
+		# tie, so an equal card never displaces it; one a better card displaces
+		# goes back to the stock, "outranked".
+		var held: Array = _board_contents.get(hand["id"], [])
 		var ask := _ask_for_hand(hand, box)
 		if ask.has("error"):
 			continue   # already reported in the evict pass
 		var own := {}
-		for id in contents:
-			own[id] = true
+		for id in held:
+			own[id] = own.get(id, 0) + 1
 		var trace = [] if _tracing() else null
-		# At most once in any one hand; at most `copies` hands here, and at most
-		# `sharedCopies` hands anywhere (schema 3.5, shared-scarcity 5).
-		var claimed := func(card: Dictionary, shared: bool) -> String: return "claimed" if own.has(card["id"]) else _claim_verdict(card, shared, claim_counts, world_claims)
-		var res := _run_ask(ask, claimed, trace)
+		# At most `inOneHand` times in this hand; in one hand of this flow at a
+		# time unless the card says any (or, from an older bundle, `copies`);
+		# at most `sharedCopies` hands anywhere (schema 3.5, shared-scarcity 5).
+		var claimed := func(card: Dictionary, shared: bool) -> String: return _claim_verdict(card, shared, claim_counts, world_claims, float(own.get(card["id"], 0)))
+		var res := _run_ask(ask, claimed, trace, own)
 		var ordered: Array = res["ordered"]
-		var take := ordered.size() if is_inf(free) else mini(int(free), ordered.size())
-		# The entries as well as their ids: the board is keyed by internal id and
-		# the trace by gameId (4.4), so both readings of "what this hand took"
-		# come off one slice rather than two walks that could disagree.
-		var taking: Array = []
-		var added: Array = []
-		for k in take:
-			taking.append(ordered[k])
-			added.append(ordered[k]["card"]["id"])
-		var next_contents := contents.duplicate()
-		next_contents.append_array(added)
+		# The top of the ranking, each card as many times as one hand may hold it.
+		var want := {}
+		var room := _hand_capacity(hand)
+		for e in ordered:
+			if room <= 0.0:
+				break
+			var n: float = minf(float(_in_one_hand_of(e["card"])), room)
+			want[e["card"]["id"]] = int(n)
+			room -= n
+		# Held cards keep their places; newcomers follow, in rank order.
+		var next_contents: Array = []
+		var outranked: Array = []
+		for id in held:
+			var n: int = want.get(id, 0)
+			if n > 0:
+				next_contents.append(id)
+				want[id] = n - 1
+			else:
+				outranked.append(id)
+		for e in ordered:
+			var id: String = e["card"]["id"]
+			for n in int(want.get(id, 0)):
+				next_contents.append(id)
+			want.erase(id)
 		_board_contents[hand["id"]] = next_contents
-		for id in added:
+		for id in held:
+			claim_counts[id] = claim_counts.get(id, 1) - 1
+			world_claims[id] = world_claims.get(id, 1) - 1
+		for id in next_contents:
 			claim_counts[id] = claim_counts.get(id, 0) + 1
 			world_claims[id] = world_claims.get(id, 0) + 1
 		# Emitted after the hand is set: a handler reading board() sees the deal.
 		if trace != null:
+			var turn_now: float = _turn_counts.get(box["id"], 0.0)
+			for id in outranked:
+				_emit({"type": "evict", "hand": StoryletBundle.effective_game_id(hand), "card": StoryletBundle.effective_game_id(_engine._cards_by_id[id]["card"]), "reason": "outranked"}, turn_now)
 			var taken := {}
-			for e in taking:
-				taken[StoryletBundle.effective_game_id(e["card"])] = true
+			for id in next_contents:
+				taken[StoryletBundle.effective_game_id(_engine._cards_by_id[id]["card"])] = true
 			_cap_trace(trace, taken)
-			_emit({"type": "deal", "hand": StoryletBundle.effective_game_id(hand), "cards": trace}, _turn_counts.get(box["id"], 0.0))
+			_emit({"type": "deal", "hand": StoryletBundle.effective_game_id(hand), "cards": trace}, turn_now)
 
 	var out := {}
 	for f in dealt:
@@ -1495,8 +1587,10 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 	# The played card's box's clock advances (schema 3.4); computed up front
 	# so the play and its writes log as one action, one turn stamp.
 	#
-	# A TIMED box (design/engine-server.md 4.8) defaults to advancing NOTHING:
-	# its clock is time, the host ticks it, and a play is not a tick. A call
+	# A box whose clock the game moves (`turn` present: a TIMED box,
+	# design/engine-server.md 4.8, or with no seconds a calendar or any beat
+	# of the game's) defaults to advancing NOTHING: the host ticks it, and a
+	# play is not a tick. A call
 	# that names advance_turns still gets what it asked for, in either kind of
 	# box, because the call says otherwise. This is the whole of turn's effect
 	# on the engine: the seconds are never read.
@@ -1561,17 +1655,57 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 			_cooldowns[entry["card"]["id"]] = float(StoryletBundle.MAX_SAFE_INTEGER)
 	elif StoryletValues.is_number(redraw):
 		_cooldowns[entry["card"]["id"]] = new_turn + float(redraw)
-	# The card leaves its hand, releasing its claim (schema 3.5/3.7).
-	var hand_id: String = ask["hand"]["id"]
-	var remaining: Array = []
-	for id in _board_contents.get(hand_id, []):
-		if id != entry["card"]["id"]:
-			remaining.append(id)
-	_board_contents[hand_id] = remaining
+	# The card leaves its hand, releasing its claim (schema 3.5/3.7): one
+	# copy, for a card the hand holds more than once (`inOneHand`).
+	_remove_one(ask["hand"]["id"], entry["card"]["id"])
 	_turn_counts[entry["box"]["id"]] = new_turn
 	# Emitted last: a handler reading the board and the clock sees the play.
 	if _tracing():
 		_emit({"type": "play", "card": StoryletBundle.effective_game_id(entry["card"]), "outcome": outcome_id, "turn": new_turn}, new_turn)
+	return ""
+
+
+# Take ONE copy of a card out of a hand, leaving the rest in place.
+func _remove_one(hand_id: String, card_id: String) -> void:
+	var remaining: Array = (_board_contents.get(hand_id, []) as Array).duplicate()
+	var at := remaining.find(card_id)
+	if at >= 0:
+		remaining.remove_at(at)
+	_board_contents[hand_id] = remaining
+
+
+## Take a card out of a hand without playing it: the player turned it down, or
+## the game wants the room (the hands-on review, 2026-10, ruling: discard). No
+## outcome, no play in the log, no move of the clock, no play count. It starts
+## its Redraw as a play would, so a re-ranking deal doesn't hand it straight
+## back: a finite Redraw waits that many turns from now, a "never" card is gone
+## for good (for everyone, when it's shared), and an "always" card can come up
+## at the next deal. One copy leaves, for a card the hand holds more than once.
+## Returns "" on success or the error message; a bad reference push_errors as
+## well, as play's does.
+func discard(card_id: String, from_hand: String) -> String:
+	if _closed:
+		var closed_msg := _closed_message()
+		push_error("StoryletFlow.discard: " + closed_msg)
+		return closed_msg
+	var rd := _resolve_dealt(card_id, from_hand)
+	if rd.has("error"):
+		push_error("StoryletFlow.discard: " + rd["error"])
+		return rd["error"]
+	var entry: Dictionary = rd["entry"]
+	var ask: Dictionary = rd["ask"]
+	var turn: float = float(_turn_counts.get(entry["box"]["id"], 0.0))
+	var redraw = entry["card"].get("redraw", "always")
+	if redraw is String and redraw == "never":
+		if _card_is_shared(entry["card"], bool(entry["deck"].get("shared", false))):
+			_engine.mark_taken(entry["card"]["id"])
+		else:
+			_cooldowns[entry["card"]["id"]] = float(StoryletBundle.MAX_SAFE_INTEGER)
+	elif StoryletValues.is_number(redraw):
+		_cooldowns[entry["card"]["id"]] = turn + float(redraw)
+	_remove_one(ask["hand"]["id"], entry["card"]["id"])
+	if _tracing():
+		_emit({"type": "discard", "hand": StoryletBundle.effective_game_id(ask["hand"]), "card": StoryletBundle.effective_game_id(entry["card"]), "turn": turn}, turn)
 	return ""
 
 

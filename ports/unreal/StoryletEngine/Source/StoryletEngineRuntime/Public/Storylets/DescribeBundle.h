@@ -106,9 +106,13 @@ namespace storylets
         bool usesMap = false;
         /** The only per-box ranking policy (Reboot 2.2). */
         bool rankingSpecificity = true;
+        /** The GAME moves this box's clock, so a play advances nothing: an
+         *  integrator reading a bundle needs it to know which boxes their host
+         *  must tick. False is the ordinary box, whose clock a play moves. */
+        bool gameClock = false;
         /** Set on a TIMED box (design/engine-server.md 4.8): how long one of its
-         *  turns lasts. An integrator reading a bundle needs it to know which
-         *  boxes their host must tick, and how often. Empty is the ordinary box. */
+         *  turns lasts, so how often the host ticks it. Empty on the ordinary
+         *  box and on a game clock with no seconds (the game's own beat). */
         std::optional<double> turnSeconds;
         /** How many cards in this box are DURABLE (design/engine-server.md
          *  4.2): their `redraw: never` spend outlives the run, so a server has
@@ -398,6 +402,7 @@ namespace storylets
             summary.title = box.title;
             summary.usesMap = box.usesMap;
             summary.rankingSpecificity = box.ranking.specificity;
+            summary.gameClock = box.gameClock;
             summary.turnSeconds = box.turnSeconds;
             summary.durableCards = durableCards;
             for (const TagGroup& group : box.tagGroups)

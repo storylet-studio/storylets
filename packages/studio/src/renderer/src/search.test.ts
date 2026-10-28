@@ -12,9 +12,9 @@ const project: ProjectDto = {
     decks: [{
       id: "k_docks", gameId: "docks", title: "Docks", gate: "@world.raining", properties: [],
       cards: [
-        { id: "c_1", gameId: "ambush-at-the-ford", title: "Ambush at the ford", condition: "@world.danger >= 2", priority: 2, redraw: "5", tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [] },
+        { id: "c_1", gameId: "ambush-at-the-ford", title: "Ambush at the ford", condition: "@world.danger >= 2", priority: 2, redraw: "5", tags: [], sharedCopies: "", fields: [], outcomes: [] },
         {
-          id: "c_2", gameId: "rat-job", title: "A rat job", priority: 1, redraw: "always", tags: [], copies: "", sharedCopies: "", fields: [],
+          id: "c_2", gameId: "rat-job", title: "A rat job", priority: 1, redraw: "always", tags: [], sharedCopies: "", fields: [],
           outcomes: [{ id: "o_1", gameId: "accepted", changes: ["@story.reputation ← @story.reputation + 1"], fields: [] }],
         },
       ],

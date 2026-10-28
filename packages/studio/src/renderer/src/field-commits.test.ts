@@ -13,7 +13,7 @@ import type { BoxDto, CardDto, DeckDto, HandDetail, TagGroupDetail, TemplateDeta
 
 const card: CardDto = {
   id: "c_1", gameId: "rat-job", title: "A rat job", priority: "0", redraw: "3",
-  tags: [], copies: "", sharedCopies: "", fields: [],
+  tags: [], sharedCopies: "", fields: [],
   outcomes: [{ id: "o_1", gameId: "take-it", title: "Take it", changes: [], fields: [] }],
 };
 const deck: DeckDto = { id: "k_1", gameId: "main", properties: [], cards: [card] };

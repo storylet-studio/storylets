@@ -484,7 +484,7 @@ export class Table {
       const gameId = box.gameId ?? box.id;
       return {
         box: gameId, turn: this.session.turn(gameId),
-        ...(box.turn !== undefined ? { seconds: box.turn.seconds } : {}),
+        ...(box.turn?.seconds !== undefined ? { seconds: box.turn.seconds } : {}),
       };
     });
   }

@@ -45,7 +45,7 @@ import type { ExtensionHost } from "./extension-rows.js";
 const NO_EXTENSIONS: ExtensionHost = { project: () => undefined, save: () => {} };
 const extHost = (h: { extensions?: ExtensionHost }): ExtensionHost => h.extensions ?? NO_EXTENSIONS;
 import type {
-  BindingDto, BoxDto, BoxEdit, CardDto, CardEdit, ConditionProperty, DeckDto, DeckEdit,
+  BindingDto, BoxDto, BoxEdit, CardDefaultsDto, CardDto, CardEdit, ConditionProperty, DeckDto, DeckEdit,
   FieldDeclDto, StageTargetDto, HandCardGate, HandCardRef, HandCardsDto, HandDetail, HandEdit, OutcomeDto, OutcomeEdit, PropertyDeclDto,
   TagGroupDetail, TagGroupEdit, TemplateDetail, TemplateEdit, ValueDetail,
 } from "../../shared/api.js";
@@ -323,8 +323,12 @@ function editFromCard(card: CardDto): Required<CardEdit> {
   return {
     gameId: card.gameIdPinned ?? "",
     priority: String(card.priority),
-    redraw: card.redraw,
-    copies: card.copies,
+    // "" while the card follows its Card template, so saving the card's other
+    // fields leaves it following; the Dealing tab shows the template's value.
+    redraw: card.redrawInherited === true ? "" : card.redraw,
+    weight: card.weight ?? "",
+    inOneHand: card.inOneHand ?? "",
+    acrossHands: card.acrossHands ?? null,
     // null is the third state: inherit the deck's flag rather than override it.
     shared: card.shared === undefined ? null : card.shared,
     sharedCopies: card.sharedCopies,
@@ -540,13 +544,16 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
 
     const priority = inputField(edit.priority ?? "", "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.priority = v; }, commit });
     priority.placeholder = "0";
-    const isNumber = /^\d+$/.test(edit.redraw ?? "");
+    // An inherited Redraw travels as "" so a save leaves it following the Card
+    // template; the control shows what it follows (`card.redraw`, the template's).
+    const shownRedraw = edit.redraw || card.redraw;
+    const isNumber = /^\d+$/.test(shownRedraw);
     const seg = segmented(([["always", "always"], ["never", "never"], ["turns", "5"]] as [string, string][]).map(([label, value]) => ({
-      label, on: label === "turns" ? isNumber : edit.redraw === value,
+      label, on: label === "turns" ? isNumber : shownRedraw === value,
       pick: () => { edit.redraw = value; commit(); drawCentre(); },
     })));
     const turns = el("input", { className: "insp-input insp-mono insp-short" });
-    turns.value = isNumber ? (edit.redraw ?? "") : ""; turns.placeholder = "3"; turns.disabled = !isNumber;
+    turns.value = isNumber ? shownRedraw : ""; turns.placeholder = "3"; turns.disabled = !isNumber;
     // In a TIMED box the number here is a length of time, not a count of plays
     // (design/engine-server.md 4.8), so the field says what it comes to as the
     // designer types rather than leaving the arithmetic to them. Nothing is
@@ -560,8 +567,22 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     };
     sayTime();
     bindField(turns, { mode: "input", set: (v) => { if (/^\d+$/.test(v)) edit.redraw = v; }, after: sayTime, commit });
-    const copies = inputField(edit.copies ?? "", "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.copies = v; }, commit });
-    copies.placeholder = "1";
+    // The dealing rules (the hands-on review, 2026-10: weights in place of
+    // Copies). Blank follows the box's Card template, whose value shows as
+    // the placeholder.
+    const defaults = box.cardDefaults;
+    const weight = inputField(edit.weight ?? "", "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.weight = v; }, commit });
+    weight.placeholder = defaults?.weight || "1";
+    const inOneHand = inputField(edit.inOneHand ?? "", "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.inOneHand = v; }, commit });
+    inOneHand.placeholder = defaults?.inOneHand || "1";
+    const templateAcross = defaults?.acrossHands ?? "one";
+    const across = segmented(([
+      [`template (${templateAcross === "any" ? "any hand" : "one hand"})`, null],
+      ["one hand at a time", "one"],
+      ["any hand", "any"],
+    ] as [string, "one" | "any" | null][]).map(([label, v]) => ({
+      label, on: edit.acrossHands === v, pick: () => { edit.acrossHands = v; commit(); drawCentre(); },
+    })));
 
     /** The three-state control the two axes share: not set / on / off, with
      *  the "not set" choice naming what the DECK actually says, so the answer
@@ -598,10 +619,10 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         if (effective) {
           const world = inputField(edit.sharedCopies ?? "", "insp-input insp-mono insp-short",
             { mode: "input", set: (v) => { edit.sharedCopies = v; }, commit });
-          world.placeholder = edit.copies.trim() || "1";
+          world.placeholder = "1";
           rows.push(cfgRow("In the world",
-            "How many hands may hold it anywhere, across every playthrough. Blank means the same as Copies, "
-            + "which is right for one-in-the-world. Set both for five in the world and one to a customer.",
+            "How many hands may hold it anywhere, across every playthrough. Blank means one, "
+            + "which is right for one-in-the-world. Five here is five in the world, one to a customer.",
             world));
         }
       }
@@ -614,7 +635,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       // way out the compiler names for a flag above its rung is "remove the
       // flag", venue being the server's to set, so the control an author
       // removes it with cannot be one the rung takes away.
-      if ((shows("durable") || edit.durable === true) && edit.redraw === "never") {
+      if ((shows("durable") || edit.durable === true) && shownRedraw === "never") {
         rows.push(cfgRow("Durable",
           "The card stays played after the run ends. Tomorrow it's still gone for whoever played it, "
           + "or for everyone if it is also shared. Only a Redraw of never can be durable.",
@@ -631,11 +652,14 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       cfgRow("Priority", box.ranking.specificity
         ? "Higher goes first. Rank by specificity is on, so this only breaks ties between equally specific cards."
         : "Higher goes first, and decides the order outright.", priority),
-      cfgRow("Redraw", unit === undefined
+      cfgRow("Redraw", (unit === undefined
         ? "Whether a played card can be dealt again."
-        : `Whether a played card can be dealt again. A turn in this box is ${turnSpan(1, unit, true)} (its Turns setting), so the number here is a length of time.`,
+        : `Whether a played card can be dealt again. A turn in this box is ${turnSpan(1, unit, true)} (its Turns setting), so the number here is a length of time.`)
+        + (card.redrawInherited === true ? " This card follows its Card template's until you set one here." : ""),
         el("div", { className: "insp-segrow" }, seg, turns, asTime)),
-      cfgRow("Copies", "How many hands may hold this card at once, in one playthrough. One copy is the rule. More is for interchangeable filler.", copies),
+      cfgRow("Weight", "How often it comes up beside cards of equal rank: 2 is twice as often as 1. Priority still comes first. Blank follows the Card template.", weight),
+      cfgRow("In one hand", "How many slots of one hand it can fill at once: 1 for an encounter, 3 for a pickup that can come up three times. Blank follows the Card template.", inOneHand),
+      cfgRow("Across hands", "Whether several hands can offer it at once. One hand at a time keeps a one-off in one place; any hand suits filler.", across),
       ...sharedRows(),
     ));
 
@@ -1616,17 +1640,24 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // consequence is spelt out under the choice rather than left to be
     // discovered on the Board, because it changes what Redraw MEANS on every
     // card in the box.
+    // Three answers (the hands-on review, 2026-10: the three-way box clock):
+    // each play moves it, as everywhere else; the game moves it on its own
+    // beat (a calendar); or real time, every N seconds. The last two say plays
+    // advance nothing.
+    type Clock = "plays" | "game" | "time";
+    let clock: Clock = box.turn === undefined ? "plays" : box.turn.seconds === undefined ? "game" : "time";
     let seconds: number | undefined = box.turn?.seconds;
     const turnsHost = el("div");
     const drawTurns = (): void => {
-      const timed = seconds !== undefined;
+      const timed = clock === "time";
       // A click on the choice already made does nothing (the helper's rule): it
       // must not reset a seconds the designer has typed.
-      const seg = segmented(([["a play", !timed], ["every N seconds of play", timed]] as [string, boolean][]).map(([label, on]) => ({
-        label, on,
+      const seg = segmented(([["each play", "plays"], ["the game", "game"], ["every N seconds", "time"]] as [string, Clock][]).map(([label, c]) => ({
+        label, on: clock === c,
         pick: () => {
-          seconds = timed ? undefined : 60;
-          h.saveBox(box.id, { turn: seconds === undefined ? null : { seconds } });
+          clock = c;
+          if (c === "time") seconds = seconds ?? 60;
+          h.saveBox(box.id, { turn: c === "plays" ? null : c === "game" ? {} : { seconds: seconds! } });
           drawTurns();
         },
       })));
@@ -1637,8 +1668,10 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       field.placeholder = "60"; field.disabled = !timed;
       const note = el("p", { className: "insp-note" });
       const say = (n: number | undefined): void => {
-        note.textContent = n === undefined ? "" : "Plays in this box don't advance its turns. The game's clock does. "
-          + `Redraw times on its cards are read as time, so a Redraw of 30 means ${turnSpan(30, n, true)}.`;
+        note.textContent = clock === "plays" ? ""
+          : clock === "game" ? "Plays in this box don't advance its turns. Your game moves its clock, a day at a time say, and Redraw counts those turns."
+          : n === undefined ? "" : "Plays in this box don't advance its turns. The game's clock does. "
+            + `Redraw times on its cards are read as time, so a Redraw of 30 means ${turnSpan(30, n, true)}.`;
       };
       const typed = (): number | undefined => {
         const n = Number(field.value);
@@ -1658,7 +1691,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       say(seconds);
       turnsHost.replaceChildren(
         el("div", { className: "cfg-panel" },
-          cfgRow("A turn is", "A play, as everywhere else, or a length of time the game's clock counts out.",
+          cfgRow("The clock moves", "On each play, as everywhere else; when your game moves it (a calendar); or by real time.",
             el("div", { className: "insp-segrow" }, seg, field))),
         note);
     };
@@ -1668,7 +1701,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // one table stays the whole answer to what a rung shows; the `seconds`
     // arm keeps a box that is ALREADY timed showing its section whatever any
     // future rule says, since hiding must never swallow content in use.
-    if (shows("timedBox") || seconds !== undefined) {
+    if (shows("timedBox") || clock !== "plays") {
       drawTurns();
       view.append(section("Turns", "what a turn is in this box", turnsHost));
     }
@@ -1692,6 +1725,8 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       propPanel(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false, fieldTypes: true,
         stages: stagesOf(h, (name) => ({ kind: "field", box: box.id, template: "outcomeFields", name })) }),
       el("p", { className: "doc-tab-note", text: "The fields every outcome in this box can carry. They're handed to the game with the press." }));
+    view.append(sectHead("Dealing"), dealingDefaults(box, h),
+      el("p", { className: "doc-tab-note", text: "What a card in this box deals with until it sets its own. Changing one here changes every card that hasn't." }));
   } else {
     const properties: PropertyDeclDto[] = box.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
     view.append(propPanel(properties, () => h.saveBox(box.id, { properties }), "+ Property", { shareScope: "box",
@@ -1699,6 +1734,29 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       el("p", { className: "doc-tab-note", text: "Properties the whole box carries, as @box." }));
   }
   centre.replaceChildren(view);
+}
+
+/** The Card template's dealing defaults (the hands-on review, 2026-10): a new
+ *  card follows them, and a card that sets none goes on following them. Saved
+ *  whole, as typed; blank is the engine's own default. */
+function dealingDefaults(box: BoxDto, h: InspectorHost): HTMLElement {
+  const d: CardDefaultsDto = { redraw: "", weight: "", inOneHand: "", ...box.cardDefaults };
+  const save = (): void => h.saveBox(box.id, { cardDefaults: { ...d } });
+  const field = (key: "redraw" | "weight" | "inOneHand", placeholder: string): HTMLInputElement => {
+    const input = inputField(d[key], "insp-input insp-mono insp-short", { mode: "input", set: (v) => { d[key] = v.trim(); }, commit: save });
+    input.placeholder = placeholder;
+    return input;
+  };
+  const across = (): HTMLElement => segmented(([["one hand at a time", "one"], ["any hand", "any"]] as [string, "one" | "any"][]).map(([label, v]) => ({
+    label, on: (d.acrossHands ?? "one") === v,
+    pick: () => { if (v === "one") delete d.acrossHands; else d.acrossHands = v; save(); host.replaceChildren(across()); },
+  })));
+  const host = el("div", {}, across());
+  return el("div", { className: "doc-panel cfg-panel" },
+    cfgRow("Redraw", "always, never, or a number of turns: whether a played card can be dealt again.", field("redraw", "always")),
+    cfgRow("Weight", "How often a card comes up beside cards of equal rank.", field("weight", "1")),
+    cfgRow("In one hand", "How many slots of one hand a card can fill at once.", field("inOneHand", "1")),
+    cfgRow("Across hands", "Whether several hands can offer a card at once.", host));
 }
 
 // --- the deck level: tab bodies -------------------------------------------------

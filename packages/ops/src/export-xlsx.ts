@@ -176,6 +176,7 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
   // --- one sheet per deck ---------------------------------------------------
   for (const lookup of boxes) {
     const decks: SourceDeck[] = authored(lookup.box.decks, (d) => d.shard.deck.order);
+    const defaults = lookup.box.box.box.cardDefaults;
     for (const deck of decks) {
       counts.decks++;
       const deckTitle = label(deck.shard.deck);
@@ -198,7 +199,9 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
         { header: "When", key: "when", width: 36 },
         { header: "Priority", key: "priority", width: 9 },
         { header: "Redraw", key: "redraw", width: 9 },
-        { header: "Copies", key: "copies", width: 8 },
+        { header: "Weight", key: "weight", width: 8 },
+        { header: "In one hand", key: "inOneHand", width: 11 },
+        { header: "Across hands", key: "acrossHands", width: 12 },
         // Shared scarcity (design/shared-scarcity.md), which landed after this
         // sheet was written and had no column: the workbook advertises itself
         // as the whole project made readable, and a reviewer filtering on
@@ -227,13 +230,17 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
           gameId: effectiveGameId(card),
           when: card.condition ?? "",
           priority: card.priority,
-          redraw: String(card.redraw),
-          copies: card.copies ?? 1,
+          // What the card deals with: its own, else its box's Card template's,
+          // else the engine's, so a sheet for checking the balance reads true.
+          redraw: String(card.redraw ?? defaults?.redraw ?? "always"),
+          weight: card.weight ?? defaults?.weight ?? 1,
+          inOneHand: card.inOneHand ?? defaults?.inOneHand ?? 1,
+          acrossHands: (card.acrossHands ?? defaults?.acrossHands ?? (card.copies !== undefined && card.copies > 1 ? "any" : "one")) === "any" ? "any hand" : "one hand",
           shared: card.shared === undefined
             ? (deck.shard.deck.shared === true ? "deck (shared)" : "deck")
             : (card.shared ? "yes" : "no"),
           sharedCopies: (card.shared ?? deck.shard.deck.shared === true)
-            ? (card.sharedCopies ?? card.copies ?? 1)
+            ? (card.sharedCopies ?? 1)
             : "",
           ...Object.fromEntries([...lookup.groups.map((g) => g.id), ...extraGroups]
             .map((id) => [`t:${id}`, lookup.tagList(card.tags?.[id])])),

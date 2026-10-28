@@ -226,17 +226,10 @@ describe("the Hamlet client", () => {
 
     click(byText(doc, ".continue", "Continue"));   // the scene has ended; the outcome plays when the player continues
     expect(doc.getElementById("clock")!.textContent).toContain("knows_road");
-    // ...and the Storylet Engine, holding the same resolver, can now deal the card
-    // gated on it. NOT yet at the tree, though: that hand has one slot, and the
-    // ambient already holding it is still eligible, so it keeps its seat. A
-    // refresh evicts the ineligible and fills empty slots; it never displaces a
-    // survivor. That is the engine's rule, and it is easy to read as "the
-    // dialogue did nothing", so it is pinned here on purpose.
-    expect(forest()).toEqual(["Wind in the Leaves"]);
-    // Act there (play the ambient), and the seat frees: the road card lands.
-    click(byText(doc, ".card", "Wind in the Leaves"));
-    click(byText(doc, ".continue", "Continue"));   // one outcome, no choice: its lines still wait to be read
-    expect(doc.getElementById("log")!.textContent).toContain("Wind in the Leaves");
+    // ...and the Storylet Engine, holding the same resolver, deals the card
+    // gated on it at once: a deal makes the hand right (the hands-on review,
+    // 2026-10, ruling 1), so the road card, ranked above the ambient, takes
+    // the tree's one slot and the ambient goes back to the stock.
     expect(forest()).toContain("The Road North");
   });
 

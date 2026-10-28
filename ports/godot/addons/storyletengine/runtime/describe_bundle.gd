@@ -42,7 +42,8 @@ const SCOPE_TAG := "tag"
 ##   "totals": {"boxes", "decks", "cards", "hands", "templates", "tagGroups"},
 ##   "boxes": [{"gameId", "title"?, "usesMap"?: true (on the project map),
 ##              "ranking": {"specificity"},
-##              "turn"?: {"seconds"} (a TIMED box, 4.8),
+##              "turn"?: {"seconds"?} (the game moves its clock: with seconds a
+##                         TIMED box, 4.8; without, a calendar or any beat),
 ##              "durableCards"?: int (cards whose never-spend outlives a run, 4.2),
 ##              "tagGroups": [{"gameId", "tags": [gameId]}] (the box's OWN groups),
 ##              "counts": {"decks", "cards", "hands", "templates", "tagGroups"}}],
@@ -112,11 +113,14 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 		if box.get("usesMap", false) == true:
 			summary["usesMap"] = true
 		summary["ranking"] = {"specificity": bool(box.get("ranking", {}).get("specificity", true))}
-		# Present on a TIMED box (design/engine-server.md 4.8): how long one of
-		# its turns lasts, so an integrator knows which boxes their host must
-		# tick. Absent is the ordinary box, whose turn is a play.
+		# Present when the game moves the box's clock: on a TIMED box
+		# (design/engine-server.md 4.8) how long one of its turns lasts, and
+		# empty on a box the game ticks on its own beat (a calendar), so an
+		# integrator knows which boxes their host must tick. Absent is the
+		# ordinary box, whose turn is a play.
 		if box.has("turn"):
-			summary["turn"] = {"seconds": float(box["turn"].get("seconds", 0.0))}
+			var turn: Dictionary = box["turn"]
+			summary["turn"] = {"seconds": float(turn["seconds"])} if turn.has("seconds") else {}
 		# Only when there are any: a box whose cards all come back with the run
 		# has nothing to lift, and the zero would be noise on every ordinary box.
 		if durable_cards > 0:

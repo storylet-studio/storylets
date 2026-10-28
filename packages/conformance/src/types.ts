@@ -127,8 +127,9 @@ export type TraceVerdictKind =
  *     play <card> <outcome>
  *     play <card>                 a card with no outcomes, played with none
  *     write <target> <path>
+ *     discard <hand> <card>       corpus 21, on a `discard` op
  *
- * Deliberately only those three kinds, and deliberately a flat string rather
+ * Deliberately only those kinds, and deliberately a flat string rather
  * than a struct: `expectVerdicts` already pins `cards[].id` on a deal or a
  * peek, and these are the events nothing else could reach. What they pin
  * is IDENTITY - `evict.hand`, `evict.card` and `play.card` are gameIds now,
@@ -246,6 +247,9 @@ export type ScriptOp =
    *  what a host is handed is a copy (the hands-on review, 2026-10,
    *  foundation 6). */
   | { op: "scribble"; flow?: string; from: string }
+  /** Corpus 21: `flow.discard(card, from)`: the card leaves the hand unplayed,
+   *  starting its Redraw. `expectError` requires it refused. */
+  | { op: "discard"; flow?: string; card: string; from: string; expectError?: true; expectTrace?: string[] }
   /** Corpus 18: hand a fresh engine on the case's bundle this envelope, raw
    *  JSON that need not be a save at all, through `loadGame`. It must be
    *  refused, with every string in `expectRefused` in the error. */
@@ -451,6 +455,12 @@ export interface CardFixture {
   tags?: Record<string, string[]>;
   /** Copies on the board at once (schema 3.5); default 1. Always per flow. */
   copies?: number;
+  /** Corpus 21: how often among cards of equal rank (default 1). */
+  weight?: number;
+  /** Corpus 21: how many slots of one hand it may fill (default 1). */
+  inOneHand?: number;
+  /** Corpus 21: "one" hand of a flow at a time (the default) or "any". */
+  acrossHands?: "one" | "any";
   /** Shared across flows (design/shared-scarcity.md); absent takes the deck's. */
   shared?: boolean;
   /** The world cap when shared; defaults to `copies`. */
@@ -527,7 +537,7 @@ export interface OtherBoxFixture {
   ranking?: { specificity: boolean };
   /** Makes `b_y` a TIMED box (design/engine-server.md 4.8), so a case can pin
    *  that one box being timed leaves the other counting plays as before. */
-  turn?: { seconds: number };
+  turn?: { seconds?: number };
   /** `b_y` opts in to the project map (`usesMap: true`). See
    *  BundleFixture.projectMap for what that does and does not change in the
    *  fixture's own name resolution. */
@@ -572,7 +582,7 @@ export interface BundleFixture {
   ranking?: { specificity: boolean };
   /** Makes `b_x` a TIMED box (design/engine-server.md 4.8): its plays advance
    *  nothing and the host's tick is the only thing that moves its clock. */
-  turn?: { seconds: number };
+  turn?: { seconds?: number };
   /** Shorthand: these cards go in the default deck `k_main`. */
   cards?: CardFixture[];
   /** Full deck list; overrides `cards`. */

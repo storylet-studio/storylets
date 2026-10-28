@@ -57,14 +57,15 @@ namespace
 	}
 
 	/** The log panel's six filter buckets; a peek files under Deal (both are
-	 *  asks). */
+	 *  asks), a discard under Play (both take a card out of its hand). */
 	int32 LogBucketOf(EStoryletLogKind Kind)
 	{
 		switch (Kind)
 		{
 			case EStoryletLogKind::Deal:
 			case EStoryletLogKind::Peek:       return 0;
-			case EStoryletLogKind::Play:       return 1;
+			case EStoryletLogKind::Play:
+			case EStoryletLogKind::Discard:    return 1;
 			case EStoryletLogKind::Write:      return 2;
 			case EStoryletLogKind::Evict:      return 3;
 			case EStoryletLogKind::Turns:      return 4;

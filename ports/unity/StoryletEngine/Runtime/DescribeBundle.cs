@@ -112,6 +112,12 @@ namespace StoryletStudio.StoryletEngine
         /// which boxes their host must tick, and how often. Null is the ordinary
         /// box.</summary>
         public double? TurnSeconds;
+        /// <summary>True on a box whose clock the GAME moves, so a play advances
+        /// nothing: an integrator reading a bundle needs it to know which boxes
+        /// their host must tick. TurnSeconds is set too on a TIMED box; alone,
+        /// it is the game's own beat (a calendar). False is the ordinary box,
+        /// whose clock a play moves.</summary>
+        public bool GameClock;
         /// <summary>How many cards in this box are DURABLE (design/engine-server.md
         /// 4.2): their redraw:never spend outlives the run, so a server has to
         /// lift and restore it. Zero on the ordinary box.</summary>
@@ -271,7 +277,8 @@ namespace StoryletStudio.StoryletEngine
                     Title = box.Title,
                     UsesMap = box.UsesMap,
                     RankingSpecificity = box.Ranking != null && box.Ranking.Specificity,
-                    TurnSeconds = box.Turn != null ? box.Turn.Seconds : (double?)null,
+                    TurnSeconds = box.Turn?.Seconds,
+                    GameClock = box.Turn != null,
                     DurableCards = durableCards,
                     Counts = new BoxCounts
                     {

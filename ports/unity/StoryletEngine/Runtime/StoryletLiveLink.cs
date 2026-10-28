@@ -252,7 +252,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 SyncFlows();
                 Post(TraceJson(flowId, evt));
-                if (evt is DealEvent || evt is PlayEvent || evt is EvictEvent || evt is TurnsEvent)
+                if (evt is DealEvent || evt is PlayEvent || evt is DiscardEvent || evt is EvictEvent || evt is TurnsEvent)
                 {
                     Engine e;
                     lock (_flowLock) e = _engine;
@@ -391,6 +391,11 @@ namespace StoryletStudio.StoryletEngine
                 case PlayEvent e:
                     sb.Append("{\"type\":\"play\",\"card\":").Append(Esc(e.Card))
                       .Append(",\"outcome\":").Append(Esc(e.Outcome))
+                      .Append(",\"turn\":").Append(ExprValue.JsNumber(e.Turn)).Append("}");
+                    break;
+                case DiscardEvent e:
+                    sb.Append("{\"type\":\"discard\",\"hand\":").Append(Esc(e.Hand))
+                      .Append(",\"card\":").Append(Esc(e.Card))
                       .Append(",\"turn\":").Append(ExprValue.JsNumber(e.Turn)).Append("}");
                     break;
                 case WriteEvent e:

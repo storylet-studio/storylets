@@ -12,6 +12,15 @@ here is part of shipping, not a courtesy.
 
 ### Added
 
+- **Weight, In one hand, and Across hands, in place of Copies.** A card's Dealing tab sets how often it comes up
+  beside cards of equal rank, how many slots of one hand it can fill (a pickup that comes up three times), and
+  whether several hands can offer it at once. `storyletengine format` moves an old Copies across.
+- **The Card template sets the dealing rules.** The box's Card template tab has a Dealing section: Redraw, Weight,
+  In one hand and Across hands for every card that doesn't set its own. A new card starts on them, so a deck of
+  things found once no longer gets Redraw "always", and changing one changes every card still following it.
+- **A box whose clock your game moves.** A box's Turns setting is now each play, the game (a calendar your game
+  ticks a day at a time), or every N seconds. Plays advance nothing in the last two.
+
 - **Renaming a property renames it everywhere.** Rename a property on the Story page, a box, deck, hand or tag
   group, or in the World settings, and every condition, priority and change that reads or writes it follows, with
   a tag group's binding, a hand's holes and a coverage driver: one step, so one Undo puts it all back. It used to
@@ -28,6 +37,11 @@ here is part of shipping, not a courtesy.
   asked about anything unsaved first), or carry on: it installs when you quit.
 
 ### Changed
+
+- **The Board deals hands that are right.** Every deal now ranks everything eligible, so a better card that has
+  just become eligible takes the place of a worse one in the hand, and the Journal says the other was outranked.
+  A discard shows in the Journal too. Coverage no longer moves a clock only plays move, so a game that would stall
+  with every card cooling down now shows as stuck.
 
 - **Hover is calmer.** Drag handles, "Open" links, hints, and the canvas's controls fade in after a moment and
   fade out gently, instead of blinking, and a highlight eases rather than snapping. A disabled canvas button

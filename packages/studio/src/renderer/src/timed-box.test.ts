@@ -12,7 +12,7 @@ import type { BoxDto, CardDto, DeckDto } from "../../shared/api.js";
 
 const card: CardDto = {
   id: "c_1", gameId: "patrol", title: "The patrol", condition: "", priority: "1", redraw: "30",
-  tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [], fields: [] }],
+  tags: [], sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [], fields: [] }],
 };
 const deck: DeckDto = { id: "k_1", gameId: "main", properties: [], cards: [card] };
 const plainBox: BoxDto = {
@@ -41,12 +41,12 @@ const buttons = (el: HTMLElement): string[] => [...el.querySelectorAll("button")
 beforeEach(() => setPlayRung("solo"));
 
 describe("the box page's Turns section", () => {
-  it("an ordinary box: a play is the choice, and the seconds field is shut", () => {
+  it("an ordinary box: each play is the choice, and the seconds field is shut", () => {
     const centre = document.createElement("div");
     renderBoxTabBody(centre, plainBox, "dealing", host());
-    expect(centre.textContent).toContain("A turn is");
+    expect(centre.textContent).toContain("The clock moves");
     const on = [...centre.querySelectorAll("button.on")].map((b) => b.textContent);
-    expect(on).toContain("a play");
+    expect(on).toContain("each play");
     expect(centre.querySelector<HTMLInputElement>("input.insp-short")!.disabled).toBe(true);
     // Nothing about time is said until there is time to say something about.
     expect(centre.textContent).not.toContain("do not advance");
@@ -56,7 +56,7 @@ describe("the box page's Turns section", () => {
     const centre = document.createElement("div");
     renderBoxTabBody(centre, timedBox, "dealing", host());
     expect([...centre.querySelectorAll("button.on")].map((b) => b.textContent))
-      .toContain("every N seconds of play");
+      .toContain("every N seconds");
     expect(centre.textContent).toContain("Plays in this box don't advance its turns");
     expect(centre.textContent).toContain("a Redraw of 30 means 30 minutes");
     const field = centre.querySelector<HTMLInputElement>("input.insp-short")!;
@@ -64,7 +64,7 @@ describe("the box page's Turns section", () => {
     expect(field.value).toBe("60");
   });
 
-  it("choosing time saves a default unit; choosing a play clears it", () => {
+  it("choosing time saves a default unit; choosing a play clears it; the game's clock saves no unit", () => {
     const saveBox = vi.fn();
     const centre = document.createElement("div");
     renderBoxTabBody(centre, plainBox, "dealing", host({ saveBox }));
@@ -73,9 +73,13 @@ describe("the box page's Turns section", () => {
     expect(saveBox).toHaveBeenCalledWith("b_1", { turn: { seconds: 60 } });
     // The section redrew itself, so the choice now reads as made and the
     // other button is the live one.
-    const playBtn = [...centre.querySelectorAll("button")].find((b) => b.textContent === "a play")!;
+    const playBtn = [...centre.querySelectorAll("button")].find((b) => b.textContent === "each play")!;
     playBtn.click();
     expect(saveBox).toHaveBeenLastCalledWith("b_1", { turn: null });
+    // The game moves it (a calendar): plays advance nothing, and there's no unit.
+    const gameBtn = [...centre.querySelectorAll("button")].find((b) => b.textContent === "the game")!;
+    gameBtn.click();
+    expect(saveBox).toHaveBeenLastCalledWith("b_1", { turn: {} });
   });
 
   // Ruling N: committed as it is typed, through the save controller, rather

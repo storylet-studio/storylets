@@ -122,7 +122,8 @@ const QUEUE_CAP = 512;
 const DEFAULT_URL = "ws://127.0.0.1:4472";
 
 /** The trace kinds that move the board, and so are followed by a snapshot. */
-const BOARD_EVENTS: ReadonlySet<TraceEvent["type"]> = new Set(["deal", "play", "evict", "turns"]);
+// A discard changes the board as a play does.
+const BOARD_EVENTS: ReadonlySet<TraceEvent["type"]> = new Set(["deal", "play", "discard", "evict", "turns"]);
 
 /** The cheap snapshot: hands by gameId holding card gameIds in dealt order,
  *  and every box's clock by gameId. */

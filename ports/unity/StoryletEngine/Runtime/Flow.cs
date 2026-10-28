@@ -142,6 +142,9 @@ namespace StoryletStudio.StoryletEngine
         private bool _closed;
 
         private Mulberry32 _prng;
+        /// <summary>OrderRun's working list, kept so a deal allocates nothing to
+        /// order its tie runs.</summary>
+        private readonly List<Scored> _runScratch = new List<Scored>();
         /// <summary>Per-box turn counters, keyed by box id (schema 3.4), PER FLOW.</summary>
         private OrderedMap<string, double> _turnCounts = new OrderedMap<string, double>();
         private OrderedMap<string, double> _cooldowns = new OrderedMap<string, double>();
@@ -897,9 +900,21 @@ namespace StoryletStudio.StoryletEngine
             return counts;
         }
 
-        private static double CopiesOf(Card card)
+        /// <summary>How many hands of one flow may hold a card at once: one, or
+        /// any number (AcrossHands), or a bundle from before it, its
+        /// Copies.</summary>
+        private static double AcrossLimit(Card card)
         {
+            if (card.AcrossHands == "any") return double.PositiveInfinity;
+            if (card.AcrossHands == "one") return 1;
             return card.Copies ?? 1;
+        }
+
+        /// <summary>How many slots of one hand a card may fill (InOneHand,
+        /// default 1).</summary>
+        private static double InOneHandOf(Card card)
+        {
+            return card.InOneHand ?? 1;
         }
 
         /// <summary>Is this card scarce across flows (design/shared-scarcity.md)?
@@ -912,10 +927,10 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>How many hands ACROSS EVERY FLOW may hold this at once;
-        /// defaults to Copies.</summary>
+        /// defaults to the per-flow limit (one hand, or Copies).</summary>
         internal static double SharedCap(Card card)
         {
-            return card.SharedCopies ?? card.Copies ?? 1;
+            return card.SharedCopies ?? AcrossLimit(card);
         }
 
         /// <summary>Every card id on THIS flow's board, one entry per holding
@@ -935,16 +950,20 @@ namespace StoryletStudio.StoryletEngine
         /// verdicts: Copies is your own board filling up, SharedCopies is
         /// somebody else already holding it, and a participant told "claimed"
         /// about a card on another person's table would read it as a
-        /// fault.</summary>
+        /// fault.
+        ///
+        /// `own` is what the hand being dealt holds already: those are the
+        /// hand's to keep or give up as it re-ranks, so they claim nothing
+        /// against it.</summary>
         private TraceVerdict? ClaimVerdict(Card card, bool shared,
-            Dictionary<string, int> mine, Dictionary<string, int> world)
+            Dictionary<string, int> mine, Dictionary<string, int> world, int own = 0)
         {
-            mine.TryGetValue(card.Id, out var own);
-            if (own >= CopiesOf(card)) return TraceVerdict.Claimed;
+            mine.TryGetValue(card.Id, out var here);
+            if (here - own >= AcrossLimit(card)) return TraceVerdict.Claimed;
             if (shared)
             {
                 world.TryGetValue(card.Id, out var anywhere);
-                if (anywhere >= SharedCap(card)) return TraceVerdict.ClaimedElsewhere;
+                if (anywhere - own >= SharedCap(card)) return TraceVerdict.ClaimedElsewhere;
             }
             return null;
         }
@@ -977,11 +996,14 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>Run one ask: availability filter then ranking. `claimed`
         /// decides the claims step (step 6) per card. `trace` (when a subscriber
-        /// exists) collects the per-card verdicts.</summary>
+        /// exists) collects the per-card verdicts. `held` is the cards the hand
+        /// being dealt holds: they win ties, so a re-ranking deal never swaps
+        /// one for an equal.</summary>
         private (List<CardEntry> Ordered, HandEnv HandEnv) RunAsk(
             AskDescriptor ask,
             Func<Card, bool, TraceVerdict?> claimed,
-            List<TraceCard> trace)
+            List<TraceCard> trace,
+            Dictionary<string, int> held = null)
         {
             var box = ask.Box;
             var handEnv = BuildHandEnv(ask);
@@ -1112,7 +1134,11 @@ namespace StoryletStudio.StoryletEngine
 
             // STABLE sort (List<T>.Sort is unstable; LINQ OrderBy is not).
             scored = scored.OrderByDescending(s => s.Priority).ThenByDescending(s => s.Spec).ToList();
-            // Seeded shuffle of each maximal tie run; runs of 1 consume no draws.
+            // Each maximal tie run in the order a deal takes it; runs of 1
+            // consume no draws. Held cards first, in the order they were
+            // scored; then the rest, shuffled, or drawn by weight when their
+            // weights differ. Held cards take no draws, so a deal draws what it
+            // always drew.
             int i = 0;
             while (i < scored.Count)
             {
@@ -1120,12 +1146,7 @@ namespace StoryletStudio.StoryletEngine
                 while (j < scored.Count
                     && scored[j].Priority == scored[i].Priority
                     && scored[j].Spec == scored[i].Spec) j++;
-                if (j - i > 1)
-                {
-                    var run = scored.GetRange(i, j - i);
-                    Prng.ShuffleInPlace(run, _prng);
-                    for (int k = 0; k < run.Count; k++) scored[i + k] = run[k];
-                }
+                if (j - i > 1) OrderRun(scored, i, j, held);
                 i = j;
             }
             if (trace != null)
@@ -1136,6 +1157,71 @@ namespace StoryletStudio.StoryletEngine
                 }
             }
             return (scored.Select(s => s.Entry).ToList(), handEnv);
+        }
+
+        /// <summary>One run of equally ranked cards, scored[from..to), put in
+        /// the order a deal takes them (the hands-on review, 2026-10, rulings 1
+        /// and 4). Cards the hand already holds come first, in the order they
+        /// were scored, so a re-ranking deal never swaps one for an equal. The
+        /// rest are shuffled, as runs always were, when their weights are all
+        /// equal; otherwise drawn by weight, one draw per place but the last:
+        /// each place takes the card whose share of the remaining weight the
+        /// draw falls in, walking the remaining cards in scored order. Both
+        /// forms draw (rest - 1) numbers, held cards none, so unweighted
+        /// content deals exactly as it did. Reordered through one scratch list
+        /// the flow keeps, so a deal allocates nothing for it.</summary>
+        private void OrderRun(List<Scored> scored, int from, int to, Dictionary<string, int> held)
+        {
+            var run = _runScratch;
+            run.Clear();
+            if (held != null && held.Count > 0)
+            {
+                for (int k = from; k < to; k++) if (held.ContainsKey(scored[k].Entry.Card.Id)) run.Add(scored[k]);
+            }
+            int first = run.Count;
+            for (int k = from; k < to; k++)
+            {
+                if (first == 0 || !held.ContainsKey(scored[k].Entry.Card.Id)) run.Add(scored[k]);
+            }
+            int rest = run.Count - first;
+            bool weighted = false;
+            if (rest > 1)
+            {
+                var w0 = run[first].Entry.Card.Weight ?? 1;
+                for (int k = first + 1; k < run.Count && !weighted; k++) weighted = (run[k].Entry.Card.Weight ?? 1) != w0;
+            }
+            if (weighted)
+            {
+                // Place p takes a draw over run[p..]; what is left keeps its
+                // scored order, as the reference's splice leaves it.
+                for (int p = first; p < run.Count - 1; p++)
+                {
+                    double total = 0;
+                    for (int k = p; k < run.Count; k++) total += run[k].Entry.Card.Weight ?? 1;
+                    double r = _prng.Next() * total;
+                    int at = p;
+                    while (at < run.Count - 1 && r >= (run[at].Entry.Card.Weight ?? 1))
+                    {
+                        r -= run[at].Entry.Card.Weight ?? 1;
+                        at++;
+                    }
+                    var picked = run[at];
+                    for (int k = at; k > p; k--) run[k] = run[k - 1];
+                    run[p] = picked;
+                }
+            }
+            else if (rest > 1)
+            {
+                // The contractual shuffle (schema 3.3), over the rest alone.
+                for (int k = rest - 1; k > 0; k--)
+                {
+                    int m = (int)Math.Floor(_prng.Next() * (k + 1));
+                    var tmp = run[first + k];
+                    run[first + k] = run[first + m];
+                    run[first + m] = tmp;
+                }
+            }
+            for (int k = 0; k < run.Count; k++) scored[from + k] = run[k];
         }
 
         /// <summary>Flip eligible-but-not-taken trace entries to "capped".
@@ -1393,29 +1479,76 @@ namespace StoryletStudio.StoryletEngine
             // bundles: the ledger walks every live flow's whole board, and an
             // empty map answers every question the same way.
             var worldClaims = _engine._hasShared ? _engine.SharedClaims() : new Dictionary<string, int>();
+            // Per hand, cleared rather than rebuilt: what the hand holds, and how
+            // many of each card it takes.
+            var own = new Dictionary<string, int>();
+            var want = new Dictionary<string, int>();
             foreach (var handInBox in dealt)
             {
                 var hand = handInBox.Hand;
                 var box = handInBox.Box;
-                var contents = _boardContents.GetOrDefault(hand.Id) ?? new List<string>();
-                var free = HandCapacity(hand) - contents.Count;
-                if (free <= 0) continue;
+                // A deal makes the hand right (the hands-on review, 2026-10,
+                // ruling 1): it ranks everything eligible, the cards it holds
+                // included, and the hand becomes the top of that ranking, full or
+                // not. A held card wins a tie, so an equal card never displaces
+                // it; one a better card displaces goes back to the stock,
+                // "outranked".
+                var held = _boardContents.GetOrDefault(hand.Id) ?? new List<string>();
+                own.Clear();
+                foreach (var id in held)
+                {
+                    own.TryGetValue(id, out var n);
+                    own[id] = n + 1;
+                }
                 var ask = AskForHand(hand, box);
-                var own = new HashSet<string>(contents);
                 var trace = Tracing ? new List<TraceCard>() : null;
-                // At most once in any one hand; at most `copies` hands here, and
-                // at most SharedCopies hands anywhere (schema 3.5, shared-scarcity 5).
+                // At most InOneHand times in this hand; in one hand of this flow
+                // at a time unless the card says any (or, from an older bundle,
+                // Copies); at most SharedCopies hands anywhere (schema 3.5,
+                // shared-scarcity 5).
                 var (ordered, _) = RunAsk(ask,
-                    (card, shared) => own.Contains(card.Id)
-                        ? TraceVerdict.Claimed
-                        : ClaimVerdict(card, shared, claimCounts, worldClaims), trace);
-                var take = double.IsPositiveInfinity(free) ? ordered.Count : Math.Min((int)free, ordered.Count);
-                var taking = ordered.GetRange(0, take);
-                var added = taking.Select(e => e.Card.Id).ToList();
-                var next = new List<string>(contents);
-                next.AddRange(added);
+                    (card, shared) => ClaimVerdict(card, shared, claimCounts, worldClaims,
+                        own.TryGetValue(card.Id, out var mineHere) ? mineHere : 0), trace, own);
+                // The top of the ranking, each card as many times as one hand may hold it.
+                want.Clear();
+                var room = HandCapacity(hand);
+                int size = 0;
+                foreach (var e in ordered)
+                {
+                    if (room <= 0) break;
+                    var n = (int)Math.Min(InOneHandOf(e.Card), room);
+                    want[e.Card.Id] = n;
+                    room -= n;
+                    size += n;
+                }
+                // Held cards keep their places; newcomers follow, in rank order.
+                var next = new List<string>(size);
+                List<string> outranked = null;
+                foreach (var id in held)
+                {
+                    if (want.TryGetValue(id, out var n) && n > 0)
+                    {
+                        next.Add(id);
+                        want[id] = n - 1;
+                    }
+                    else if (trace != null)
+                    {
+                        (outranked ?? (outranked = new List<string>())).Add(id);
+                    }
+                }
+                foreach (var e in ordered)
+                {
+                    if (!want.TryGetValue(e.Card.Id, out var n)) continue;
+                    for (; n > 0; n--) next.Add(e.Card.Id);
+                    want.Remove(e.Card.Id);
+                }
                 _boardContents.Set(hand.Id, next);
-                foreach (var id in added)
+                foreach (var id in held)
+                {
+                    claimCounts[id] = (claimCounts.TryGetValue(id, out var c) ? c : 1) - 1;
+                    worldClaims[id] = (worldClaims.TryGetValue(id, out var w) ? w : 1) - 1;
+                }
+                foreach (var id in next)
                 {
                     claimCounts.TryGetValue(id, out var c);
                     claimCounts[id] = c + 1;
@@ -1425,8 +1558,21 @@ namespace StoryletStudio.StoryletEngine
                 // Emitted after the hand is set: a handler reading Board() sees the deal.
                 if (trace != null)
                 {
-                    CapTrace(trace, new HashSet<string>(taking.Select(e => Model.EffectiveGameId(e.Card))));
-                    Emit(new DealEvent { Hand = Model.EffectiveGameId(hand), Cards = trace }, _turnCounts.GetOrDefault(box.Id));
+                    var turn = _turnCounts.GetOrDefault(box.Id);
+                    if (outranked != null)
+                    {
+                        foreach (var id in outranked)
+                        {
+                            Emit(new EvictEvent
+                            {
+                                Hand = Model.EffectiveGameId(hand),
+                                Card = Model.EffectiveGameId(_engine._cardsById.GetOrDefault(id).Card),
+                                Reason = "outranked",
+                            }, turn);
+                        }
+                    }
+                    CapTrace(trace, new HashSet<string>(next.Select(id => Model.EffectiveGameId(_engine._cardsById.GetOrDefault(id).Card))));
+                    Emit(new DealEvent { Hand = Model.EffectiveGameId(hand), Cards = trace }, turn);
                 }
             }
 
@@ -1606,17 +1752,55 @@ namespace StoryletStudio.StoryletEngine
             {
                 _cooldowns.Set(entry.Card.Id, newTurn + entry.Card.Redraw.Turns.Value);
             }
-            // The card leaves its hand, releasing its claim (schema 3.5/3.7).
-            var handId = ask.Hand.Id;
-            var remaining = (_boardContents.GetOrDefault(handId) ?? new List<string>())
-                .Where(id => id != entry.Card.Id).ToList();
-            _boardContents.Set(handId, remaining);
+            // The card leaves its hand, releasing its claim (schema 3.5/3.7):
+            // one copy, for a card the hand holds more than once (InOneHand).
+            RemoveOne(ask.Hand.Id, entry.Card.Id);
             _turnCounts.Set(entry.Box.Id, newTurn);
             // Emitted last: a handler reading the board and the clock sees the play.
             if (Tracing)
             {
                 Emit(new PlayEvent { Card = Model.EffectiveGameId(entry.Card), Outcome = outcomeId, Turn = newTurn }, newTurn);
             }
+        }
+
+        /// <summary>Take a card out of a hand without playing it: the player
+        /// turned it down, or the game wants the room (the hands-on review,
+        /// 2026-10, ruling: discard). No outcome, no play in the log, no move of
+        /// the clock, no play count. It starts its Redraw as a play would, so a
+        /// re-ranking deal doesn't hand it straight back: a finite Redraw waits
+        /// that many turns from now, a "never" card is gone for good (for
+        /// everyone, when it's shared), and an "always" card can come up at the
+        /// next deal. One copy leaves, for a card the hand holds more than
+        /// once.</summary>
+        public void Discard(string cardId, string from)
+        {
+            AssertOpen();
+            var (entry, ask) = ResolveDealt(cardId, from);
+            var turn = _turnCounts.GetOrDefault(entry.Box.Id);
+            if (entry.Card.Redraw.IsNever)
+            {
+                if (CardIsShared(entry.Card, entry.Deck.Shared ?? false)) _engine.MarkTaken(entry.Card.Id);
+                else _cooldowns.Set(entry.Card.Id, Model.MAX_SAFE_INTEGER);
+            }
+            else if (entry.Card.Redraw.Turns != null)
+            {
+                _cooldowns.Set(entry.Card.Id, turn + entry.Card.Redraw.Turns.Value);
+            }
+            RemoveOne(ask.Hand.Id, entry.Card.Id);
+            if (Tracing)
+            {
+                Emit(new DiscardEvent { Hand = Model.EffectiveGameId(ask.Hand), Card = Model.EffectiveGameId(entry.Card), Turn = turn }, turn);
+            }
+        }
+
+        /// <summary>One copy of a card out of a hand (Play and Discard), set as a
+        /// new list as a play always has.</summary>
+        private void RemoveOne(string handId, string cardId)
+        {
+            var remaining = new List<string>(_boardContents.GetOrDefault(handId) ?? new List<string>());
+            var at = remaining.IndexOf(cardId);
+            if (at >= 0) remaining.RemoveAt(at);
+            _boardContents.Set(handId, remaining);
         }
 
         /// <summary>One owned property owner's address, owner segment and all

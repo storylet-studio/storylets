@@ -122,3 +122,22 @@ describe("format on a path with no project (CLI review, October 2026: ruling M)"
     expect(result.issues[0]).toMatchObject({ severity: "error", message: expect.stringContaining("no .storylets project") });
   });
 });
+
+// Copies gives way to Across hands (the hands-on review, 2026-10): format moves
+// a card's `copies` to `acrossHands`, 1 as "one" and more as "any".
+describe("copies becomes acrossHands", () => {
+  it("rewrites each card that says copies, and says so", () => {
+    const dir = scratch();
+    const deck = join(dir, "encounters", "decks", "docks.storyletdeck");
+    const shard = parseSource(readFileSync(deck, "utf8")) as { cards: Record<string, unknown>[] };
+    shard.cards[0]!["copies"] = 1;
+    shard.cards[1]!["copies"] = 3;
+    writeFileSync(deck, canonicalStringify(shard));
+    const result = runFormat(loadProject(dir));
+    const written = parseSource(result.changed.find((w) => w.path === deck)!.content) as { cards: Record<string, unknown>[] };
+    expect(written.cards[0]).toMatchObject({ acrossHands: "one" });
+    expect(written.cards[1]).toMatchObject({ acrossHands: "any" });
+    expect(written.cards.some((c) => "copies" in c)).toBe(false);
+    expect(result.migrated.join()).toContain("2 cards' copies are now acrossHands");
+  });
+});

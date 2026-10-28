@@ -93,7 +93,7 @@ describe("the adapter's nodes", () => {
     const card = (await adapter.node("c_bell", true))!;
     expect([card.kind, card.parent, card.label]).toEqual(["card", "k_rumours", "bell"]);
     expect(card.host).toEqual({
-      gameId: "bell", title: null, purpose: null, condition: null, priority: 2, redraw: "always", copies: "",
+      gameId: "bell", title: null, purpose: null, condition: null, priority: 2, redraw: "always", 
       tags: {}, fields: { mood: "tense" }, deck: "k_rumours", box: "b_harbour",
     });
     expect(card.ext["probe"]?.["note"]).toBe("Ring it twice.");
@@ -129,7 +129,7 @@ describe("the adapter's nodes", () => {
     expect(card.children?.map((n) => n.id)).toEqual(["o_ring"]);
     expect((await adapter.node("c_tide", false))!.ext["probe"]).toEqual({ note: "As typed." });
     landed?.();
-    expect(cardAsTyped({ id: "c", gameId: "c", priority: 1, redraw: "always", tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [] }, undefined).gameId).toBe("c");
+    expect(cardAsTyped({ id: "c", gameId: "c", priority: 1, redraw: "always", tags: [], sharedCopies: "", fields: [], outcomes: [] }, undefined).gameId).toBe("c");
   });
 
   it("write a structural edit still waiting before reading, so a read never misses it", async () => {

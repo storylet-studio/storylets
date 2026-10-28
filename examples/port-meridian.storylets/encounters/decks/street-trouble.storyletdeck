@@ -52,8 +52,8 @@
       title: "Checkpoint Shakedown",
     },
     {
+      acrossHands: "any",
       condition: "@heat == \"unnoticed\"",
-      copies: 2,
       gameId: "corner-hustle",
       id: "c_corner_hustle",
       order: 0,

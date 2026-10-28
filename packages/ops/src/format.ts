@@ -14,6 +14,8 @@
 //   - a Storylet extension whose manifest has moved past the project's pin is
 //     taken: its renamed stages renamed in its data, and the pin moved, in one
 //     step (extensions.ts)
+//   - a card's `copies` becomes `acrossHands` (the hands-on review, 2026-10):
+//     1 is "one", more is "any"
 //
 // An extension's manifest is never formatted: it is the extension's own JSON.
 //
@@ -64,6 +66,7 @@ export function runFormat(loaded: LoadedProject): FormatResult {
   const changed: PlannedWrite[] = [];
   const removed: string[] = [];
   const issues: Issue[] = [];
+  const copiesReport: string[] = [];
 
   // The migrations first, so a moved value is canonicalised by the same pass
   // that moved it rather than left for the next one. The project map's goes
@@ -106,7 +109,10 @@ export function runFormat(loaded: LoadedProject): FormatResult {
     }
     let canonical: string;
     try {
-      canonical = canonicalStringify(parseSource(file.text));
+      const parsed = parseSource(file.text);
+      const replaced = file.path.endsWith(".storyletdeck") ? replaceCopies(parsed) : 0;
+      if (replaced > 0) copiesReport.push(`${file.path}: ${replaced === 1 ? "1 card's copies is" : `${replaced} cards' copies are`} now acrossHands`);
+      canonical = canonicalStringify(parsed);
     } catch (e) {
       issues.push({
         severity: "error", path: file.path,
@@ -123,8 +129,24 @@ export function runFormat(loaded: LoadedProject): FormatResult {
   for (const [path, content] of migrated) changed.push({ path, content });
 
   return {
-    changed, removed, moved: projectMap?.moved ?? [], migrated: [...(projectMap?.report ?? []), ...(upgrades?.report ?? [])], issues,
+    changed, removed, moved: projectMap?.moved ?? [],
+    migrated: [...(projectMap?.report ?? []), ...(upgrades?.report ?? []), ...copiesReport], issues,
   };
+}
+
+/** A deck shard's cards moved from `copies` to `acrossHands`, in place: 1
+ *  is "one", more is "any" (a card that already says acrossHands keeps it).
+ *  How many cards changed. */
+function replaceCopies(shard: unknown): number {
+  const cards = (shard as { cards?: Record<string, unknown>[] }).cards;
+  let n = 0;
+  for (const card of Array.isArray(cards) ? cards : []) {
+    if (card["copies"] === undefined) continue;
+    if (card["acrossHands"] === undefined) card["acrossHands"] = card["copies"] === 1 ? "one" : "any";
+    delete card["copies"];
+    n++;
+  }
+  return n;
 }
 
 /** The same shard with nothing in it but its schema: what "this file now says

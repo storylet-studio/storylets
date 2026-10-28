@@ -16,7 +16,7 @@ const deck: DeckDto = {
     id: "c_1", gameId: "ambush", title: "Ambush at the ford",
     purpose: "Cutthroats spring from the reeds.",
     condition: "@hand.danger >= 2", priority: 2, redraw: "5",
-    tags: [{ group: "zone", values: ["docks"] }], copies: "", sharedCopies: "", fields: [],
+    tags: [{ group: "zone", values: ["docks"] }], sharedCopies: "", fields: [],
     outcomes: [{ id: "o_1", gameId: "flee", changes: [], fields: [] }],
   }],
 };
@@ -467,7 +467,7 @@ describe("deck centre", () => {
     const host = document.createElement("div");
     const two: DeckDto = { ...deck, cards: [
       deck.cards[0]!,
-      { id: "c_2", gameId: "rat-job", title: "A rat job", priority: 1, redraw: "always", tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [] },
+      { id: "c_2", gameId: "rat-job", title: "A rat job", priority: 1, redraw: "always", tags: [], sharedCopies: "", fields: [], outcomes: [] },
     ] };
     const moveCard = vi.fn();
     renderDeckCentre(host, box, two, [], new Set(), "table", () => {}, stubActions({ moveCard }));
@@ -484,7 +484,7 @@ describe("deck centre", () => {
       id: "k_2", gameId: "quest", properties: [], cards: [{
         id: "c_2", gameId: "reveal", title: "The reveal", purpose: "A secret surfaces.",
         condition: "check_flags(@story.quests, +main, -done)", priority: 0, redraw: "always",
-        tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [],
+        tags: [], sharedCopies: "", fields: [], outcomes: [],
       }],
     };
     const catalogue = [{ scope: "story", name: "quests", type: "flags" as const, enumValues: ["main", "done"] }];

@@ -1,5 +1,5 @@
 extends SceneTree
-# Headless: the loop, the survivor rule, a mid-scene save/load, and the
+# Headless: the loop, a deal that makes the hand right, a mid-scene save/load, and the
 # cross-host envelope (a save written by the JS client, loaded here).
 var fails := 0
 func check(label: String, ok: bool, detail := "") -> void:
@@ -42,9 +42,10 @@ func _init() -> void:
 	check("Patter wrote @world.knows_road", g2.world["knows_road"] == true, str(g2.world))
 	check("the outcome was played and logged", not g2.log.is_empty() and str(g2.log[0]).find("ask-about-the-road-north") >= 0, str(g2.log))
 	g2.go("the-mystic-tree")
-	check("tree shows the ambient only (survivor rule)", ids(g2.hand()) == ["wind-in-the-leaves"], str(ids(g2.hand())))
-	g2.start(g2.hand()[0]); g2.finish()   # no choice at all: it ends, and Continue plays it
-	check("The Road North lands once the seat frees", ids(g2.hand()).has("the-road-north"), str(ids(g2.hand())))
+	# A deal makes the hand right (the hands-on review, 2026-10, ruling 1): the
+	# road card, ranked above the ambient, takes the tree's one slot at once,
+	# and the ambient goes back to the stock.
+	check("The Road North takes the tree's slot as soon as it is eligible", ids(g2.hand()) == ["the-road-north"], str(ids(g2.hand())))
 	# Cross-host: a save the JS client wrote at the same point.
 	if FileAccess.file_exists("res://test/fixtures/envelope-from-js.json"):
 		var env = JSON.parse_string(FileAccess.get_file_as_string("res://test/fixtures/envelope-from-js.json"))

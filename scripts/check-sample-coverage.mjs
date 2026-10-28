@@ -61,6 +61,7 @@ const OMITTED = [
   // multi-flow half: a second flow, closing one, listing them.
   { member: "closeFlow", why: "flows: nothing here closes a flow, because nothing here opens a second one. Same ruling" },
   { member: "flows", why: "flows: a list of one is not a demonstration. Same ruling" },
+  { member: "discard", why: "the Village has no way to turn a card down: a player acts on what is offered or walks on, and walking on is a place change, which the next deal covers. Dealing describes discard" },
   { member: "Flow", why: "a game never CONSTRUCTS a flow: `openFlow` hands you one, and `getFlow` hands it back after a load. The class is exported for its type and for the ports" },
   { member: "StoryletError", why: "the error class every engine refusal throws, exported so a host can tell the engine's errors from its own with instanceof. The client never meets one: it plays only the outcomes outcomes() offers, from the hands the board holds, so it has no refusal to catch" },
   { member: "close", why: "flows: the flow lives as long as the tab does" },

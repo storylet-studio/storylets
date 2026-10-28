@@ -41,9 +41,9 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the branch's closing words wait on Continue"), g2.Playing && g2.Playing->bDone); g2.Finish();
 	TestTrue(TEXT("Patter wrote @world.knows_road"), g2.World.Store->GetBool(TEXT("knows_road")));
 	g2.Go(TEXT("the-mystic-tree"));
-	TestEqual(TEXT("tree shows the ambient only (survivor rule)"), Join(g2.Hand()), FString(TEXT("wind-in-the-leaves")));
-	g2.Start(g2.Hand()[0]); g2.Finish();   // no choice at all: it ends, and Continue plays it
-	TestTrue(TEXT("The Road North lands once the seat frees"), Join(g2.Hand()).Contains(TEXT("the-road-north")));
+	// A deal makes the hand right (the hands-on review, 2026-10, ruling 1): the road card, ranked
+	// above the ambient, takes the tree's one slot at once and the ambient goes back to the stock.
+	TestTrue(TEXT("The Road North takes the tree's slot as soon as it's eligible"), Join(g2.Hand()).Contains(TEXT("the-road-north")));
 	// Cross-host: envelopes the JS client wrote. The release zip carries them in Tests/fixtures; in the
 	// repo checkout the Godot demo keeps them. Each is an assertion: a missing fixture, a refused load,
 	// or the wrong landing fails the test.

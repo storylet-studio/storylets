@@ -99,7 +99,7 @@ const LOG_KIND_LABELS: Record<(typeof LOG_KINDS)[number], string> = {
 };
 
 const logKindOf = (e: LogEntry): (typeof LOG_KINDS)[number] =>
-  e.type === "peek" ? "deal" : e.type;
+  e.type === "peek" ? "deal" : e.type === "discard" ? "play" : e.type;
 
 const showVal = (v: ScalarValue | undefined): string =>
   v === undefined ? "<unset>" : JSON.stringify(v);
@@ -131,6 +131,8 @@ function formatLogBody(e: LogEntry, flow: string): string {
     case "play": return `${stamp}play ${e.card}${e.outcome === "" ? "" : ` -> ${e.outcome}`}`;
     case "write": return `${stamp}write ${e.path}: ${showVal(e.prev)} -> ${showVal(e.value)}`;
     case "turns": return `${stamp}turns ${e.box} -> ${e.turn}`;
+    // A card the game took out of its hand unplayed: filed with the plays.
+    case "discard": return `${stamp}discard ${e.card} from ${e.hand}`;
     default: return `${stamp}diagnostic ${e.where}: ${e.message}`;
   }
 }

@@ -599,6 +599,7 @@ function setUp(source: SourceProject, opts: CoverageOptions): SweepState | { don
     // A timed box has no clock of its own: whoever runs the engine ticks it, and
     // during a sweep that is the harness. One sweep turn is one tick, which is
     // what makes a cooldown in a timed box expire in a run at all.
+    // Every box whose clock the game moves, timed or not.
     timedBoxes: bundle.boxes.filter((b) => b.turn !== undefined),
     analysis: analyse(bundle),
     prng: makePrng(seed),
@@ -630,8 +631,14 @@ function runOnce(s: SweepState): void {
     if (driver.values.length === 0) return;
     session.setProperty(ref.slice(1), pick(driver.values));   // "@world.x" -> "world.x"
   };
+  // When nothing could be played, the sweep plays the game's part: it moves
+  // the clocks the GAME moves (a timed box, a calendar), and no other. A box
+  // whose clock only plays move stays where it is, as it would in the game,
+  // so a run where every card is cooling down stalls and is counted stuck,
+  // rather than the sweep's own tick carrying it past (the hands-on review,
+  // 2026-10: coverage reported "0 stuck" for a game that would stall).
   const tickAll = (session: Flow): void => {
-    for (const box of bundle.boxes) session.advanceTurns(box.id, 1);
+    for (const box of s.timedBoxes) session.advanceTurns(box.id, 1);
   };
 
   // The engine's own seed derives from the harness PRNG: one seed, whole

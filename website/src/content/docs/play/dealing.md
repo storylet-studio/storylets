@@ -88,35 +88,52 @@ The cards that pass every check are put in order by:
 2. Specificity breaks ties. A card whose condition asks for more beats one that asks for
    less, so the special case wins over the general one. It's on by default and you can switch
    it off per box, in which case priority decides outright.
-3. Chance decides anything still tied. The random numbers are seeded, so the same seed
+3. Chance decides anything still tied, weighted by each card's `weight` (default 1): a card
+   of weight 2 comes up ahead of its equals twice as often as one of weight 1. Weight never
+   lifts a card above a higher priority. The random numbers are seeded, so the same seed
    gives the same order every time, in every runtime.
 
-A hand with a slot limit takes the top few. With no state change between two deals, you get
-the same cards.
+A deal makes the hand right. It ranks everything eligible, including what the hand already
+holds, and the hand becomes the top of that ranking. So a better card that has just become
+eligible takes the place of a worse one, which goes back to the stock (the trace says
+`outranked`). A card the hand holds wins a tie, so an equal card never swaps in for it. Between
+deals a hand stays as it is: deal when your game is ready for the cards to change, after a
+play or when its clock moves. With no state change between two deals, you get the same
+cards.
 
-## Copies and claims
+## In one hand, across hands, and claims
 
-There's one copy of every card unless the card says `copies: N`. A dealt card is **claimed**
-by the hand holding it, so a card sits in at most one hand at a time (and at most once in any
-one hand), exactly as a physical card can't be in two places at once.
+A dealt card is **claimed** by the hand holding it. By default a card sits in one hand at a
+time and fills one slot of it, exactly as a physical card can't be in two places at once. Two
+settings on the card change that:
 
-You don't configure this. `deal` claims, and `peek` only respects the claims that exist.
-Playing a card removes it from its hand and releases its claim. The slot stays empty until
-that hand is next dealt.
+- **In one hand** (`inOneHand: N`): it may fill up to N slots of one hand, for a pickup or a
+  piece of equipment that can come up three times at once.
+- **Across hands** (`acrossHands: "any"`): any number of hands may hold it at once, for
+  interchangeable filler. The default, `"one"`, keeps a one-off from being offered in two
+  places.
+
+`deal` claims, and `peek` only respects the claims that exist. Playing a card removes it (one
+copy) from its hand and releases its claim; the slot fills at the hand's next deal.
+
+To take a card out of a hand without playing it, because the player turned it down or the game
+wants the room, `discard(card, hand)` it. That's no play: no outcome, no move of the clock,
+nothing in the play log. Its Redraw starts as a play's would, so the next deal doesn't hand it
+straight back.
 
 This is what makes the "one rumour, offered wherever the player goes first" pattern free.
 Write one card, and whichever hand deals it first has it.
 
 Claims live on the **flow**, so "at most one hand at a time" means at most one hand in that
-playthrough. Run [several flows](/play/world-state/#shared-or-per-flow) and a `copies: 1` card
+playthrough. Run [several flows](/play/world-state/#shared-or-per-flow) and a one-hand card
 is on two participants' boards at once, because each of them is playing their own copy of the
 deck.
 
 **Unless you say otherwise.** Mark a deck (or a single card) **`shared`** and its claims count
 across every flow instead, so there's one goblin in the whole world, held by whoever was
 dealt it first, and nobody else can be dealt it until they play it or it leaves their board.
-`sharedCopies` sets how many may be out anywhere, defaulting to `copies`, so `copies: 1,
-sharedCopies: 5` is five golden tickets with one to a customer. A card refused because
+`sharedCopies` sets how many may be out anywhere, so `sharedCopies: 5` is five golden tickets
+with one to a customer. A card refused because
 somebody else holds it says so. The trace verdict is `claimed-elsewhere`, not `claimed`,
 because your own board has room.
 
@@ -125,9 +142,10 @@ and a per-flow one are the same thing.
 
 ## Turns and cooldowns
 
-The clock is the **turn**, and each box has its own. Your game advances a box's turns, and a
-`play` also advances the played card's box by the project's configured amount (one by default,
-and you can override it per call). Nothing here runs off a frame, and a turn is whatever your
+The clock is the **turn**, and each box has its own. Your game advances a box's turns, and in
+an ordinary box a `play` also advances the played card's box by the project's configured
+amount (one by default, and you can override it per call). A box can instead say the game
+moves its clock, so plays advance nothing: see below. Nothing here runs off a frame, and a turn is whatever your
 game says it is.
 
 A card's `redraw` policy is its cooldown, measured in its own box's turns: `always` (no
@@ -156,12 +174,21 @@ is also shared. See
 because a finite cooldown is a turn of a clock that resets with the run, so `durable` on one
 is a compile warning.
 
-### A box that counts in time
+### A box whose clock the game moves
 
-A box can declare that its turns are time rather than plays:
+A box's clock moves on each play by default. It can say instead that your game moves it, so
+plays advance nothing: a calendar, where a turn is a day that ends when the game says so.
 
 ```json5
 // box.storyletbox
+{ gameId: "calendar", title: "The Season",
+  turn: {},                // the game ticks it, a day at a time
+  ... }
+```
+
+Or that its turns are real time:
+
+```json5
 { gameId: "street", title: "The Street",
   turn: { seconds: 60 },   // one turn a minute of the run
   ... }

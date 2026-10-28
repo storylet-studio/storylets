@@ -78,8 +78,14 @@ import type {
  *  20: a load checks every held card it puts back as a deal would, when the envelope carries the values,
  *  and drops what no longer qualifies with a deal's reason in the report's `evicted` (the hands-on review,
  *  2026-10, foundation 7); previewLoad says the same. The moved-deck case's card now goes at the load,
- *  not the next deal. New: a load drops a held card that no longer qualifies, and says why. */
-export const CORPUS_VERSION = 20;
+ *  not the next deal. New: a load drops a held card that no longer qualifies, and says why.
+ *  21: a deal makes the hand right (the hands-on review, 2026-10, rulings 1, 2 and 4): it ranks everything
+ *  eligible, held cards included and winning ties, and the hand becomes the top, so a displaced card is
+ *  evicted "outranked" and a full hand is dealt too; weights order a run of equal cards (equal weights
+ *  shuffle as before); a card's `inOneHand` and `acrossHands`; the op `discard` and its trace line; a box
+ *  whose clock the game moves (`turn` without seconds). Changed: the pinned random() draw count case's
+ *  second deal, since a full hand now draws. */
+export const CORPUS_VERSION = 21;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
@@ -241,6 +247,9 @@ const expandCard = (f: CardFixture, strip: boolean, s: Scaffold): Card<Expressio
     }),
   ),
   ...(f.copies !== undefined ? { copies: f.copies } : {}),
+  ...(f.weight !== undefined ? { weight: f.weight } : {}),
+  ...(f.inOneHand !== undefined ? { inOneHand: f.inOneHand } : {}),
+  ...(f.acrossHands !== undefined ? { acrossHands: f.acrossHands } : {}),
   ...(f.shared !== undefined ? { shared: f.shared } : {}),
   ...(f.sharedCopies !== undefined ? { sharedCopies: f.sharedCopies } : {}),
   ...(f.durable !== undefined ? { durable: f.durable } : {}),

@@ -9,7 +9,7 @@ import type { BoxDto, CardDto, DeckDto, TemplateDto } from "../../shared/api.js"
 
 const card = (over: Partial<CardDto> = {}): CardDto => ({
   id: "c_1", gameId: "new-card", title: "New card", priority: "0", redraw: "always",
-  tags: [], copies: "", sharedCopies: "", fields: [],
+  tags: [], sharedCopies: "", fields: [],
   outcomes: [{ id: "o_1", gameId: "continue", title: "Continue", changes: [], fields: [] }],
   ...over,
 });

@@ -83,8 +83,11 @@ export function cardAsTyped(card: CardDto, edit: CardEdit | undefined): CardDto 
   if (edit.gameId !== undefined) out.gameId = edit.gameId;
   if (edit.condition !== undefined) { if (edit.condition.trim() === "") delete out.condition; else out.condition = edit.condition; }
   if (edit.priority !== undefined) out.priority = edit.priority;
-  if (edit.redraw !== undefined) out.redraw = edit.redraw;
-  if (edit.copies !== undefined) out.copies = edit.copies;
+  // "" is a card going on following its Card template: keep what it follows.
+  if (edit.redraw) out.redraw = edit.redraw;
+  if (edit.weight !== undefined) out.weight = edit.weight;
+  if (edit.inOneHand !== undefined) out.inOneHand = edit.inOneHand;
+  if (edit.acrossHands !== undefined) { if (edit.acrossHands === null) delete out.acrossHands; else out.acrossHands = edit.acrossHands; }
   if (edit.tags !== undefined) out.tags = edit.tags;
   if (edit.fields !== undefined) out.fields = edit.fields.filter((f) => f.value.trim() !== "");
   if (edit.outcomes !== undefined) {
@@ -173,7 +176,10 @@ export function viewAdapter(ctx: ViewHostContext, extension?: string): ViewAdapt
         const c = f.card!;
         return {
           gameId: c.gameId, title: or(c.title), purpose: or(c.purpose), condition: or(c.condition),
-          priority: c.priority, redraw: c.redraw, copies: c.copies,
+          priority: c.priority, redraw: c.redraw,
+          // The dealing rules only when the card sets them; blank follows its Card template.
+          ...(c.weight ? { weight: c.weight } : {}), ...(c.inOneHand ? { inOneHand: c.inOneHand } : {}),
+          ...(c.acrossHands !== undefined ? { acrossHands: c.acrossHands } : {}),
           tags: Object.fromEntries(c.tags.map((t) => [t.group, [...t.values]])),
           fields: fieldMap(c.fields), deck: f.deck!.id, box: f.box!.id,
         };

@@ -7,7 +7,7 @@ import { alsoUnder, boxEntries, groupEntries, groupOptions, hasPlaces, resolveGr
 import type { BoxDto, CardDto } from "../../shared/api.js";
 
 const card = (id: string, tags: CardDto["tags"] = []): CardDto => ({
-  id, gameId: id, priority: 0, redraw: "always", tags, copies: "", sharedCopies: "", fields: [], outcomes: [],
+  id, gameId: id, priority: 0, redraw: "always", tags, sharedCopies: "", fields: [], outcomes: [],
 });
 
 /** A village: two decks, a map, two sites, a thread group. */

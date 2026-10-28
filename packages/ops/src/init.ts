@@ -548,9 +548,9 @@ function actionGameParts(): KitParts {
       deck: { id: newId("k"), gameId: "headlines", title: "Headlines", purpose: "Every story the screens can run.", properties: [] },
       cards: [
         {
-          id: newId("c"), order: 0, title: "Acid drizzle advisory", priority: 0, redraw: "never", copies: 2, outcomes: [],
+          id: newId("c"), order: 0, title: "Acid drizzle advisory", priority: 0, redraw: "never", acrossHands: "any", outcomes: [],
           tags: { [d.group.id]: [d.docks, d.oldTown] },
-          purpose: "Background chatter: always there, two copies so both screens can run it.",
+          purpose: "Background chatter: always there, on any hand, so both screens can run it.",
         },
         {
           id: newId("c"), order: 1, title: "Container yard raided", priority: 3, redraw: "never", outcomes: [],

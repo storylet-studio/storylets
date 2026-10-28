@@ -87,10 +87,12 @@ export interface BoxSummary {
   usesMap?: true;
   /** The only per-box ranking policy (Reboot 2.2). */
   ranking: { specificity: boolean };
-  /** Present on a TIMED box (design/engine-server.md 4.8): how long one of
-   *  its turns lasts. An integrator reading a bundle needs it to know which
-   *  boxes their host must tick, and how often. Absent is the ordinary box. */
-  turn?: { seconds: number };
+  /** Present on a box whose clock the GAME moves, so a play advances nothing:
+   *  an integrator reading a bundle needs it to know which boxes their host
+   *  must tick. With `seconds`, a TIMED box (design/engine-server.md 4.8) and
+   *  how long one of its turns lasts; without, the game's own beat (a
+   *  calendar). Absent is the ordinary box, whose clock a play moves. */
+  turn?: { seconds?: number };
   /** How many cards in this box are DURABLE (design/engine-server.md 4.2):
    *  their `redraw: "never"` spend outlives the run, and a server has to lift
    *  and restore it. A count rather than a list, like every other number here:
@@ -263,7 +265,7 @@ export function describeBundle(bundle: Bundle): BundleDescription {
       ...(box.title !== undefined ? { title: box.title } : {}),
       ...(box.usesMap === true ? { usesMap: true as const } : {}),
       ranking: { specificity: box.ranking.specificity },
-      ...(box.turn !== undefined ? { turn: { seconds: box.turn.seconds } } : {}),
+      ...(box.turn !== undefined ? { turn: box.turn.seconds !== undefined ? { seconds: box.turn.seconds } : {} } : {}),
       ...(durableCardCount(box) > 0 ? { durableCards: durableCardCount(box) } : {}),
       tagGroups: box.tagGroups.map((group) => ({
         gameId: effectiveGameId(group),

@@ -248,6 +248,10 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         traceSink.push(`evict ${e.hand} ${e.card} ${e.reason}`);
         return;
       }
+      if (e.type === "discard") {
+        traceSink.push(`discard ${e.hand} ${e.card}`);
+        return;
+      }
       if (e.type === "play") {
         traceSink.push(e.outcome === "" ? `play ${e.card}` : `play ${e.card} ${e.outcome}`);
         return;
@@ -535,6 +539,16 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         const actual = Object.fromEntries(Object.keys(op.expect).map((g) =>
           [g, views.find((v) => v.gameId === g)?.extensions ?? {}]));
         if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
+        break;
+      }
+      case "discard": {
+        let error: string | undefined;
+        collect(() => {
+          try { flowOf(op.flow).discard(op.card, op.from); } catch (e) { error = String(e); }
+        });
+        if (op.expectError === true) { if (error === undefined) failures.push(`${at}: expected the discard to be refused`); }
+        else if (error !== undefined) failures.push(`${at}: unexpected error: ${error}`);
+        checkTrace(at, op.expectTrace, traceSink);
         break;
       }
       case "loadEnvelope": {

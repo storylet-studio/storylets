@@ -67,7 +67,7 @@ describe("runExportXlsx on the example project", async () => {
     // One box, so no Box column.
     // "Place" is the reserved home group, headed for a reader rather than by
     // its internal name, and it appears because the Hamlet's cards use it.
-    // Shared and In the world sit beside Copies: they are the same question
+    // Shared and In the world sit beside Across hands: they are the same question
     // (how many of this card exist) asked of the world rather than of a board.
     //
     // The card-field columns come FROM THE PROJECT rather than being named here.
@@ -76,7 +76,7 @@ describe("runExportXlsx on the example project", async () => {
     // hard-coded list broke the day the example's field changed, which taught
     // nothing: the column is the mechanism, its name is content.
     expect(cardFields.length).toBeGreaterThan(0);   // or this test proves nothing
-    expect(headers(arrival)).toEqual(["Title", "gameId", "When", "Priority", "Redraw", "Copies",
+    expect(headers(arrival)).toEqual(["Title", "gameId", "When", "Priority", "Redraw", "Weight", "In one hand", "Across hands",
       "Shared", "In the world", "area", "Place", ...cardFields, "Purpose", "Outcomes"]);
     expect(arrival.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
     expect(arrival.getRow(1).font?.bold).toBe(true);
@@ -89,30 +89,32 @@ describe("runExportXlsx on the example project", async () => {
     expect(row[3]).toBe("not check_flags(@rel_innkeeper, +met)");
     expect(row[4]).toBe("3");
     expect(row[5]).toBe("never");
-    expect(row[6]).toBe("1");
+    expect(row[6]).toBe("1");          // Weight
+    expect(row[7]).toBe("1");          // In one hand
+    expect(row[8]).toBe("one hand");   // Across hands
     // Neither the card nor its deck opts in, so the card defers to the deck
     // ("deck") and has no world count at all. The three-state reading is the
     // card page's: "deck" is not the same answer as a flat no.
-    expect(row[7]).toBe("deck");
-    expect(row[8]).toBe("");
+    expect(row[9]).toBe("deck");
+    expect(row[10]).toBe("");
     // This card belongs AT The Inn, not anywhere in the village, so the area
     // column is empty and Place carries the hand. That is the direct form the
     // Hamlet gained in 2026-08-21's Where work; a regional card is the mirror
     // of it (see "Market Bustle" below).
-    expect(row[9]).toBe("");                // area: not a regional card
-    expect(row[10]).toBe("the-inn");        // Place: the reserved home group
+    expect(row[11]).toBe("");                // area: not a regional card
+    expect(row[12]).toBe("the-inn");        // Place: the reserved home group
     // Again from the project: that the card's own field VALUE reaches its column.
     const inn = loaded.source!.boxes[0]!.decks
       .flatMap((d) => d.shard.cards ?? []).find((c) => c.gameId === "settle-at-the-inn")!;
-    expect(row[11]).toBe(String(inn.fields?.[cardFields[0]!] ?? ""));
+    expect(row[13]).toBe(String(inn.fields?.[cardFields[0]!] ?? ""));
     // The mirror: a card that IS regional fills area and leaves Place empty.
     const bustle = rowWhere(wb.getWorksheet("Ambients")!, 2, "market-bustle");
-    expect(bustle[9]).toBe("village");
-    expect(bustle[10]).toBe("");
+    expect(bustle[11]).toBe("village");
+    expect(bustle[12]).toBe("");
     // DISPLAY order, which is what the card document shows and what the bundle
     // carries: "warmly" is order 0 in the shard even though its id sorts second.
     // The export read storage order until 2026-08-21 and so disagreed with both.
-    expect(row[13]).toBe([
+    expect(row[15]).toBe([
       "Ask warmly about the village's history: @story.rel_innkeeper = set_flags(@rel_innkeeper, +met, +warm); @story.reputation = @reputation + 1",
       "Ask only about the road north: @story.rel_innkeeper = set_flags(@rel_innkeeper, +met)",
     ].join("\n"));

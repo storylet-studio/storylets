@@ -14,6 +14,7 @@ import type { ProjectSession } from "../project.js";
 import { coerceDefault, declFromDto, declsFromDtos, fieldDeclFromDto } from "../decls.js";
 import type { BoxEdit, BoxKit, DeckEdit, OpenResult, TagGroupEdit } from "../../shared/api.js";
 import { commit, commitMaking, freshKey, refuse } from "./write-path.js";
+import { coerceRedraw } from "./cards.js";
 import type { Written } from "./write-path.js";
 import {
   allDeckGameIds, applyIdentity, blank, boxFile, boxWrite, dedupedGameId, deckFileState, deckPath, deckWrite, gone,
@@ -43,7 +44,26 @@ export async function saveBox(session: ProjectSession, boxId: string, edit: BoxE
   // Turns: an object makes the box timed, null puts it back to counting plays.
   // Deleted rather than written as absent, so a box that is not timed carries
   // no `turn` key at all and the shard reads as it always did.
-  if (edit.turn !== undefined) { if (edit.turn === null) delete b.turn; else b.turn = { seconds: edit.turn.seconds }; }
+  // `{}` hands the clock to the game with no seconds (a calendar).
+  if (edit.turn !== undefined) {
+    if (edit.turn === null) delete b.turn;
+    else b.turn = edit.turn.seconds !== undefined ? { seconds: edit.turn.seconds } : {};
+  }
+  // The Card template's dealing defaults, whole: blank is the engine's own,
+  // and a box with none carries no key.
+  if (edit.cardDefaults !== undefined) {
+    const d = edit.cardDefaults;
+    const redraw = d.redraw.trim() === "" ? undefined : coerceRedraw(d.redraw);
+    const weight = Number(d.weight);
+    const inOneHand = Number(d.inOneHand);
+    const next = {
+      ...(redraw !== undefined ? { redraw } : {}),
+      ...(d.weight.trim() && Number.isFinite(weight) && weight > 0 ? { weight } : {}),
+      ...(d.inOneHand.trim() && Number.isInteger(inOneHand) && inOneHand >= 1 ? { inOneHand } : {}),
+      ...(d.acrossHands !== undefined ? { acrossHands: d.acrossHands } : {}),
+    };
+    if (Object.keys(next).length > 0) b.cardDefaults = next; else delete b.cardDefaults;
+  }
   if (edit.fields !== undefined) b.fields = edit.fields.map(fieldDeclFromDto);
   // The outcome half of the template. Deleted when the list empties rather
   // than written as `outcomeFields: []`, the way `turn` is: a box that declares

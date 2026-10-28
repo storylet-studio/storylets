@@ -14,11 +14,11 @@ import type { HoleDecls, Issue, LoadedProject, PatterReport, PatterScenes, Place
 import { writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, walkProjectFiles, worldDeclarations } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
-import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung, VcsKind } from "@storylet-studio/model";
+import type { Bundle, Card, CardDefaults, CoverageDriver, Hand, HandTemplate, PlayRung, VcsKind } from "@storylet-studio/model";
 import type { SourceBox, SourceExtension, SourceProject } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
-  BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectKit, ProjectSettingsDto,
+  BoardPatterDto, BoardScopesDto, BoxDto, CardDefaultsDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectKit, ProjectSettingsDto,
   RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../shared/api.js";
@@ -128,9 +128,15 @@ const cardDto = (box: SourceBox, card: Card<string>, patter?: PatterScenes): Car
     ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
     ...(!blank(card.condition) ? { condition: card.condition } : {}),
     priority: card.priority ?? 0,
-    redraw: String(card.redraw ?? "always"),
+    // The card's own Redraw, else its Card template's: what it deals with.
+    redraw: String(card.redraw ?? box.box.box.cardDefaults?.redraw ?? "always"),
+    ...(card.redraw === undefined ? { redrawInherited: true as const } : {}),
     tags: chipValues(box, card.tags),
-    copies: card.copies === undefined || card.copies === 1 ? "" : String(card.copies),
+    weight: card.weight === undefined ? "" : String(card.weight),
+    inOneHand: card.inOneHand === undefined ? "" : String(card.inOneHand),
+    // A card from before acrossHands, saying copies above one, reads as "any".
+    ...(card.acrossHands !== undefined ? { acrossHands: card.acrossHands }
+      : card.copies !== undefined ? { acrossHands: card.copies > 1 ? "any" as const : "one" as const } : {}),
     ...(card.shared !== undefined ? { shared: card.shared } : {}),
     sharedCopies: card.sharedCopies === undefined ? "" : String(card.sharedCopies),
     ...(card.durable !== undefined ? { durable: card.durable } : {}),
@@ -242,7 +248,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
       ...(source.project.patter !== undefined ? { patter: { performed: (source.project.patterBoxes ?? []).includes(box.box.box.id) } } : {}),
       ...(noted(`box:${effectiveGameId(box.box.box)}`) !== undefined
         ? { contract: noted(`box:${effectiveGameId(box.box.box)}`)! } : {}),
-      ...(box.box.box.turn !== undefined ? { turn: { seconds: box.box.box.turn.seconds } } : {}),
+      ...(box.box.box.turn !== undefined
+        ? { turn: box.box.box.turn.seconds !== undefined ? { seconds: box.box.box.turn.seconds } : {} } : {}),
+      cardDefaults: cardDefaultsDto(box.box.box.cardDefaults),
       ...(boxColourOf(box) !== undefined ? { colour: boxColourOf(box)! } : {}),
       fields: (box.box.box.fields ?? []).map(fieldDeclDto),
       // Absent on every box that declares none, which is every box older than
@@ -475,6 +483,16 @@ export async function vcStatus(session: ProjectSession): Promise<VcStatusDto> {
     else shards.push({ key, ...state });
   }
   return { system, shards, ...(Object.keys(extensions).length > 0 ? { extensions } : {}) };
+}
+
+/** A box's Card template dealing defaults, as the editor types them. */
+function cardDefaultsDto(d: CardDefaults | undefined): CardDefaultsDto {
+  return {
+    redraw: d?.redraw === undefined ? "" : String(d.redraw),
+    weight: d?.weight === undefined ? "" : String(d.weight),
+    inOneHand: d?.inOneHand === undefined ? "" : String(d.inOneHand),
+    ...(d?.acrossHands !== undefined ? { acrossHands: d.acrossHands } : {}),
+  };
 }
 
 export function validate(session: ProjectSession): Problem[] {

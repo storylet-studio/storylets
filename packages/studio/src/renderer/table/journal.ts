@@ -69,6 +69,8 @@ export function journalRows(plan: readonly JournalItem[], ctx: JournalContext): 
         return { stamp, kind: "wrote", cls: "j-write", parts: [`${e.target} `, ...change(e.prev, e.value)] };
       case "evict":
         return { stamp, kind: "left", cls: "j-evict", parts: [`${quote(e.card)} (${e.reason})`] };
+      case "discard":
+        return { stamp, kind: "discarded", cls: "j-evict", parts: [`${quote(e.card)} from ${e.hand}`] };
       case "turns":
         return { stamp, kind: "turn", cls: "j-turn", parts: [`${e.box} advances to ${e.turn}`] };
       case "peek":

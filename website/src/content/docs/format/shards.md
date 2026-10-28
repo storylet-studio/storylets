@@ -287,17 +287,21 @@ wrote them, so a field a card leaves out arrives missing; the field helpers fill
 declaration's default. `properties` is the
 `@box` scope. `ranking.specificity` is the one per-box ranking toggle.
 
-An optional `turn` makes this a **timed box**:
+An optional `turn` says your game moves this box's clock, so plays in it advance nothing:
 
 ```json5
-    turn: { seconds: 60 },   // one turn a minute of the run
+    turn: {},                // the game ticks it: a calendar, a day at a time
+    turn: { seconds: 60 },   // or a timed box: one turn a minute of the run
 ```
 
-`seconds` is a whole number of seconds, one or more. Declaring it says that a turn in this
-box is a length of time, so plays in it no longer advance its clock, your game ticks it
-instead, and a card's `redraw: 30` reads as thirty minutes. See
-[Dealing](/play/dealing/#a-box-that-counts-in-time). Leave it out and a turn is a play, which
-is the ordinary box.
+With `seconds`, a whole number of seconds, one or more, this is a **timed box**: a turn is a
+length of time, and a card's `redraw: 30` reads as thirty minutes. See
+[Dealing](/play/dealing/#a-box-whose-clock-the-game-moves). Leave `turn` out and a turn is a
+play, which is the ordinary box.
+
+An optional `cardDefaults` is the Card template's dealing rules: what a card in this box takes
+when it sets none of its own (`redraw`, `weight`, `inOneHand`, `acrossHands`). It's live, so
+changing it changes every card that hasn't set its own.
 
 **`usesMap: true`** puts the box on the [project map](#the-project-map). Its hands may then be
 bound to the map's zones and its cards filed to them. Leave it out and the box can't name the
@@ -615,15 +619,20 @@ Reading a card top to bottom:
 - **`fields`** fills in the box's card template. Here the game reads `scene` and plays it.
 - **`priority`** is the first ranking key. It can be a number or an expression.
 - **`redraw`** is the cooldown policy in this box's own turns: `always`, `never`, or a
-  number.
-- **`copies`** (absent here, so 1) is how many hands may hold the card at once, counted
-  within one playthrough.
+  number. Absent, the card takes its box's Card template default (`cardDefaults`), or
+  `always`.
+- **`weight`** (absent here, so 1) is how often the card comes up beside cards of equal rank.
+- **`inOneHand`** (absent here, so 1) is how many slots of one hand it may fill at once.
+- **`acrossHands`** (absent here, so `"one"`) says whether several hands may hold it at
+  once, counted within one playthrough: `"one"` or `"any"`. It replaces `copies`, which
+  `storyletengine format` rewrites as `acrossHands`. Each of these three, absent, takes the
+  box's Card template default too.
 - **`shared`** makes the card scarce across [flows](/play/world-state/#shared-or-per-flow),
   one goblin in the whole world rather than one each. Absent, it takes its deck's flag, so the
   usual place to write it is on a deck whose whole pile is scarce. On the card it's the
   override for a single unique card sitting in an ordinary deck. **`sharedCopies`** is then
-  how many hands may hold it anywhere, defaulting to `copies`, so `copies: 1, sharedCopies: 5`
-  is five in the world, one to a customer.
+  how many hands may hold it anywhere, so `sharedCopies: 5` is five in the world, one to a
+  customer.
 - **`durable`** says this card's `redraw: never` spend
   [survives the run](/play/world-state/#durable-state-that-outlives-a-run), for whoever
   played it, or for everyone when the card is also shared. Absent, it takes its deck's flag,

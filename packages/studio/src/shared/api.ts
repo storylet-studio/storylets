@@ -327,13 +327,22 @@ export interface CardDto {
   redraw: string;
   /** Tags as gameIds: tag group -> tag names. */
   tags: { group: string; values: string[] }[];
-  /** Copies on the board at once; blank = 1 (the default). */
-  copies: string;
+  /** How often among cards of equal rank, as typed; blank = the Card
+   *  template's (or 1). */
+  weight?: string;
+  /** How many slots of one hand, as typed; blank = the Card template's (or 1). */
+  inOneHand?: string;
+  /** Whether several hands may hold it: the card's own, or absent to follow
+   *  the Card template (a card from before acrossHands that says copies > 1
+   *  reads as "any"). */
+  acrossHands?: "one" | "any";
+  /** Redraw comes from the Card template (or "always"), the card setting none. */
+  redrawInherited?: true;
   /** Scarce across flows (design/shared-scarcity.md). Absent takes the deck's
    *  flag; set here it overrides the deck, which is how a single unique card
    *  stays in the content it belongs to. */
   shared?: boolean;
-  /** The world cap when shared, as typed; blank = the same as copies. */
+  /** The world cap when shared, as typed; blank = the per-flow limit. */
   sharedCopies: string;
   /** Its `never` spend outlives the run (design/engine-server.md 4.2). Absent
    *  takes the deck's flag, exactly as `shared` does. */
@@ -371,11 +380,16 @@ export interface CardEdit {
   redraw?: string;
   /** Tags as gameIds. */
   tags?: { group: string; values: string[] }[];
-  /** Copies as typed; blank or "1" clears to the default. */
-  copies?: string;
+  /** Weight as typed; blank follows the Card template. */
+  weight?: string;
+  /** In one hand as typed; blank follows the Card template. */
+  inOneHand?: string;
+  /** Across hands; null follows the Card template. Writing it retires a
+   *  card's old `copies`. */
+  acrossHands?: "one" | "any" | null;
   /** Scarce across flows; null clears the override back to the deck's flag. */
   shared?: boolean | null;
-  /** The world cap as typed; blank clears it back to copies. */
+  /** The world cap as typed; blank clears it back to the per-flow limit. */
   sharedCopies?: string;
   /** Its `never` spend outlives the run; null clears the override back to the
    *  deck's flag (design/engine-server.md 4.2). */
@@ -537,9 +551,14 @@ export interface BoxDto {
    *  `ViewShard.colour`), once it has one: stored, never worked out from the
    *  box's position, so it does not move when the boxes do. */
   colour?: number;
-  /** Set on a TIMED box (design/engine-server.md 4.8): a turn here is that
-   *  many seconds of the run rather than a play. Absent is the ordinary box. */
-  turn?: { seconds: number };
+  /** Present when the GAME moves the box's clock, so a play advances nothing:
+   *  with `seconds`, a TIMED box (design/engine-server.md 4.8), a turn being
+   *  that many seconds of the run; without, the game's own beat (a calendar).
+   *  Absent is the ordinary box, whose clock a play moves. */
+  turn?: { seconds?: number };
+  /** The Card template's dealing defaults (the hands-on review, 2026-10);
+   *  absent, the engine's own. */
+  cardDefaults?: CardDefaultsDto;
   /** The card template - the fields a card may set. */
   fields: FieldDeclDto[];
   /** The other half of the same template - the fields an OUTCOME may set. A
@@ -931,6 +950,15 @@ export interface OpenResult {
   at?: ReviewAt;
 }
 
+/** A box's Card template defaults for its cards' dealing rules, as typed:
+ *  blank (or absent) is the engine's own default. */
+export interface CardDefaultsDto {
+  redraw: string;
+  weight: string;
+  inOneHand: string;
+  acrossHands?: "one" | "any";
+}
+
 export interface BoxEdit {
   title?: string;
   gameId?: string;
@@ -938,9 +966,12 @@ export interface BoxEdit {
   ranking?: { specificity: boolean };
   /** Performed by Patter: adds this box to, or takes it off, the project's `patterBoxes`. */
   patterPerformed?: boolean;
-  /** The Turns section: an object makes the box timed, `null` makes it count
-   *  plays again. Absent leaves it as it was, like every other field here. */
-  turn?: { seconds: number } | null;
+  /** The Turns section: an object hands the clock to the game (with
+   *  `seconds`, a timed box), `null` makes it count plays again. Absent leaves
+   *  it as it was, like every other field here. */
+  turn?: { seconds?: number } | null;
+  /** The Card template's dealing defaults, whole. */
+  cardDefaults?: CardDefaultsDto;
   fields?: FieldDeclDto[];
   /** The outcome template. An empty list clears it: the box keeps no
    *  `outcomeFields` key rather than an empty one, so a project that never

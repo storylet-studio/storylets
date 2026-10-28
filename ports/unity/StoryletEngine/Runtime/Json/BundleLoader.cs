@@ -269,7 +269,8 @@ namespace StoryletStudio.StoryletEngine
             var ranking = o["ranking"] as JObject;
             if (ranking != null) box.Ranking.Specificity = ranking.Value<bool>("specificity");
             var turn = o["turn"] as JObject;
-            if (turn != null) box.Turn = new TurnUnit { Seconds = turn.Value<double>("seconds") };
+            // No seconds is a clock the game moves on its own beat (a calendar).
+            if (turn != null) box.Turn = new TurnUnit { Seconds = turn["seconds"] != null ? turn.Value<double>("seconds") : (double?)null };
             if (o["fields"] is JArray fields)
             {
                 foreach (var f in fields) box.Fields.Add(ParseFieldDecl((JObject)f));
@@ -385,6 +386,9 @@ namespace StoryletStudio.StoryletEngine
                     card.Tags.Set(pair.Key, ids);
                 }
             }
+            if (o["weight"] != null) card.Weight = o.Value<double>("weight");
+            if (o["inOneHand"] != null) card.InOneHand = o.Value<double>("inOneHand");
+            if (o["acrossHands"] != null) card.AcrossHands = o.Value<string>("acrossHands");
             if (o["copies"] != null) card.Copies = o.Value<double>("copies");
             if (o["shared"] != null) card.Shared = o.Value<bool>("shared");
             if (o["sharedCopies"] != null) card.SharedCopies = o.Value<double>("sharedCopies");

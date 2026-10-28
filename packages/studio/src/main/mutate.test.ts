@@ -199,20 +199,25 @@ describe("card mutations", () => {
     expect(card.tags.find((t) => t.group === PLACE_GROUP)!.values).toEqual(["docks-street"]);
   });
 
-  it("saves copies when 2+, and clears it back to the default of 1", async () => {
+  it("saves the dealing rules, and clears each back to the Card template's (the hands-on review, 2026-10)", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    await saveCard(session, docks, ratJob.id, { copies: "3" });
-    expect(readFileSync(dockDeckFile(session), "utf8")).toContain("copies: 3");
+    await saveCard(session, docks, ratJob.id, { weight: "3", inOneHand: "2", acrossHands: "any" });
+    const text = readFileSync(dockDeckFile(session), "utf8");
+    expect(text).toContain("weight: 3");
+    expect(text).toContain("inOneHand: 2");
+    expect(text).toContain('acrossHands: "any"');
     let reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
-    expect(reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!.copies).toBe("3");
+    expect(reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)).toMatchObject({ weight: "3", inOneHand: "2", acrossHands: "any" });
 
-    await saveCard(session, docks, ratJob.id, { copies: "1" });
-    expect(readFileSync(dockDeckFile(session), "utf8")).not.toContain("copies:");
+    await saveCard(session, docks, ratJob.id, { weight: "", inOneHand: "", acrossHands: null });
+    expect(readFileSync(dockDeckFile(session), "utf8")).not.toMatch(/weight:|inOneHand:|acrossHands:/);
     reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
-    expect(reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!.copies).toBe("");
+    const card = reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!;
+    expect(card.weight).toBe("");
+    expect(card.acrossHands).toBeUndefined();
   });
 
   it("creates a card with a unique gameId and a default outcome, then deletes it", async () => {
@@ -946,9 +951,9 @@ describe("box mutations", () => {
     expect(rumour.tags).toEqual([{ group: "npc", values: ["gareth", "mira"] }]);
 
     // And the opt-out from exclusivity, which the dialogue picker's blurb had
-    // been promising while the kit had no `copies` in it at all.
+    // been promising while the kit had no way to say it: any hand at once.
     const roads = d.decks[0]!.cards.find((c) => c.gameId === "a-complaint-about-the-roads")!;
-    expect(roads.copies).toBe("2");   // the DTO carries scalars as editable strings
+    expect(roads.acrossHands).toBe("any");
   });
 
   it("applying the same kit twice dedupes its hand and card names (they are API)", async () => {

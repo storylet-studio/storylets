@@ -255,7 +255,9 @@ enum class EStoryletLogKind : uint8
 	Play,
 	Write,
 	Turns,
-	Diagnostic
+	Diagnostic,
+	/** A card the game took out of a hand unplayed (Discard). */
+	Discard
 };
 
 /** One card's verdict in a deal or a peek: why it did or did not make the
@@ -331,7 +333,7 @@ struct FStoryletLogEntry
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Summary;
 
-	/** Deal and Evict: the hand's gameId. */
+	/** Deal, Evict and Discard: the hand's gameId. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Hand;
 
@@ -339,7 +341,7 @@ struct FStoryletLogEntry
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Box;
 
-	/** Evict and Play: the card's gameId. A card the build no longer has
+	/** Evict, Play and Discard: the card's gameId. A card the build no longer has
 	 *  (Reason "vanished") has no gameId left, so it is named by the id the
 	 *  board carried. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
@@ -351,7 +353,8 @@ struct FStoryletLogEntry
 	FString Outcome;
 
 	/** Evict: a verdict's wire name (see FStoryletTraceCard::Verdict), or
-	 *  "hand-condition" or "vanished". */
+	 *  "hand-condition", "vanished" or "outranked" (a deal gave its place to a
+	 *  better card). */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Reason;
 
@@ -586,10 +589,18 @@ struct FStoryletBoxSummary
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	bool bRankingSpecificity = true;
 
+	/** The GAME moves this box's clock, so a play in it advances nothing and
+	 *  the host must tick it with AdvanceTurns. False on an ordinary box,
+	 *  whose clock a play moves (the hands-on review, 2026-10: the three-way
+	 *  box clock). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	bool bGameClock = false;
+
 	/** How long one turn of a TIMED box lasts (design/engine-server.md 4.8),
 	 *  which is what tells a host how often it must tick this box. Zero on an
-	 *  ordinary box, whose turn is a play: the compiler refuses a timed box
-	 *  under one second, so zero can only mean "not timed". */
+	 *  ordinary box and on a game clock with no seconds (a calendar, the
+	 *  game's own beat): the compiler refuses a timed box under one second,
+	 *  so zero can only mean "not timed". */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	double TurnSeconds = 0;
 

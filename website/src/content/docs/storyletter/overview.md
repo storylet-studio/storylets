@@ -155,7 +155,8 @@ The same page from the command line is [`storyletengine export-html`](/cli/#expo
 thing a lead reads in a review meeting and a producer sorts and filters. It asks where to
 save, suggesting `<project name>.xlsx` beside the project folder.
 
-One sheet per deck, a row per card: title, gameId, When, priority, redraw, copies, a column
+One sheet per deck, a row per card: title, gameId, When, priority, redraw, weight, in one
+hand, across hands (each as the card deals with it, Card template defaults included), a column
 per tag group, a column per card field, purpose, and the outcomes with their changes. After
 the decks come an **Outcomes** sheet (one row per outcome), **Hands** (template, When, tags,
 slots), and **Tag groups** (every tag with its properties), with an **Overview** sheet in

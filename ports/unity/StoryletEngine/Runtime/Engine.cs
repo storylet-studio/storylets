@@ -438,8 +438,19 @@ namespace StoryletStudio.StoryletEngine
     {
         public string Hand;
         public string Card;
-        /// <summary>A verdict wire name, or "hand-condition" / "vanished".</summary>
+        /// <summary>A verdict wire name, or "hand-condition" / "vanished", or
+        /// "outranked": a deal re-ranked the hand and better cards took the
+        /// slot.</summary>
         public string Reason;
+    }
+
+    /// <summary>A card the game took out of a hand without playing it
+    /// (Discard): card and hand gameIds.</summary>
+    public sealed class DiscardEvent : TraceEvent
+    {
+        public string Hand;
+        public string Card;
+        public double Turn;
     }
 
     /// <summary>Card and outcome gameIds.</summary>

@@ -29,7 +29,7 @@ function coercePriority(raw: string): number | string {
   return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : raw;
 }
 
-function coerceRedraw(raw: string): RedrawPolicy {
+export function coerceRedraw(raw: string): RedrawPolicy {
   if (raw === "always" || raw === "never") return raw;
   const n = Number(raw);
   return Number.isInteger(n) && n >= 0 ? n : "always";
@@ -82,14 +82,25 @@ function applyEdit(box: SourceBox, existing: Card<string>, edit: CardEdit): Card
   applyIdentity(next, edit);
   if (edit.condition !== undefined) { if (blank(edit.condition)) delete next.condition; else next.condition = edit.condition; }
   if (edit.priority !== undefined) next.priority = coercePriority(edit.priority);
-  if (edit.redraw !== undefined) next.redraw = coerceRedraw(edit.redraw);
+  // Blank follows the box's Card template.
+  if (edit.redraw !== undefined) { if (edit.redraw.trim() === "") delete next.redraw; else next.redraw = coerceRedraw(edit.redraw); }
   if (edit.tags !== undefined) {
     const resolved = resolveTags(box, edit.tags);
     if (Object.keys(resolved).length > 0) next.tags = resolved; else delete next.tags;
   }
-  if (edit.copies !== undefined) {
-    const n = Number(edit.copies);
-    if (edit.copies.trim() && Number.isInteger(n) && n >= 2) next.copies = n; else delete next.copies;
+  // The dealing rules (the hands-on review, 2026-10): blank, or null, follows
+  // the Card template; anything else is the card's own.
+  if (edit.weight !== undefined) {
+    const n = Number(edit.weight);
+    if (edit.weight.trim() && Number.isFinite(n) && n > 0) next.weight = n; else delete next.weight;
+  }
+  if (edit.inOneHand !== undefined) {
+    const n = Number(edit.inOneHand);
+    if (edit.inOneHand.trim() && Number.isInteger(n) && n >= 1) next.inOneHand = n; else delete next.inOneHand;
+  }
+  if (edit.acrossHands !== undefined) {
+    if (edit.acrossHands === null) delete next.acrossHands; else next.acrossHands = edit.acrossHands;
+    delete next.copies;   // replaced: Across hands says it now
   }
   // Scarcity across flows (design/shared-scarcity.md). null is the third state:
   // clear the card's override and let the deck's flag stand, which is what the
@@ -168,7 +179,9 @@ export async function saveCard(session: ProjectSession, deckId: string, cardId: 
 function newCard(session: ProjectSession): Card<string> {
   const title = freeTitle("New card", allCardGameIds(session));
   return {
-    id: newId("c"), title, priority: 0, redraw: "always",
+    // No Redraw: a new card follows its box's Card template (the hands-on
+    // review, 2026-10: a deck whose cards are "found once" got "always").
+    id: newId("c"), title, priority: 0,
     outcomes: [{ id: newId("o"), title: "Continue", changes: {} }],
   };
 }

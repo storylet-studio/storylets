@@ -329,7 +329,8 @@ namespace StoryletStudio.StoryletEngine.Editor
         private static string LogKindOf(TraceEvent evt)
         {
             if (evt is DealEvent || evt is PeekEvent) return "deal";
-            if (evt is PlayEvent) return "play";
+            // A card the game took out of its hand unplayed: filed with the plays.
+            if (evt is PlayEvent || evt is DiscardEvent) return "play";
             if (evt is WriteEvent) return "write";
             if (evt is EvictEvent) return "evict";
             if (evt is TurnsEvent) return "turns";
@@ -383,6 +384,8 @@ namespace StoryletStudio.StoryletEngine.Editor
                     return $"{stamp}evict {e.Card} from {e.Hand} ({e.Reason})";
                 case PlayEvent e:
                     return $"{stamp}play {e.Card} -> {e.Outcome}";
+                case DiscardEvent e:
+                    return $"{stamp}discard {e.Card} from {e.Hand}";
                 case WriteEvent e:
                     return $"{stamp}write {e.Path}: {ShowValue(e.Prev)} -> {ShowValue(e.Value)}";
                 case TurnsEvent e:

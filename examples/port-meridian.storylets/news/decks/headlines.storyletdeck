@@ -9,8 +9,8 @@
   },
   cards: [
     {
+      acrossHands: "any",
       condition: "check_flags(@wire, +blackout)",
-      copies: 3,
       gameId: "rolling-blackouts-hit-old-grid",
       id: "c_nw_blackouts",
       order: 4,
@@ -21,7 +21,7 @@
       title: "Rolling Blackouts Hit Old Grid",
     },
     {
-      copies: 2,
+      acrossHands: "any",
       gameId: "acid-drizzle-advisory",
       id: "c_nw_drizzle",
       order: 0,
@@ -48,8 +48,8 @@
       title: "Nightlife Roundup",
     },
     {
+      acrossHands: "any",
       condition: "@heat >= \"watched\"",
-      copies: 3,
       gameId: "port-authority-steps-up-patrols",
       id: "c_nw_patrols",
       order: 2,
@@ -60,8 +60,8 @@
       title: "Port Authority Steps Up Patrols",
     },
     {
+      acrossHands: "any",
       condition: "check_flags(@wire, +container_robbery)",
-      copies: 2,
       gameId: "container-yard-robbery",
       id: "c_nw_robbery",
       order: 3,

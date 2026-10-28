@@ -25,7 +25,7 @@ extends SceneTree
 const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
 	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertOutcomeFields",
 	"assertCardFields", "assertCardExtensions", "assertOutcomeExtensions",
-	"assertBoxExtensions", "assertState", "scribble"]
+	"assertBoxExtensions", "assertState", "scribble", "discard"]
 
 ## The load report's comparison separator: a UNIT SEPARATOR, because it cannot
 ## occur in an id, a gameId or a property name.
@@ -678,6 +678,9 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			if e["type"] == "evict":
 				(rc["traces"] as Array).append("evict %s %s %s" % [e["hand"], e["card"], e["reason"]])
 				return
+			if e["type"] == "discard":
+				(rc["traces"] as Array).append("discard %s %s" % [e["hand"], e["card"]])
+				return
 			if e["type"] == "play":
 				# A play with no outcome renders as "play <card>", no trailing space.
 				var played: String = "play %s" % e["card"] if str(e["outcome"]) == "" \
@@ -868,6 +871,18 @@ func _run_scripted_case(c: Dictionary) -> Array:
 					failures.append("%s: expected an error, play succeeded" % at)
 				if not expect_error and error != "":
 					failures.append("%s: unexpected error: %s" % [at, error])
+
+			"discard":
+				# Corpus 21: out of the hand unplayed. A refusal is the returned
+				# string, as play's is.
+				rc["traces"] = []
+				var discard_error := session.discard(op["card"], op["from"])
+				check_trace.call(at, op, failures)
+				var expect_discard_error: bool = op.get("expectError", false)
+				if expect_discard_error and discard_error == "":
+					failures.append("%s: expected the discard to be refused" % at)
+				if not expect_discard_error and discard_error != "":
+					failures.append("%s: unexpected error: %s" % [at, discard_error])
 
 			"advanceTurns":
 				session.advance_turns(op["box"], float(op["n"]))

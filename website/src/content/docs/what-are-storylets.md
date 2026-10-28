@@ -149,8 +149,8 @@ card's **redraw** setting:
 ## Priority
 
 When more cards are eligible than there is room for, priority sets the running order. Give the
-big moment, the dragon finally turning up, a high priority and it pushes to the front the
-instant its condition is met, ahead of the everyday stuff.
+big moment, the dragon finally turning up, a high priority and it pushes to the front at the
+first deal after its condition is met, ahead of the everyday stuff.
 
 Storylet Studio also breaks ties by how *specific* a card is, so the special case wins over the
 general one without you having to number everything. The whole ranking is on

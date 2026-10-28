@@ -30,9 +30,9 @@ static class Program
         Check(g2.Playing != null && g2.Playing.Done, "the branch's closing words wait on Continue"); g2.Finish();
         Check(Equals(g2.World.Values["knows_road"], true), "Patter wrote @world.knows_road");
         g2.Go("the-mystic-tree");
-        Check(string.Join(",", g2.Hand().Select(c => c.GameId)) == "wind-in-the-leaves", "tree shows the ambient only (survivor rule)");
-        g2.Start(g2.Hand()[0]); g2.Finish();   // no choice at all: it ends, and Continue plays it
-        Check(g2.Hand().Any(c => c.GameId == "the-road-north"), "The Road North lands once the seat frees");
+        // A deal makes the hand right (the hands-on review, 2026-10, ruling 1): the road
+        // card, ranked above the ambient, takes the tree's one slot as soon as it's eligible.
+        Check(g2.Hand().Any(c => c.GameId == "the-road-north"), "The Road North lands at once, outranking the ambient");
         var fx = Path.GetFullPath(Path.Combine(sa, "../../../../godot/HamletDemo/test/fixtures/envelope-from-js-mid.json"));   // ports/unity/HamletDemo/Assets/StreamingAssets -> ports/godot/...
         Console.WriteLine("cross-host fixture: " + (File.Exists(fx) ? "found" : "MISSING at " + fx));
         if (File.Exists(fx))

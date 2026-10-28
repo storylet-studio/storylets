@@ -403,6 +403,14 @@ export interface Outcome<E> {
   fields?: Record<string, ScalarValue>;
 }
 
+/** A box's defaults for its cards' dealing rules (its Card template). */
+export interface CardDefaults {
+  redraw?: RedrawPolicy;
+  weight?: number;
+  inOneHand?: number;
+  acrossHands?: "one" | "any";
+}
+
 export interface Card<E> {
   /** Bundle only: this node's extension values, by extension id, raw as
    *  authored (editor-only fields stripped). Source keeps them in extension
@@ -419,16 +427,33 @@ export interface Card<E> {
   condition?: E;
   /** Default 0; an expression must evaluate to a number. */
   priority: number | E;
-  redraw: RedrawPolicy;
+  /** Always present in a bundle. A source card may leave it out, and then
+   *  takes its box's Card template default (or "always"). */
+  redraw?: RedrawPolicy;
   /** Tags: tag group id -> tag ids. An absent group is a wildcard (matches
    *  any binding of it), except the reserved home group, whose default
    *  inverts (schema 2.4). Editors and fixtures speak gameIds; stored
    *  references are ids. */
   tags?: Record<string, string[]>;
-  /** How many hands may hold this card at once (schema 3.5): integer >= 1,
-   *  default 1. One copy is the exclusivity rule; copies: N is the
-   *  deliberate opt-out for interchangeable filler. Always counted WITHIN a
-   *  flow, whether or not the card is shared. */
+  /** How often this card comes up beside cards of equal rank: a positive
+   *  number, default 1 (the hands-on review, 2026-10: weights in place of
+   *  Copies). Priority, then specificity, still decide between ranks; within
+   *  a run of equal cards a card of weight 2 is drawn ahead twice as often as
+   *  one of weight 1. A run whose weights are all equal shuffles exactly as it
+   *  always has. */
+  weight?: number;
+  /** How many slots of ONE hand this card may fill: integer >= 1, default 1
+   *  (an encounter comes up once; a pickup or a piece of equipment can be up
+   *  to 3). */
+  inOneHand?: number;
+  /** Whether several hands may hold this card at once, within a flow:
+   *  "one" (the default, a one-off can't be offered in two places) or "any"
+   *  (interchangeable filler). Replaces `copies`. */
+  acrossHands?: "one" | "any";
+  /** @deprecated Read when `acrossHands` is absent, for a bundle from before
+   *  it: how many hands may hold this card at once (schema 3.5), integer >= 1,
+   *  default 1. `storyletengine format` writes `acrossHands` in its place
+   *  (1 is "one", more is "any"). */
   copies?: number;
   /** Scarcity across flows (design/shared-scarcity.md). Absent takes the
    *  deck's flag; set here it overrides the deck, so a single unique card can
@@ -442,9 +467,9 @@ export interface Card<E> {
    *  question, not an engine one (shared-scarcity 9.3.3). */
   shared?: boolean;
   /** The world cap: how many hands ACROSS EVERY FLOW may hold this at once.
-   *  Read only when the card is shared, and defaults to `copies`, so the
-   *  common case writes one number and "five in the world, one to a customer"
-   *  is `copies: 1, sharedCopies: 5`. */
+   *  Read only when the card is shared, and defaults to the per-flow limit
+   *  (one hand, or `copies`), so "five in the world, one to a customer" is
+   *  `sharedCopies: 5`. */
   sharedCopies?: number;
   /** Does this card's `redraw: "never"` spend survive the run
    *  (design/engine-server.md 4.2)? Absent takes the deck's flag, set here it
@@ -728,9 +753,12 @@ export interface Box<E> {
   /** The only per-box ranking policy (Reboot 2.2). */
   ranking: { specificity: boolean };
   /**
-   * A TIMED box: its clock counts real time, one turn every `seconds` of the
-   * run (design/engine-server.md 4.8). Absent is the ordinary box, whose turn
-   * is a play.
+   * Who moves the box's clock. Absent is the ordinary box, whose clock a
+   * play moves. Present, the GAME moves it: with `seconds` it is a TIMED box,
+   * counting real time, one turn every `seconds` of the run
+   * (design/engine-server.md 4.8); without, it is a calendar or any clock the
+   * game ticks on its own beat (the hands-on review, 2026-10: the three-way
+   * box clock).
    *
    * Two things follow, and only two. In the ENGINE, a play in this box
    * defaults to advancing nothing: `settings.playAdvancesTurns` does not
@@ -743,7 +771,7 @@ export interface Box<E> {
    *
    * The number itself is inert to the runtime, which never reads it.
    */
-  turn?: { seconds: number };
+  turn?: { seconds?: number };
   /** The card template: what every card in this box carries. */
   fields: FieldDecl[];
   /** What every outcome in this box may carry, declared the same way.
@@ -1778,8 +1806,15 @@ export interface BoxShard {
      *  into the bundle); merges as a per-field value. */
     order?: number;
     ranking: { specificity: boolean };
-    /** Declares a timed box (see `Box.turn`); compiled through unchanged. */
-    turn?: { seconds: number };
+    /** Who moves the box's clock (see `Box.turn`): present, the game does,
+     *  with `seconds` a timed box; compiled through unchanged. */
+    turn?: { seconds?: number };
+    /** The Card template's dealing rules: what a card that sets none takes
+     *  (the hands-on review, 2026-10). Live, as field defaults are: a card left
+     *  on the default follows it, a card's own value stays its own. Absent
+     *  keys take the engine's defaults (Redraw "always", weight 1, one slot of
+     *  one hand, one hand at a time). */
+    cardDefaults?: CardDefaults;
     fields: FieldDecl[];
     /** The outcome fields (see `Box.outcomeFields`); a shard without the key
      *  declares none. */

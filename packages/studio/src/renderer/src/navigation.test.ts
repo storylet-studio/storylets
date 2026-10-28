@@ -10,7 +10,7 @@ import type { BoxDto, ProjectDto } from "../../shared/api.js";
 const box: BoxDto = {
   id: "b_1", gameId: "harbour", folder: "harbour", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [],
   decks: [{ id: "k_1", gameId: "docks", properties: [], cards: [{
-    id: "c_1", gameId: "ambush", condition: "", priority: 0, redraw: "never", tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [],
+    id: "c_1", gameId: "ambush", condition: "", priority: 0, redraw: "never", tags: [], sharedCopies: "", fields: [], outcomes: [],
   }] }],
   templates: [{ id: "t_1", gameId: "street-hands", bindings: [], slots: "3", instances: 0 }],
   tagGroups: [{ id: "g_1", gameId: "zone", values: [] }],

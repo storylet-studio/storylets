@@ -14,8 +14,29 @@ the same version number always means the same runtime behaviour.
   `{"flow", "kind": "condition", "node", "source", "message"}`, Patterplay's `on_error` shape, with `node` such as
   `card <gameId>` or `outcome <card>/<outcome>`. Without one, a `push_warning` says it. It used to reach only a
   trace, so with tracing off a typo in a condition looked like a card that never came up.
+- **Weights, In one hand and Across hands.** A card's `weight` (default 1) says how often it comes up beside cards of
+  equal rank: priority, then specificity, still decide between ranks, and within a run of equal cards one of weight 2
+  is drawn ahead twice as often as one of weight 1. A run whose weights are all equal shuffles exactly as before.
+  `inOneHand` (default 1) lets a card fill up to that many slots of one hand, a pickup or a piece of equipment, and a
+  play takes one copy. `acrossHands` is `"one"` (the default: one hand of a flow at a time) or `"any"`
+  (interchangeable filler), in place of `copies`, which a bundle from before it still uses; `sharedCopies` defaults
+  to that limit.
+- **Discard.** `StoryletFlow.discard(card_id, from)` takes a card out of a hand without playing it: no outcome, no
+  play in the log, no move of the clock. It starts its Redraw from the current turn, as a play would, so the next deal
+  doesn't hand it straight back, and a shared `"never"` card is spent for everyone. One copy leaves. It returns `""`,
+  or the refusal, as `play` does, and the trace gains a `"discard"` event (`{"hand", "card", "turn"}`), which the
+  state panel's log files with the plays.
+- **The game's clock.** A box's `turn` may now come with no `seconds`: the game moves that box's clock on its own beat
+  (a calendar), so a play advances nothing, as in a timed box. `describe_bundle` gives such a box an empty `"turn"`,
+  and the bundle inspector says "turn moved by the game".
 
 ### Changed
+
+- **A deal makes the hand right.** Every hand a deal reaches is re-ranked whole, full or not: everything eligible,
+  the cards it holds included, and the hand becomes the top of that ranking. A held card wins a tie, so an equal card
+  never displaces it, and keeps its place; a card a better one displaces goes back to the stock with an `"evict"`
+  trace event, reason `"outranked"`. A full hand used to keep what it held until a play or an eviction made room, so a
+  better card that became eligible waited. The conformance corpus (version 21) checks it in every runtime.
 
 - **Saves name cards by Game ID.** A save (now `storylets/save@3`, `StoryletBundle.SAVE_SCHEMA`) keys a flow's board,
   cooldowns and box clocks, and the spent shared cards, by Game ID, as its play log always did. A card deleted and

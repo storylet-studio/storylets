@@ -127,8 +127,10 @@ describe("example project", () => {
     // take the rat job, freeing a slot, and re-deal - the ambush (p2) seats.
     session.play("c_rat_job", "accepted", "docks-street");
     expect(session.getProperty("story.visited")).toEqual(["docks"]);
+    // A deal makes the hand right (ruling 1): the rat job, back at once (its
+    // Redraw is "always"), outranks the stranger, who goes back to the stock.
     docksStreet = session.deal("docks-street").map((c) => c.gameId);
-    expect(docksStreet).toEqual(["mysterious-stranger", "ambush-at-the-ford"]);
+    expect(docksStreet).toEqual(["ambush-at-the-ford", "rat-job"]);
 
     // Outcome gates read current truth; the fight is open at reputation 0.
     // The ORDER is the author's, not the ids': the shard writes flee first, and
@@ -143,7 +145,7 @@ describe("example project", () => {
     session.play("c_ambush", "stand-and-fight", "docks-street");
     expect(session.getProperty("story.reputation")).toBe(1);
     expect(session.getProperty("value.v_docks.danger")).toBe(2);
-    expect(session.board()["docks-street"]!.map((c) => c.gameId)).toEqual(["mysterious-stranger"]);
+    expect(session.board()["docks-street"]!.map((c) => c.gameId)).toEqual(["rat-job"]);
   });
 });
 
@@ -430,7 +432,7 @@ describe("publish-gate validation", () => {
   // nothing; the ladder's own tests set the rung they are testing.
   const minimal = (deckCards: unknown[], overrides: {
     templates?: unknown[]; hands?: unknown[]; story?: unknown[]; groups?: unknown[]; world?: unknown[];
-    turn?: unknown; play?: string; deck?: Record<string, unknown>;
+    turn?: unknown; cardDefaults?: unknown; play?: string; deck?: Record<string, unknown>;
     fields?: unknown[]; outcomeFields?: unknown[]; metadata?: "full" | "stripped";
   } = {}): SourceFile[] => [
     shard("p.storyletproj", {
@@ -447,6 +449,7 @@ describe("publish-gate validation", () => {
       box: {
         id: "b_1", gameId: "b1", ranking: { specificity: true },
         ...(overrides.turn !== undefined ? { turn: overrides.turn } : {}),
+        ...(overrides.cardDefaults !== undefined ? { cardDefaults: overrides.cardDefaults } : {}),
         fields: overrides.fields ?? [],
         ...(overrides.outcomeFields !== undefined ? { outcomeFields: overrides.outcomeFields } : {}),
         properties: [],
@@ -550,6 +553,40 @@ describe("publish-gate validation", () => {
       expect(() => paying.play("c1", "go", "h1"))
         .toThrow("@patter.gold cannot be written: no engine on this registry registered @patter");
     });
+  });
+
+  // The three-way box clock (the hands-on review, 2026-10): `turn` with no
+  // seconds is the game's own beat, and compiles to a turn with none.
+  it("carries a box whose clock the game moves as a turn with no seconds", () => {
+    const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", redraw: 3, outcomes: [] }], { turn: {} }));
+    expect(errors(result.issues)).toEqual([]);
+    expect(result.bundle!.boxes[0]!.turn).toEqual({});
+  });
+
+  // The Card template's dealing defaults, live: a card that sets none takes
+  // the box's; a card's own value stays its own; an engine default is not
+  // written, so a bundle that uses none of this is byte for byte what it was.
+  it("resolves a card's dealing rules from its own, then the Card template's, then the engine's", () => {
+    const result = compileFiles(minimal([
+      { id: "c_1", gameId: "c1", outcomes: [] },
+      { id: "c_2", gameId: "c2", redraw: 4, weight: 1, inOneHand: 2, outcomes: [] },
+    ], { cardDefaults: { redraw: "never", weight: 3, acrossHands: "any" } }));
+    expect(errors(result.issues)).toEqual([]);
+    const [one, two] = result.bundle!.boxes[0]!.decks[0]!.cards;
+    expect(one).toMatchObject({ redraw: "never", weight: 3, acrossHands: "any" });
+    expect("inOneHand" in one!).toBe(false);
+    expect(two).toMatchObject({ redraw: 4, inOneHand: 2, acrossHands: "any" });
+    expect("weight" in two!).toBe(false);
+  });
+
+  it("refuses a dealing rule that isn't one", () => {
+    const result = compileFiles(minimal([
+      { id: "c_1", gameId: "c1", weight: 0, inOneHand: 1.5, acrossHands: "two", outcomes: [] },
+    ] as never));
+    const said = errors(result.issues).join("|");
+    expect(said).toContain("weight must be a number above 0");
+    expect(said).toContain("inOneHand must be an integer >= 1");
+    expect(said).toContain('acrossHands is "one" or "any"');
   });
 
   it("an untimed box carries no turn at all", () => {

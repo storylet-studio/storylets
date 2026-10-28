@@ -24,7 +24,7 @@ import { planProjectMapGroup } from "./map.js";
 /** A box kit: the scaffold a new box copies. Blank is always present; the
  *  narrated starters each teach a chapter of the model (A10): RPG teaches
  *  boxes, tags and a drawn map, dialogue teaches hands, exclusivity and
- *  copies. (A `barks` kit taught the look/use rule and redraw until
+ *  Across hands. (A `barks` kit taught the look/use rule and redraw until
  *  2026-08-29, when it was withdrawn: barks are Patter's domain and a kit
  *  here encouraged the wrong tool. No kit teaches the card template now.) */
 /** Every kit, in picker order. The ONE list: `BoxKit` is derived from it, the
@@ -143,7 +143,7 @@ const sampleCard = (title: string, purpose: string, tags?: Record<string, string
 });
 
 /** The dialogue-topics kit: per-NPC hands - the chapter where exclusivity
- *  and copies get taught (A10: the fan in the NPC's pocket). */
+ *  and Across hands get taught (A10: the fan in the NPC's pocket). */
 function dialogueKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckShard {
   boxShard.box.purpose = "Dialogue: what can this NPC talk about right now?";
   const gareth = newId("v"), mira = newId("v");
@@ -172,8 +172,8 @@ function dialogueKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): De
         { [npc.id]: [gareth, mira] }),
       sampleCard("Gareth's aching shoulder", "A personal topic: only Gareth's hand can pull it.", { [npc.id]: [gareth] }),
       sampleCard("A complaint about the roads",
-        "The deliberate opt-out: TWO copies, so both of them can be holding it at once. Compare \u201cA rumour about the well\u201d, which has one copy and so belongs to whoever claims it first. Use copies for interchangeable filler, where hearing it twice costs nothing.",
-        { [npc.id]: [gareth, mira] }, { copies: 2 }),
+        "The deliberate opt-out: Across hands is any hand, so both of them can be holding it at once. Compare \u201cA rumour about the well\u201d, which is in one hand at a time and so belongs to whoever claims it first. Use any hand for interchangeable filler, where hearing it twice costs nothing.",
+        { [npc.id]: [gareth, mira] }, { acrossHands: "any" }),
     ],
   };
 }
@@ -424,8 +424,8 @@ function newsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSh
     deck: { id: newId("k"), title: "Headlines", purpose: "Every story the screens can run. Never played.", properties: [] },
     cards: [
       {
-        id: newId("c"), title: "Acid drizzle advisory", priority: 0, redraw: "never", copies: 2, outcomes: [], tags: both,
-        purpose: "Background chatter: no condition, lowest priority, two copies so both screens can run it at once.",
+        id: newId("c"), title: "Acid drizzle advisory", priority: 0, redraw: "never", acrossHands: "any", outcomes: [], tags: both,
+        purpose: "Background chatter: no condition, lowest priority, on any hand so both screens can run it at once.",
       },
       {
         id: newId("c"), title: "Rolling blackouts hit the old town", priority: 3, redraw: "never", outcomes: [],

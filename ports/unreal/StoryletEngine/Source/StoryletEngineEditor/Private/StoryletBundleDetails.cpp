@@ -203,12 +203,13 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 		D.Totals.Templates, D.Totals.TagGroups));
 	for (const FStoryletBoxSummary& Box : D.Boxes)
 	{
-		// A timed box says its unit here, because this is the line an
-		// integrator reads to find out what their host has to tick. Nothing is
-		// added for an ordinary box, whose turn is a play.
+		// A box whose clock the game moves says so here, and a timed one its
+		// unit, because this is the line an integrator reads to find out what
+		// their host has to tick. Nothing is added for an ordinary box, whose
+		// clock a play moves.
 		const FString Timed = Box.TurnSeconds > 0
 			? FString::Printf(TEXT(", turn = %ss"), *SecondsLabel(Box.TurnSeconds))
-			: FString();
+			: Box.bGameClock ? FString(TEXT(", turn = the game's clock")) : FString();
 		// Durable cards (design/engine-server.md 4.2), only when there are any:
 		// what a server has to lift over a run boundary.
 		const FString Durable = Box.DurableCards > 0

@@ -12,7 +12,7 @@ import type { BoxDto, CardDto, DeckDto } from "../../shared/api.js";
 
 const oneShot: CardDto = {
   id: "c_1", gameId: "the-well", title: "The well", condition: "", priority: "0", redraw: "never",
-  tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [], fields: [] }],
+  tags: [], sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [], fields: [] }],
 };
 const deck: DeckDto = { id: "k_1", gameId: "main", properties: [], cards: [oneShot] };
 const box: BoxDto = {

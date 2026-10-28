@@ -109,3 +109,22 @@ describe("renamePropertyEverywhere", () => {
     expect(text(session)).toMatch(/@story\.reputation\b/);
   });
 });
+
+// A card on its Card template's Redraw goes on following it when its other
+// dealing rules are saved: the editor sends Redraw "" for it, and "" writes
+// no Redraw (the hands-on review, 2026-10: Card template defaults are live).
+describe("a card following its Card template's Redraw", () => {
+  it("is saved with no Redraw of its own, and the template still decides it", async () => {
+    const session = scratch();
+    const box = session.dto.boxes[0]!;
+    const { saveBox, saveCard } = await import("./mutate.js");
+    await saveBox(session, box.id, { cardDefaults: { redraw: "never", weight: "", inOneHand: "", acrossHands: "any" } });
+    const card = deck(session, "k_docks").cards[0]!;
+    await saveCard(session, "k_docks", card.id, { redraw: "", acrossHands: "one" });
+    const saved = session.loaded.source!.boxes[0]!.decks.find((d) => d.shard.deck.id === "k_docks")!.shard.cards.find((c) => c.id === card.id)!;
+    expect("redraw" in saved).toBe(false);
+    expect(saved.acrossHands).toBe("one");
+    const shown = deck(session, "k_docks").cards.find((c) => c.id === card.id)!;
+    expect(shown).toMatchObject({ redraw: "never", redrawInherited: true });
+  });
+});

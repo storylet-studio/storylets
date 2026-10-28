@@ -12,7 +12,7 @@ import type { BoxDto, CardDto, DeckDto } from "../../shared/api.js";
 
 const card = (tags: CardDto["tags"]): CardDto => ({
   id: "c_1", gameId: "rumour", title: "A rumour", condition: "", priority: "", redraw: "",
-  tags, copies: "", sharedCopies: "", fields: [], outcomes: [],
+  tags, sharedCopies: "", fields: [], outcomes: [],
 });
 const box = (c: CardDto): BoxDto => {
   const deck: DeckDto = { id: "k_1", gameId: "topics", title: "Topics", properties: [], cards: [c] };

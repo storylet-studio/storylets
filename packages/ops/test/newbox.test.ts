@@ -117,12 +117,12 @@ describe("the starter kits", () => {
     expect(writes.length, "no narrated kit has an outcome that changes anything").toBeGreaterThan(0);
   });
 
-  it("teaches copies where the picker says it does", () => {
-    // The dialogue kit's blurb promises exclusivity AND copies. Exclusivity was
-    // taught well (a shared rumour with one copy); `copies` as the deliberate
-    // opt-out was promised and absent.
+  it("teaches Across hands where the picker says it does", () => {
+    // The dialogue kit's blurb promises exclusivity AND the opt-out from it.
+    // Exclusivity was taught well (a shared rumour in one hand); the opt-out,
+    // a card any hand may hold at once, was promised and once absent.
     const cards = kitBox("dialogue").decks.flatMap((d) => d.shard.cards);
-    expect(cards.some((c) => (c.copies ?? 1) > 1)).toBe(true);
+    expect(cards.some((c) => c.acrossHands === "any")).toBe(true);
   });
 
   it("names every hole it leaves for the author to fill", () => {

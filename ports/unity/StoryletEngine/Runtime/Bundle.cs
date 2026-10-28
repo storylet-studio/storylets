@@ -318,14 +318,30 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Tags: tag group id -> tag ids. An absent group is a wildcard,
         /// except the reserved home group, whose default inverts (schema 2.4).</summary>
         public OrderedMap<string, List<string>> Tags;
-        /// <summary>How many hands may hold this card at once (schema 3.5):
-        /// integer >= 1, default 1.</summary>
+        /// <summary>How often this card comes up beside cards of equal rank: a
+        /// positive number, default 1 (the hands-on review, 2026-10: weights in
+        /// place of Copies). Priority, then specificity, still decide between
+        /// ranks; within a run of equal cards a card of weight 2 is drawn ahead
+        /// twice as often as one of weight 1. A run whose weights are all equal
+        /// shuffles exactly as it always has.</summary>
+        public double? Weight;
+        /// <summary>How many slots of ONE hand this card may fill: integer >= 1,
+        /// default 1.</summary>
+        public double? InOneHand;
+        /// <summary>Whether several hands of a flow may hold this card at once:
+        /// "one" (the default) or "any" (interchangeable filler). Replaces
+        /// Copies.</summary>
+        public string AcrossHands;
+        /// <summary>Deprecated: read when AcrossHands is absent, for a bundle
+        /// from before it. How many hands may hold this card at once (schema
+        /// 3.5), integer >= 1, default 1.</summary>
         public double? Copies;
         /// <summary>Scarce across flows (design/shared-scarcity.md); absent
         /// takes the deck's flag, set here it overrides the deck.</summary>
         public bool? Shared;
         /// <summary>How many hands ACROSS EVERY FLOW may hold this at once.
-        /// Read only when shared; defaults to Copies.</summary>
+        /// Read only when shared; defaults to the per-flow limit (one hand, or
+        /// Copies).</summary>
         public double? SharedCopies;
         /// <summary>Does this card's redraw:never spend survive the run
         /// (design/engine-server.md 4.2)? Absent takes the deck's flag, set here
@@ -475,10 +491,13 @@ namespace StoryletStudio.StoryletEngine
         public bool Specificity = true;
     }
 
-    /// <summary>How long one turn of a timed box lasts (design/engine-server.md 4.8).</summary>
+    /// <summary>A box whose clock the GAME moves, so a play advances nothing.
+    /// With Seconds it is a TIMED box, one turn every Seconds of the run
+    /// (design/engine-server.md 4.8); without, a calendar or any clock the game
+    /// ticks on its own beat (the hands-on review, 2026-10).</summary>
     public sealed class TurnUnit
     {
-        public double Seconds;
+        public double? Seconds;
     }
 
     public sealed class Box : IIdentified
@@ -488,11 +507,13 @@ namespace StoryletStudio.StoryletEngine
         public string Title { get; set; }
         public string Purpose;
         public RankingPolicy Ranking = new RankingPolicy();
-        /// <summary>Non-null on a TIMED box: its clock counts real time, one turn
-        /// every Seconds of the run (design/engine-server.md 4.8). A play in such
-        /// a box advances nothing by default; the host ticks it with AdvanceTurns,
-        /// and a card's redraw of N reads as N x Seconds. Null is the ordinary
-        /// box, whose turn is a play. The number is inert to the runtime.</summary>
+        /// <summary>Non-null on a box whose clock the GAME moves: a play in it
+        /// advances nothing by default, and the host ticks it with AdvanceTurns.
+        /// With Seconds it is a TIMED box, counting real time, one turn every
+        /// Seconds of the run (design/engine-server.md 4.8), and a card's redraw
+        /// of N reads as N x Seconds; without, a calendar or any clock the game
+        /// ticks on its own beat. Null is the ordinary box, whose turn is a
+        /// play. The number is inert to the runtime.</summary>
         public TurnUnit Turn;
         /// <summary>The card template: what every card in this box carries.</summary>
         public List<FieldDecl> Fields = new List<FieldDecl>();

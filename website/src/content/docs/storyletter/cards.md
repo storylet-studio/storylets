@@ -89,8 +89,8 @@ The identity heading holds the title, the gameId chip, and the purpose. Below it
 tabs.
 
 <figure class="doc-shot">
-  <img src="/doc-images/Card.png" alt="A card document in Storyletter: The Moneylender's Men from the Hamlet example, on its Dealing tab. It opens with the sentence Comes up anywhere in village when deck.debt is troubled, the zone as a chip, with In Gareth's Debt, Village beneath and a Change button; then the When section with the condition as pills, then Priority 5, Redraw set to never, and Copies." />
-  <figcaption>A card's Dealing tab in a box on the map: where and when the card comes up, in one sentence, above the condition (labelled <strong>When</strong>), Priority, Redraw and Copies.</figcaption>
+  <img src="/doc-images/Card.png" alt="A card document in Storyletter: The Moneylender's Men from the Hamlet example, on its Dealing tab. It opens with the sentence Comes up anywhere in village when deck.debt is troubled, the zone as a chip, with In Gareth's Debt, Village beneath and a Change button; then the When section with the condition as pills, then Priority 5 and Redraw set to never." />
+  <figcaption>A card's Dealing tab in a box on the map: where and when the card comes up, in one sentence, above the condition (labelled <strong>When</strong>), Priority and Redraw.</figcaption>
 </figure>
 
 ### Dealing
@@ -123,9 +123,16 @@ where** and **Anywhere is right**.
   outright.
 - **Redraw** is whether a played card can be dealt again. It's a three-way switch,
   `always` / `never` / `turns`, with a number field that wakes up when you pick turns. The
-  number is counted in this box's own turns.
-- **Copies** is how many hands may hold this card at once. One copy is the rule; more is
-  for interchangeable filler.
+  number is counted in this box's own turns. Until you set one, a card follows its box's
+  Card template, and the hint says so.
+- **Weight** is how often the card comes up beside cards of equal rank: 2 is twice as often
+  as 1. Priority still comes first.
+- **In one hand** is how many slots of one hand the card can fill at once: 1 for an
+  encounter, 3 for a pickup that can come up three times.
+- **Across hands** is whether several hands can offer the card at once. **One hand at a
+  time** keeps a one-off in one place; **any hand** suits filler; **template** follows the
+  box's Card template. Blank Weight and In one hand follow the template too, which the
+  greyed number shows.
 - **Shared across playthroughs** is whether this card is scarce in the WORLD rather than
   one each per playthrough, which is the difference between "everyone can find the goblin"
   and "only the first player to find it gets it". There are three settings, not two.
@@ -134,8 +141,8 @@ where** and **Anywhere is right**.
   deck. **shared** and **not shared** override it for this card alone.
 - The In the world field is how many copies exist across every playthrough, when the card is
   effectively shared. It's offered only then, because on an unshared card it does
-  nothing. It defaults to **Copies**, so the common "one in the world, one to a customer"
-  needs nothing set.
+  nothing. Blank is one, so the common "one in the world, one to a customer" needs nothing
+  set.
 - **Durable** appears on a project whose Play setting reads Venue, on a card whose Redraw is
   **never**, beside Shared and in the same three settings. The value survives the run boundary the server it came from draws.
 - **Where**, in a box where nothing decides where a card comes up, is a row at the foot of

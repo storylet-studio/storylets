@@ -22,9 +22,11 @@ A box has six tabs, plus **Map** when the box uses the [project map](/storylette
   [Group by](/storyletter/cards/#group-by).
 - **Dealing** is how the box deals. **Rank by specificity** decides whether a card that
   asks for more beats a card that asks for less. It's on by default, and while it's on, a
-  card's priority is the tie-break. **Turns** says what a turn is in this box: **a play**,
-  or **every N seconds of play** for a box the game's clock advances, in which case Redraw
-  numbers on its cards are read as time. Once the project is
+  card's priority is the tie-break. **Turns** says what moves this box's clock: **each
+  play**, as everywhere else; **the game**, for a calendar your game ticks a day at a time;
+  or **every N seconds** for a box the game's clock advances by real time, in which case
+  Redraw numbers on its cards are read as time. With either of the last two, plays advance
+  nothing. Once the project is
   [paired with Patter](/storyletter/patter/#boxes-patter-performs), **Performed by Patter**
   is here too.
 - **Card template** declares what every card in this box carries. A card's fields are its
@@ -39,7 +41,10 @@ A box has six tabs, plus **Map** when the box uses the [project map](/storylette
   is usually lead-owned.
   The same tab declares the box's **Outcome fields** below its card fields, which is what
   an outcome in this box may carry, shaped exactly the same way and filled in each
-  outcome's own editor. The tab's count is both lists together.
+  outcome's own editor. The tab's count is both lists together. Under them, **Dealing** is
+  what a card in this box deals with until it sets its own: Redraw, Weight, In one hand and
+  Across hands. A new card starts on these, and a card that hasn't set its own goes on
+  following them, so changing one here changes every such card.
 - **Hand templates** lists the kinds of hand the box declares, each row showing its
   bindings, its slot count and how many hands use it. Click one to open it.
 - **Tags** lists the tag groups, each row showing its name and its tags as colour chips.

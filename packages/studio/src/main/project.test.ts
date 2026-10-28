@@ -35,7 +35,7 @@ describe("project session", () => {
   it("resolves tag ids to tag names for the chips", () => {
     const ambush = dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "ambush-at-the-ford")!;
     expect(ambush.tags).toEqual([{ group: "area", values: ["docks"] }]);
-    expect(ambush.copies).toBe("");   // the default of 1 shows blank
+    expect(ambush.weight).toBe("");   // following the Card template shows blank
   });
 
   it("projects outcomes with gates and readable change lines", () => {

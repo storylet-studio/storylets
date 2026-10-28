@@ -8,8 +8,27 @@
   `PlayError` (`Flow`, `Kind`, `Node` such as `card lantern`, `Source`, `Message`), whether or not anything is
   tracing. Left unset, each goes to `Engine.DefaultOnError`, a warning that the Unity layer points at
   `Debug.LogWarning`. Patterplay's `OnError`, the same shape.
+- **`Flow.Discard(card, hand)`.** Takes a card out of a hand without playing it, when the player turns it down or
+  the game wants the room: no outcome, no move of the clock, nothing in the play log. Its Redraw starts as a play's
+  would, so the next deal doesn't hand it straight back. A `DiscardEvent` trace event says so, and the state
+  window's log files it with the plays (`discard <card> from <hand>`).
+- **Weights, In one hand, and Across hands, in place of copies.** A card's `Weight` (default 1) orders a run of
+  cards of equal rank: weight 2 comes up ahead twice as often as weight 1, and a run whose weights are all equal
+  shuffles exactly as before. `InOneHand` lets a card fill up to that many slots of one hand. `AcrossHands` "any"
+  lets any number of hands hold it at once; the default "one" keeps a one-off in one place. A bundle that still
+  says `copies` deals as it did.
+- **A box whose clock the game moves.** A box with `turn` and no `seconds` advances nothing on a play, as a timed
+  box doesn't: a calendar, ticked by the game. `TurnUnit.Seconds` is now nullable, and the bundle description's
+  `BoxSummary.GameClock` says which boxes the game must tick.
 
 ### Changed
+
+- **A deal makes the hand right.** A deal ranks everything eligible, including what the hand holds, and the hand
+  becomes the top of that ranking, full or not. A better card that has become eligible takes the place of a worse
+  one, which goes back to the stock (an `EvictEvent`, reason `outranked`); a held card wins a tie, so an equal card
+  never swaps in. A hand used to keep every card it held while it stayed eligible, so a newly eligible better card
+  waited for a free slot. `Play` takes one copy out of the hand, for a card it holds more than once. The
+  conformance corpus (version 21) checks it in every runtime.
 
 - **Saves name cards by Game ID.** A save (now `storylets/save@3`, `Model.SAVE_SCHEMA`) keys a flow's board,
   cooldowns and box clocks, and the spent shared cards, by Game ID, as its play log always did. A card deleted and

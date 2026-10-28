@@ -356,14 +356,27 @@ namespace storylets
          *  except the reserved home group, whose default inverts (schema 2.4).
          *  An empty map means the card carries no tags at all. */
         OrderedMap<std::string, std::vector<std::string>> tags;
-        /** How many hands may hold this card at once (schema 3.5): integer
-         *  >= 1, default 1. */
+        /** How often this card comes up beside cards of equal rank: a positive
+         *  number, default 1 (the hands-on review, 2026-10: weights in place of
+         *  Copies). Priority, then specificity, still decide between ranks. */
+        std::optional<double> weight;
+        /** How many slots of ONE hand this card may fill: integer >= 1,
+         *  default 1. */
+        std::optional<double> inOneHand;
+        /** Whether several hands of a flow may hold this card at once: "one"
+         *  (the default) or "any". Empty when the bundle does not say, and
+         *  then `copies` is read. */
+        std::string acrossHands;
+        /** Deprecated: read when `acrossHands` is absent, for a bundle from
+         *  before it. How many hands may hold this card at once (schema 3.5):
+         *  integer >= 1, default 1. */
         std::optional<double> copies;
         /** Scarce across flows (design/shared-scarcity.md); absent takes the
          *  deck's flag, set here it overrides the deck. */
         std::optional<bool> shared;
         /** How many hands ACROSS EVERY FLOW may hold this at once. Read only
-         *  when shared; defaults to copies. */
+         *  when shared; defaults to the per-flow limit (one hand, any, or
+         *  `copies`). */
         std::optional<double> sharedCopies;
         /** Does this card's `redraw: never` spend survive the run (4.2)? Absent
          *  takes the deck's flag. Read only by the durable halves (ruling H):
@@ -492,11 +505,16 @@ namespace storylets
         std::string title;
         std::string purpose;
         RankingPolicy ranking;
-        /** Set on a TIMED box (design/engine-server.md 4.8): its clock counts
-         *  real time, one turn every `seconds` of the run. A play in such a box
-         *  advances nothing by default; the host ticks it with advanceTurns, and
-         *  a card's `redraw: N` reads as N x seconds. Empty is the ordinary box,
-         *  whose turn is a play. The number is inert to the runtime. */
+        /** The box has a `turn`: the GAME moves its clock, so a play in it
+         *  advances nothing by default and the host ticks it with
+         *  advanceTurns. False is the ordinary box, whose clock a play moves
+         *  (the hands-on review, 2026-10: the three-way box clock). */
+        bool gameClock = false;
+        /** Set on a TIMED box (design/engine-server.md 4.8), a game clock that
+         *  counts real time, one turn every `seconds` of the run, and a card's
+         *  `redraw: N` reads as N x seconds. Empty on the ordinary box and on
+         *  a game clock with no seconds (a calendar, the game's own beat). The
+         *  number is inert to the runtime. */
         std::optional<double> turnSeconds;
         /** The card template: what every card in this box carries. */
         std::vector<FieldDecl> fields;
@@ -1356,6 +1374,11 @@ namespace storylets
             }
             const JsonValue* copies = o.find("copies");
             if (copies && copies->isNumber()) card.copies = copies->num;
+            const JsonValue* weight = o.find("weight");
+            if (weight && weight->isNumber()) card.weight = weight->num;
+            const JsonValue* inOneHand = o.find("inOneHand");
+            if (inOneHand && inOneHand->isNumber()) card.inOneHand = inOneHand->num;
+            card.acrossHands = o.strOr("acrossHands");
             const JsonValue* cardShared = o.find("shared");
             if (cardShared && cardShared->isBool()) card.shared = cardShared->b;
             const JsonValue* sharedCopies = o.find("sharedCopies");
@@ -1549,7 +1572,12 @@ namespace storylets
             const JsonValue* ranking = o.find("ranking");
             if (ranking && ranking->isObject()) box.ranking.specificity = ranking->boolOr("specificity");
             const JsonValue* turn = o.find("turn");
-            if (turn && turn->isObject()) box.turnSeconds = turn->numOr("seconds", 0);
+            if (turn && turn->isObject())
+            {
+                box.gameClock = true;
+                const JsonValue* seconds = turn->find("seconds");
+                if (seconds && seconds->isNumber()) box.turnSeconds = seconds->num;
+            }
             box.usesMap = o.boolOr("usesMap");
             const JsonValue* fields = o.find("fields");
             if (fields && fields->isArray())

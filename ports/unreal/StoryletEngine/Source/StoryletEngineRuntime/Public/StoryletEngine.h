@@ -12,10 +12,13 @@
 // return crosses the Blueprint boundary here. A discriminated value struct
 // on a BP pin forces every graph through a kind switch and makes silently
 // mis-defaulted payloads easy (set a Number, forget the Kind, write false),
-// so the wrapper keeps one honest pin per type instead - the same decision
-// as Patterplay's UPatterEngine accessors. It appears on BOTH objects because
-// the core reads differ: the engine sees @world and the shared half only and
-// refuses a per-flow path, while a flow sees its whole merged view.
+// so the wrapper keeps one honest pin per type instead. Patterplay's
+// UPatterEngine decided otherwise: it has a generic GetProperty with an
+// FPatterValue out-pin as well as typed ones, and the two families' surfaces
+// are to be aligned for 1.0 (the hands-on review, 2026-10, ruling 3). It
+// appears on BOTH objects because the core reads differ: the engine sees
+// @world and the shared half only and refuses a per-flow path, while a flow
+// sees its whole merged view.
 #pragma once
 
 #include <memory>
@@ -127,7 +130,8 @@ public:
 	 *  target, or an unknown card/hand - nothing mutates on failure.
 	 *  An EMPTY OutcomeGameId plays a card with no outcomes: everything a
 	 *  play does except the writes (logged, turn advanced, redraw applied,
-	 *  the card leaves its hand). Refused on a card that has outcomes. */
+	 *  the card leaves its hand). Refused on a card that has outcomes. One
+	 *  copy leaves, for a card the hand holds more than once. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	bool Play(const FString& CardRef, const FString& OutcomeGameId, const FString& FromHand, FString& OutError);
 
@@ -137,6 +141,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	bool PlayAdvancing(const FString& CardRef, const FString& OutcomeGameId, const FString& FromHand,
 		double AdvanceTurns, FString& OutError);
+
+	/** Take a card out of FromHand without playing it: the player turned it
+	 *  down, or the game wants the room. No outcome, no play in the log, no
+	 *  move of the clock; it starts its Redraw from the current turn, as a
+	 *  play would, so a re-ranking deal doesn't hand it straight back. One
+	 *  copy leaves, for a card the hand holds more than once. False (with
+	 *  OutError) on an unknown card or hand, or a card not in that hand;
+	 *  nothing mutates on failure. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	bool Discard(const FString& CardRef, const FString& FromHand, FString& OutError);
 
 	/** Advance one box's clock on THIS flow (a turn is one draw-from-stock
 	 *  session for that box; there is deliberately no global turn). */

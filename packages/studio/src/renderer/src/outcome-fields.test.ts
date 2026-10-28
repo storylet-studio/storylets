@@ -15,7 +15,7 @@ import type { BoxDto, CardDto, DeckDto, FieldDeclDto } from "../../shared/api.js
 const outcome = { id: "o_1", gameId: "take-it", title: "Take it", changes: [], fields: [] };
 const card: CardDto = {
   id: "c_1", gameId: "rat-job", title: "A rat job", priority: "0", redraw: "always",
-  tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [outcome],
+  tags: [], sharedCopies: "", fields: [], outcomes: [outcome],
 };
 const deck: DeckDto = { id: "k_1", gameId: "main", properties: [], cards: [card] };
 const plainBox: BoxDto = {
@@ -48,7 +48,7 @@ describe("the box's Card template tab", () => {
     const centre = document.createElement("div");
     renderBoxTabBody(centre, declaring([{ name: "after", type: "string", default: "" }]), "template", host());
     const labels = [...centre.querySelectorAll(".insp-label")].map((s) => s.textContent);
-    expect(labels).toEqual(["Card fields", "Outcome fields"]);
+    expect(labels).toEqual(["Card fields", "Outcome fields", "Dealing"]);
     expect(centre.textContent).toContain("The fields every outcome in this box can carry.");
   });
 

@@ -79,7 +79,10 @@ diagnostic; never a silent pass, never a crash.
   across flows too, not just the state it reads: one goblin in the world, held
   by whoever was dealt it first, and a shared `redraw: "never"` is spent for
   everyone the moment anyone plays it. `sharedCopies` is the world cap and
-  defaults to `copies`.
+  defaults to the card's Across hands limit (one hand, or any).
+- **Discard**: `flow.discard(card_id, hand_id)` takes a card out of a hand
+  unplayed. Its Redraw starts from the current turn, so the next deal doesn't
+  hand it straight back; it returns `""` or the refusal, as `play` does.
 - **Save / load**: `engine.save_game()` / `engine.load_game(envelope)`
   snapshot and restore the whole run, every open flow included. The envelope
   is `storylets/save@3`, naming cards, hands and boxes by Game ID;

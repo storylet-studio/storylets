@@ -385,7 +385,13 @@ func _on_log_kind(on: bool, kind: String) -> void:
 ## Which filter bucket an entry files under; a peek files under "deal" (both
 ## are asks).
 static func _log_kind_of(e: Dictionary) -> String:
-	return "deal" if e["type"] == "peek" else str(e["type"])
+	# A discard (a card the game took out of its hand unplayed) is filed with
+	# the plays.
+	if e["type"] == "peek":
+		return "deal"
+	if e["type"] == "discard":
+		return "play"
+	return str(e["type"])
 
 
 static func _show_log_value(v) -> String:
@@ -422,6 +428,8 @@ static func _format_log_entry(e: Dictionary) -> String:
 			if str(e.get("outcome", "")) == "":
 				return "%splay %s" % [stamp, e["card"]]
 			return "%splay %s -> %s" % [stamp, e["card"], e["outcome"]]
+		"discard":
+			return "%sdiscard %s from %s" % [stamp, e["card"], e["hand"]]
 		"write":
 			return "%swrite %s: %s -> %s" % [stamp, e["path"], _show_log_value(e.get("prev")), _show_log_value(e["value"])]
 		"turns":

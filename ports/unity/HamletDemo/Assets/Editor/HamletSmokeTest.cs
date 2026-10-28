@@ -1,4 +1,4 @@
-// Headless: the loop, the survivor rule, a mid-scene save/load, and the
+// Headless: the loop, a deal re-ranking a hand, a mid-scene save/load, and the
 // cross-host envelope the JS client wrote. Drives HamletGame directly, so no
 // scene is needed; the scene is for people.
 //
@@ -39,9 +39,9 @@ namespace StoryletStudio.Hamlet.Editor
             Check(g2.Playing != null && g2.Playing.Done, "the branch's closing words wait on Continue"); g2.Finish();
             Check(Equals(g2.World.Values["knows_road"], true), "Patter wrote @world.knows_road", g2.World.Values["knows_road"]?.ToString());
             g2.Go("the-mystic-tree");
-            Check(string.Join(",", g2.Hand().Select(c => c.GameId)) == "wind-in-the-leaves", "tree shows the ambient only (survivor rule)");
-            g2.Start(g2.Hand()[0]); g2.Finish();   // no choice at all: it ends, and Continue plays it
-            Check(g2.Hand().Any(c => c.GameId == "the-road-north"), "The Road North lands once the seat frees", string.Join(",", g2.Hand().Select(c => c.GameId)));
+            // A deal makes the hand right (the hands-on review, 2026-10, ruling 1): the road
+            // card, ranked above the ambient, takes the tree's one slot as soon as it's eligible.
+            Check(g2.Hand().Any(c => c.GameId == "the-road-north"), "The Road North lands at once, outranking the ambient", string.Join(",", g2.Hand().Select(c => c.GameId)));
             // Cross-host: the JS client's envelopes, when this is the maintainers' checkout.
             var fixtures = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../godot/HamletDemo/test/fixtures"));
             var between = Path.Combine(fixtures, "envelope-from-js.json");

@@ -10,6 +10,17 @@ section for it.
 
 ### Added
 
+- **`discard(card, hand)`.** Takes a card out of a hand without playing it, when the player turns it down or the
+  game wants the room: no outcome, no move of the clock, nothing in the play log. Its Redraw starts as a play's
+  would, so the next deal doesn't hand it straight back. A `discard` trace event says so.
+- **Weights, In one hand, and Across hands, in place of copies.** A card's `weight` (default 1) orders a run of
+  cards of equal rank: weight 2 comes up ahead twice as often as weight 1, and a run whose weights are all equal
+  shuffles exactly as before. `inOneHand: N` lets a card fill up to N slots of one hand. `acrossHands: "any"` lets
+  any number of hands hold it at once; the default `"one"` keeps a one-off in one place. A bundle that still says
+  `copies` deals as it did.
+- **A box whose clock the game moves.** A box with `turn` and no `seconds` advances nothing on a play, as a timed
+  box doesn't: a calendar, ticked by the game.
+
 - **`onError`: the game hears about a condition that failed.** A condition the engine can't evaluate (a division by
   zero, a value of the wrong type from a resolver) still counts as false, and now also reaches `EngineOptions.onError`
   as a `PlayError` (`flow`, `kind`, `node`, `source`, `message`), whether or not anything is tracing. With no handler
@@ -20,6 +31,11 @@ section for it.
 
 ### Changed
 
+- **A deal makes the hand right.** A deal ranks everything eligible, including what the hand holds, and the hand
+  becomes the top of that ranking, full or not. A better card that has become eligible takes the place of a worse
+  one, which goes back to the stock (`evict`, reason `outranked`); a held card wins a tie, so an equal card never
+  swaps in. A hand used to keep every card it held while it stayed eligible, so a newly eligible better card waited
+  for a free slot.
 - **A load drops a held card that no longer qualifies.** A save made before a content edit could put back a card
   whose condition the edit made false, and nothing said so. A load now checks every held card as a deal would, with
   the values the save carries, and drops what no longer qualifies, listed in the report's `evicted` with the deal's

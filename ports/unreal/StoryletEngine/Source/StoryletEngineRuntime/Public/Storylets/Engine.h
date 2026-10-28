@@ -24,9 +24,13 @@
 //     never play a card you only peeked (3.1, look/use rule)
 //   - availability order: deck gate -> cooldown -> tags -> hand condition ->
 //     card condition -> claims (3.1)
-//   - claims are physical WITHIN a flow: a card sits in at most `copies` hands
-//     of that flow's board at once, at most once in any one hand; the ledger
-//     is derived from the board contents (3.5)
+//   - claims are physical WITHIN a flow: a card sits in one hand of that
+//     flow's board at once unless its `acrossHands` is "any" (an older
+//     bundle's `copies` when absent), at most `inOneHand` times in any one
+//     hand; the ledger is derived from the board contents (3.5)
+//   - a deal makes the hand right: every dealt hand is re-ranked whole, full
+//     or not, held cards winning ties; a held card a better one displaces is
+//     evicted "outranked" (the hands-on review, 2026-10)
 //   - a SHARED card (its deck's flag, or its own overriding it) is scarce
 //     across flows too: at most `sharedCopies` hands anywhere, counted over
 //     every live flow's board, and a shared `redraw: "never"` is spent for
@@ -36,7 +40,8 @@
 //   - the reserved home group inverts the wildcard: a homed card is available
 //     only to an ask binding its home (2.4)
 //   - ranking: priority desc -> specificity desc (box toggle) -> seeded
-//     shuffle of each maximal tie run (3.2); sorts are STABLE
+//     shuffle of each maximal tie run, or a weighted draw when the run's
+//     weights differ (3.2); sorts are STABLE
 //     (std::stable_sort; never a bare std::sort over candidates)
 //   - one PRNG per flow: expression random(), tie shuffles and the batch
 //     deal's hand-order shuffle all advance it; state lives in the save (3.3)
@@ -331,20 +336,21 @@ namespace storylets
      *  the Live Link, a wire a kiosk reads - mapped one to the other itself. */
     struct TraceEvent
     {
-        enum class Kind { Deal, Peek, Evict, Play, Write, Turns, Diagnostic };
+        enum class Kind { Deal, Peek, Evict, Play, Write, Turns, Diagnostic, Discard };
 
         Kind kind = Kind::Deal;
-        /** Deal / Evict: hand gameId. */
+        /** Deal / Evict / Discard: hand gameId. */
         std::string hand;
         /** Peek / Turns: box gameId. */
         std::string box;
-        /** Evict / Play: card gameId. A card the build no longer has (Evict's
+        /** Evict / Play / Discard: card gameId. A card the build no longer has (Evict's
          *  "vanished") has no gameId left, so it is named by the id the board
          *  carried - the rule a load report has always used. */
         std::string card;
         /** Play: outcome gameId. */
         std::string outcome;
-        /** Evict: a verdict wire name, or "hand-condition" / "vanished". */
+        /** Evict: a verdict wire name, or "hand-condition" / "vanished", or
+         *  "outranked" (a re-ranking deal gave its place to a better card). */
         std::string reason;
         /** Write: the authored target and the resolved store location, in the
          *  address grammar getProperty takes - the owner segment is its gameId
@@ -363,7 +369,8 @@ namespace storylets
         OrderedMap<std::string, std::string> criteria;
         /** Deal / Peek: per-card verdicts. */
         std::vector<TraceCard> cards;
-        /** Play / Turns: the box's (new) turn. */
+        /** Play / Turns: the box's (new) turn. Discard: the box's turn, which
+         *  a discard does not move. */
         double turn = 0;
     };
 
@@ -2544,52 +2551,96 @@ namespace storylets
             {
                 const Hand& hand = *handInBox.hand;
                 const Box& box = *handInBox.box;
-                // Sized through a pointer: a full hand, the common case, copies
-                // nothing. The copy below is taken before runAsk, whose
-                // diagnostics can re-enter the flow, and is the vector the hand
-                // ends up holding.
-                const std::vector<std::string>* held = boardContents_.get(hand.id);
-                double free = handCapacity(hand) - static_cast<double>(held ? held->size() : 0);
-                if (free <= 0) continue;
-                std::vector<std::string> contents = held ? *held : std::vector<std::string>();
+                // A deal makes the hand right (the hands-on review, 2026-10,
+                // ruling 1): it ranks everything eligible, the cards it holds
+                // included, and the hand becomes the top of that ranking, full
+                // or not. A held card wins a tie, so an equal card never
+                // displaces it; one a better card displaces goes back to the
+                // stock, "outranked". The copy is taken before runAsk, whose
+                // diagnostics can re-enter the flow.
+                const std::vector<std::string>* heldPtr = boardContents_.get(hand.id);
+                const std::vector<std::string> held = heldPtr ? *heldPtr : std::vector<std::string>();
+                std::unordered_map<std::string, int> own;
+                for (const auto& id : held) ++own[id];
                 AskDescriptor ask = askForHand(hand, box);
-                std::unordered_set<std::string> own(contents.begin(), contents.end());
                 std::vector<TraceCard> traceStorage;
                 std::vector<TraceCard>* trace = tracing() ? &traceStorage : nullptr;
-                // At most once in any one hand; at most `copies` hands here, and
-                // at most sharedCopies hands anywhere (schema 3.5, shared-scarcity 5).
+                // At most `inOneHand` times in this hand; in one hand of this
+                // flow at a time unless the card says any (or, from an older
+                // bundle, `copies`); at most sharedCopies hands anywhere
+                // (schema 3.5, shared-scarcity 5).
                 auto claimed = [this, &own, &claimCounts, &worldClaims](const Card& card, bool shared)
                     -> std::optional<TraceVerdict>
                 {
-                    if (own.count(card.id) > 0) return TraceVerdict::Claimed;
-                    return claimVerdict(card, shared, claimCounts, worldClaims);
+                    auto it = own.find(card.id);
+                    return claimVerdict(card, shared, claimCounts, worldClaims, it == own.end() ? 0 : it->second);
                 };
-                RunAskResult run = runAsk(ask, claimed, trace);
-                size_t take = std::isinf(free)
-                    ? run.ordered.size()
-                    : std::min(static_cast<size_t>(free), run.ordered.size());
-                // `added` is what the BOARD holds (internal ids); `taking` is
-                // the same cards as the trace names them (gameIds). The two must
+                RunAskResult run = runAsk(ask, claimed, trace, &own);
+                // The top of the ranking, each card as many times as one hand
+                // may hold it.
+                std::unordered_map<std::string, double> want;
+                double room = handCapacity(hand);
+                for (const auto& e : run.ordered)
+                {
+                    if (room <= 0) break;
+                    const double n = std::min(inOneHandOf(*e.card), room);
+                    want[e.card->id] = n;
+                    room -= n;
+                }
+                // Held cards keep their places; newcomers follow, in rank order.
+                std::vector<std::string> next;
+                std::vector<std::string> outranked;
+                for (const auto& id : held)
+                {
+                    auto it = want.find(id);
+                    if (it != want.end() && it->second > 0)
+                    {
+                        next.push_back(id);
+                        it->second -= 1;
+                    }
+                    else
+                    {
+                        outranked.push_back(id);
+                    }
+                }
+                for (const auto& e : run.ordered)
+                {
+                    auto it = want.find(e.card->id);
+                    if (it == want.end()) continue;
+                    for (double n = it->second; n > 0; n -= 1) next.push_back(e.card->id);
+                    want.erase(it);
+                }
+                for (const auto& id : held) { --claimCounts[id]; --worldClaims[id]; }
+                for (const auto& id : next) { ++claimCounts[id]; ++worldClaims[id]; }
+                // `next` is what the BOARD holds (internal ids); `taking` is the
+                // same cards as the trace names them (gameIds). The two must
                 // move together or every dealt card silently reads as capped.
                 std::unordered_set<std::string> taking;
-                const size_t kept = contents.size();
-                contents.reserve(kept + take);
-                for (size_t i = 0; i < take; ++i)
-                {
-                    contents.push_back(run.ordered[i].card->id);
-                    if (trace) taking.insert(EffectiveGameId(*run.ordered[i].card));
-                }
-                for (size_t i = kept; i < contents.size(); ++i) { ++claimCounts[contents[i]]; ++worldClaims[contents[i]]; }
-                boardContents_.set(hand.id, std::move(contents));
-                // Emitted after the hand is set: a handler reading board() sees the deal.
                 if (trace)
                 {
+                    for (const auto& id : next) taking.insert(EffectiveGameId(*engine_->cardsById_.at(id).card));
+                }
+                boardContents_.set(hand.id, std::move(next));
+                // Emitted after the hand is set: a handler reading board() sees
+                // the deal, and the outranked cards' evictions come first.
+                if (trace)
+                {
+                    const double boxTurn = turnCounts_.getOr(box.id, 0);
+                    for (const auto& id : outranked)
+                    {
+                        TraceEvent evt;
+                        evt.kind = TraceEvent::Kind::Evict;
+                        evt.hand = EffectiveGameId(hand);
+                        evt.card = EffectiveGameId(*engine_->cardsById_.at(id).card);
+                        evt.reason = "outranked";
+                        emit(std::move(evt), boxTurn);
+                    }
                     capTrace(*trace, taking);
                     TraceEvent evt;
                     evt.kind = TraceEvent::Kind::Deal;
                     evt.hand = EffectiveGameId(hand);
                     evt.cards = std::move(traceStorage);
-                    emit(std::move(evt), turnCounts_.getOr(box.id, 0));
+                    emit(std::move(evt), boxTurn);
                 }
             }
 
@@ -2748,12 +2799,13 @@ namespace storylets
             // The played card's box's clock advances (schema 3.4); computed up
             // front so the play and its writes log as one action, one turn stamp.
             //
-            // A TIMED box (design/engine-server.md 4.8) defaults to advancing
-            // NOTHING: its clock is time, the host ticks it, and a play is not a
-            // tick. A call that names advanceTurns still gets what it asked for,
+            // A box whose clock the GAME moves (a `turn`, with seconds or
+            // without: a TIMED box, design/engine-server.md 4.8, or a calendar)
+            // defaults to advancing NOTHING: the host ticks it, and a play is
+            // not a tick. A call that names advanceTurns still gets what it asked for,
             // in either kind of box, because the call says otherwise. This is the
             // whole of turn's effect on the engine: the seconds are never read.
-            const double perPlay = entry.box->turnSeconds.has_value()
+            const double perPlay = entry.box->gameClock
                 ? 0.0 : engine_->bundle_->settings.playAdvancesTurns;
             double newTurn = turnCounts_.getOr(entry.box->id, 0)
                 + (opts.advanceTurns.has_value() ? *opts.advanceTurns : perPlay);
@@ -2822,16 +2874,9 @@ namespace storylets
             {
                 cooldowns_.set(entry.card->id, newTurn + entry.card->redraw.turns);
             }
-            // The card leaves its hand, releasing its claim (schema 3.5/3.7).
-            const std::string& handId = resolved.ask.hand->id;
-            if (std::vector<std::string>* held = boardContents_.get(handId))
-            {
-                held->erase(std::remove(held->begin(), held->end(), entry.card->id), held->end());
-            }
-            else
-            {
-                boardContents_.set(handId, {});
-            }
+            // The card leaves its hand, releasing its claim (schema 3.5/3.7):
+            // one copy, for a card the hand holds more than once (`inOneHand`).
+            removeOneCopy(resolved.ask.hand->id, entry.card->id);
             turnCounts_.set(entry.box->id, newTurn);
             // Emitted last: a handler reading the board and the clock sees the play.
             if (tracing())
@@ -2842,6 +2887,43 @@ namespace storylets
                 evt.outcome = outcomeId;
                 evt.turn = newTurn;
                 emit(std::move(evt), newTurn);
+            }
+        }
+
+        /** Take a card out of a hand without playing it: the player turned it
+         *  down, or the game wants the room (the hands-on review, 2026-10,
+         *  ruling: discard). No outcome, no play in the log, no move of the
+         *  clock, no play count. It starts its Redraw as a play would, so a
+         *  re-ranking deal doesn't hand it straight back: a finite Redraw waits
+         *  that many turns from now, a "never" card is gone for good (for
+         *  everyone, when it's shared), and an "always" card can come up at the
+         *  next deal. One copy leaves, for a card the hand holds more than
+         *  once. */
+        void discard(const std::string& cardId, const std::string& from)
+        {
+            assertOpen();
+            ResolvedDealt resolved = resolveDealt(cardId, from);
+            const CardEntry& entry = resolved.entry;
+            const double turn = turnCounts_.getOr(entry.box->id, 0);
+            if (entry.card->redraw.kind == RedrawPolicy::Kind::Never)
+            {
+                const bool deckShared = entry.deck->shared.has_value() ? *entry.deck->shared : false;
+                if (cardIsShared(*entry.card, deckShared)) engine_->markTaken(entry.card->id);
+                else cooldowns_.set(entry.card->id, MAX_SAFE_INTEGER);
+            }
+            else if (entry.card->redraw.kind == RedrawPolicy::Kind::After)
+            {
+                cooldowns_.set(entry.card->id, turn + entry.card->redraw.turns);
+            }
+            removeOneCopy(resolved.ask.hand->id, entry.card->id);
+            if (tracing())
+            {
+                TraceEvent evt;
+                evt.kind = TraceEvent::Kind::Discard;
+                evt.hand = EffectiveGameId(*resolved.ask.hand);
+                evt.card = EffectiveGameId(*entry.card);
+                evt.turn = turn;
+                emit(std::move(evt), turn);
             }
         }
 
@@ -3653,9 +3735,33 @@ namespace storylets
             return counts;
         }
 
-        static double copiesOf(const Card& card)
+        /** How many hands of one flow may hold a card at once: one, or any
+         *  number (`acrossHands`), or a bundle from before it, its `copies`. */
+        static double acrossLimit(const Card& card)
         {
+            if (card.acrossHands == "any") return std::numeric_limits<double>::infinity();
+            if (card.acrossHands == "one") return 1;
             return card.copies.has_value() ? *card.copies : 1;
+        }
+
+        /** How many slots of one hand a card may fill (`inOneHand`, default 1). */
+        static double inOneHandOf(const Card& card)
+        {
+            return card.inOneHand.has_value() ? *card.inOneHand : 1;
+        }
+
+        /** One copy of a card leaves a hand: a play or a discard. */
+        void removeOneCopy(const std::string& handId, const std::string& cardId)
+        {
+            if (std::vector<std::string>* held = boardContents_.get(handId))
+            {
+                auto at = std::find(held->begin(), held->end(), cardId);
+                if (at != held->end()) held->erase(at);
+            }
+            else
+            {
+                boardContents_.set(handId, {});
+            }
         }
 
         /** Is this card scarce across flows (design/shared-scarcity.md)? The
@@ -3668,11 +3774,11 @@ namespace storylets
         }
 
         /** How many hands ACROSS EVERY FLOW may hold this at once; defaults to
-         *  copies. */
+         *  the per-flow limit (acrossLimit). */
         static double sharedCap(const Card& card)
         {
             if (card.sharedCopies.has_value()) return *card.sharedCopies;
-            return copiesOf(card);
+            return acrossLimit(card);
         }
 
     public:
@@ -3694,18 +3800,23 @@ namespace storylets
          *  and they are different statements, so they get different verdicts:
          *  copies is your own board filling up, sharedCopies is somebody else
          *  already holding it, and a participant told "claimed" about a card on
-         *  another person's table would read it as a fault. */
+         *  another person's table would read it as a fault.
+         *
+         *  `mine` counts this flow's holdings, `world` every live flow's, and
+         *  `own` what the hand being dealt holds already: those are the hand's
+         *  to keep or give up as it re-ranks, so they claim nothing against it. */
         std::optional<TraceVerdict> claimVerdict(
             const Card& card, bool shared,
             const std::unordered_map<std::string, int>& mine,
-            const std::unordered_map<std::string, int>& world) const
+            const std::unordered_map<std::string, int>& world,
+            int own = 0) const
         {
             auto mineIt = mine.find(card.id);
-            if ((mineIt == mine.end() ? 0 : mineIt->second) >= copiesOf(card)) return TraceVerdict::Claimed;
+            if ((mineIt == mine.end() ? 0 : mineIt->second) - own >= acrossLimit(card)) return TraceVerdict::Claimed;
             if (shared)
             {
                 auto worldIt = world.find(card.id);
-                if ((worldIt == world.end() ? 0 : worldIt->second) >= sharedCap(card)) return TraceVerdict::ClaimedElsewhere;
+                if ((worldIt == world.end() ? 0 : worldIt->second) - own >= sharedCap(card)) return TraceVerdict::ClaimedElsewhere;
             }
             return std::nullopt;
         }
@@ -3738,11 +3849,14 @@ namespace storylets
 
         /** Run one ask: availability filter then ranking. `claimed` decides
          *  the claims step (step 6) per card. `trace` (when a subscriber
-         *  exists) collects the per-card verdicts. */
+         *  exists) collects the per-card verdicts. `held` is what the hand
+         *  being dealt holds (card id -> copies): those cards win ties, so a
+         *  re-ranking deal never swaps one for an equal. */
         RunAskResult runAsk(
             const AskDescriptor& ask,
             const std::function<std::optional<TraceVerdict>(const Card&, bool)>& claimed,
-            std::vector<TraceCard>* trace)
+            std::vector<TraceCard>* trace,
+            const std::unordered_map<std::string, int>* held = nullptr)
         {
             const Box& box = *ask.box;
             RunAskResult result;
@@ -3906,7 +4020,9 @@ namespace storylets
                 if (a.priority != b.priority) return a.priority > b.priority;
                 return a.spec > b.spec;
             });
-            // Seeded shuffle of each maximal tie run; runs of 1 consume no draws.
+            // Each maximal tie run in deal order (orderRun): held cards first,
+            // then the rest shuffled, or drawn by weight when their weights
+            // differ. Runs of 1 consume no draws, nor do held cards.
             size_t i = 0;
             while (i < scored.size())
             {
@@ -3918,7 +4034,7 @@ namespace storylets
                 {
                     std::vector<Scored> run(scored.begin() + static_cast<ptrdiff_t>(i),
                         scored.begin() + static_cast<ptrdiff_t>(j));
-                    ShuffleInPlace(run, prng_);
+                    run = orderRun(std::move(run), held, prng_);
                     for (size_t k = 0; k < run.size(); ++k) scored[i + k] = run[k];
                 }
                 i = j;
@@ -3938,6 +4054,63 @@ namespace storylets
             result.ordered.reserve(scored.size());
             for (const auto& s : scored) result.ordered.push_back(s.entry);
             return result;
+        }
+
+        /** One run of equally ranked cards, in the order a deal takes them (the
+         *  hands-on review, 2026-10, rulings 1 and 4). Cards the hand already
+         *  holds come first, in the order they were scored, so a re-ranking
+         *  deal never swaps one for an equal. The rest are shuffled, as runs
+         *  always were, when their weights are all equal; otherwise drawn by
+         *  weight, one draw per place but the last: each place takes the card
+         *  whose share of the remaining weight the draw falls in, walking the
+         *  remaining cards in scored order (the total summed in that order
+         *  too). Both forms draw (rest - 1) numbers, held cards none, so
+         *  unweighted content deals exactly as it did. */
+        template <typename T>
+        static std::vector<T> orderRun(std::vector<T> run,
+            const std::unordered_map<std::string, int>* held, Mulberry32& prng)
+        {
+            std::vector<T> first;
+            std::vector<T> rest;
+            for (auto& s : run)
+            {
+                if (held && held->count(s.entry.card->id) > 0) first.push_back(std::move(s));
+                else rest.push_back(std::move(s));
+            }
+            auto weight = [](const T& s)
+            {
+                return s.entry.card->weight.has_value() ? *s.entry.card->weight : 1.0;
+            };
+            bool weighted = false;
+            if (rest.size() > 1)
+            {
+                for (const auto& s : rest)
+                {
+                    if (weight(s) != weight(rest[0])) { weighted = true; break; }
+                }
+            }
+            if (weighted)
+            {
+                std::vector<T> left = std::move(rest);
+                rest.clear();
+                while (left.size() > 1)
+                {
+                    double total = 0;
+                    for (const auto& s : left) total += weight(s);
+                    double r = prng.next() * total;
+                    size_t k = 0;
+                    while (k < left.size() - 1 && r >= weight(left[k])) { r -= weight(left[k]); ++k; }
+                    rest.push_back(std::move(left[k]));
+                    left.erase(left.begin() + static_cast<ptrdiff_t>(k));
+                }
+                rest.push_back(std::move(left[0]));
+            }
+            else if (rest.size() > 1)
+            {
+                ShuffleInPlace(rest, prng);
+            }
+            for (auto& s : rest) first.push_back(std::move(s));
+            return first;
         }
 
         /** Flip eligible-but-not-taken trace entries to "capped". `taken` is

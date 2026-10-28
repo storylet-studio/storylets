@@ -749,6 +749,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 case "assertOutcomeExtensions":
                 case "assertBoxExtensions":
                 case "scribble":
+                case "discard":
                 case "assertState":
                     return true;
                 default:
@@ -1315,6 +1316,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 {
                     if (e is DiagnosticEvent dg) { diagnostics.Add(dg.Message); return; }
                     if (e is EvictEvent ev) { traces.Add($"evict {ev.Hand} {ev.Card} {ev.Reason}"); return; }
+                    if (e is DiscardEvent dc) { traces.Add($"discard {dc.Hand} {dc.Card}"); return; }
                     if (e is PlayEvent pl) { traces.Add(pl.Outcome == "" ? $"play {pl.Card}" : $"play {pl.Card} {pl.Outcome}"); return; }
                     if (e is WriteEvent wr) { traces.Add($"write {wr.Target} {wr.Path}"); return; }
                     List<TraceCard> cards = null;
@@ -1597,6 +1599,32 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         {
                             failures.Add($"{at}: unexpected error: {error}");
                         }
+                        break;
+                    }
+
+                    // Corpus 21: the card leaves the hand unplayed, starting its Redraw.
+                    case "discard":
+                    {
+                        var expectError = op.Value<bool?>("expectError") ?? false;
+                        string error = null;
+                        Collect();
+                        try
+                        {
+                            session.Discard(op.Value<string>("card"), op.Value<string>("from"));
+                        }
+                        catch (Exception ex)
+                        {
+                            error = ex.Message;
+                        }
+                        if (expectError && error == null)
+                        {
+                            failures.Add($"{at}: expected the discard to be refused");
+                        }
+                        if (!expectError && error != null)
+                        {
+                            failures.Add($"{at}: unexpected error: {error}");
+                        }
+                        CheckTrace(at, op);
                         break;
                     }
 

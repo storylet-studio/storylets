@@ -678,7 +678,7 @@ static bool needsFlow(const std::string& kind)
         || kind == "play" || kind == "advanceTurns" || kind == "assertOutcomes"
         || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertCardFields" || kind == "assertState"
         || kind == "assertCardExtensions" || kind == "assertOutcomeExtensions" || kind == "assertBoxExtensions"
-        || kind == "scribble";
+        || kind == "scribble" || kind == "discard";
 }
 
 // The `scribble` op (corpus version 17): a careless host defacing, in place,
@@ -807,6 +807,11 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             if (e.kind == TraceEvent::Kind::Write)
             {
                 traces.push_back("write " + e.target + " " + e.path);
+                return;
+            }
+            if (e.kind == TraceEvent::Kind::Discard)
+            {
+                traces.push_back("discard " + e.hand + " " + e.card);
                 return;
             }
             if (e.kind != TraceEvent::Kind::Deal && e.kind != TraceEvent::Kind::Peek) return;
@@ -1102,6 +1107,32 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             {
                 failures.push_back(at + ": unexpected error: " + *error);
             }
+        }
+        else if (kind == "discard")
+        {
+            // Corpus 21: the card leaves the hand unplayed, starting its Redraw.
+            bool expectError = op.boolOr("expectError");
+            std::optional<std::string> error;
+            verdicts.clear();
+            diagnostics.clear();
+            traces.clear();
+            try
+            {
+                session->discard(op.strOr("card"), op.strOr("from"));
+            }
+            catch (const std::exception& ex)
+            {
+                error = ex.what();
+            }
+            if (expectError && !error.has_value())
+            {
+                failures.push_back(at + ": expected the discard to be refused");
+            }
+            if (!expectError && error.has_value())
+            {
+                failures.push_back(at + ": unexpected error: " + *error);
+            }
+            checkTrace(at, op);
         }
         else if (kind == "advanceTurns")
         {

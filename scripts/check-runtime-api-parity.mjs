@@ -316,6 +316,8 @@ const API = [
     why: "not a hole: elsewhere an optional argument on board(); a separate BP method because Blueprint has no optional args and an always-present pin would make the whole-board read look like it needed one (as PlayAdvancing / DealAllHands)" },
   { on: "Flow", member: "outcomes", js: "outcomes", unity: "Outcomes", godot: "outcomes", unreal: "outcomes", bp: "Outcomes" },
   { on: "Flow", member: "play", js: "play", unity: "Play", godot: "play", unreal: "play", bp: "Play" },
+  // Take a card out of a hand unplayed (the hands-on review, 2026-10).
+  { on: "Flow", member: "discard", js: "discard", unity: "Discard", godot: "discard", unreal: "discard", bp: "Discard" },
   { on: "Flow", member: "playAdvancing", js: null, unity: null, godot: null, unreal: null, bp: "PlayAdvancing",
     why: "elsewhere an option (opts.advanceTurns / PlayOptions / {\"advance_turns\"}); a separate BP method because Blueprint has no optional struct args" },
   { on: "Flow", member: "advanceTurns", js: "advanceTurns", unity: "AdvanceTurns", godot: "advance_turns", unreal: "advanceTurns", bp: "AdvanceTurns" },

@@ -91,7 +91,8 @@ On a **flow** (one playthrough):
 | Call | Does |
 |---|---|
 | `peek(box, criteria, n)` | Look at the top of a box through tag criteria, without dealing anything |
-| `deal(hand)` | Refresh one hand; returns its new contents. A refresh evicts cards no longer eligible and fills empty slots; a card that is still eligible stays dealt, so a newly eligible card waits for an empty slot |
+| `deal(hand)` | Deal one hand; returns its new contents. The hand becomes the top of everything eligible, so a newly eligible better card takes the place of a worse one; a held card wins a tie |
+| `discard(card, hand)` | Take a card out of a hand without playing it: no outcome, no clock, no play count. Its Redraw starts |
 | `dealMany(hands?)` | Refresh several or all hands, same rule; returns what was dealt, keyed by hand |
 | `board(box?)` | The current contents of every hand, or of one box's hands |
 | `outcomes(card, hand)` | This card's outcomes with availability, evaluated against current state, and each one's fields |

@@ -192,10 +192,11 @@ namespace StoryletStudio.StoryletEngine.Editor
                 var c = box.Counts;
                 // A timed box says its unit here (design/engine-server.md 4.8),
                 // because this is the line an integrator reads to find out what
-                // their host has to tick. Nothing is added for an ordinary box.
+                // their host has to tick, as is a box whose clock the game
+                // moves on its own beat. Nothing is added for an ordinary box.
                 string timed = box.TurnSeconds.HasValue
                     ? ", turn = " + box.TurnSeconds.Value.ToString("R", CultureInfo.InvariantCulture) + "s"
-                    : "";
+                    : box.GameClock ? ", turn moved by the game" : "";
                 // Durable cards (4.2), only when there are any: what a server
                 // has to lift over a run boundary.
                 string durable = box.DurableCards > 0 ? $", durable cards {box.DurableCards}" : "";

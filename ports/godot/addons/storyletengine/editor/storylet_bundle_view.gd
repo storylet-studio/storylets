@@ -103,10 +103,15 @@ func _render(res: Resource) -> void:
 		var counts: Dictionary = box["counts"]
 		# A timed box says its unit here (design/engine-server.md 4.8), because
 		# this is the line an integrator reads to find out what their host has
-		# to tick. Nothing is added for an ordinary box.
+		# to tick. A box whose clock the game moves without a unit (a calendar,
+		# the hands-on review, 2026-10) says so instead. Nothing is added for
+		# an ordinary box.
 		var timed := ""
 		if box.has("turn"):
-			timed = ", turn = %ss" % _seconds(float(box["turn"]["seconds"]))
+			if (box["turn"] as Dictionary).has("seconds"):
+				timed = ", turn = %ss" % _seconds(float(box["turn"]["seconds"]))
+			else:
+				timed = ", turn moved by the game"
 		# Durable cards (4.2), only when there are any: what a server lifts over
 		# a run boundary. Nothing is added for the ordinary box.
 		var durable := ""

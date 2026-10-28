@@ -315,7 +315,9 @@ export interface PlayOptions {
 /** Why a card did or did not make an ask, in availability order (schema 3.1). */
 /** Why a held card left its hand: an `evict` trace event's reason, and a
  *  load report's when the load checks what it put back. */
-export type EvictReason = "hand-condition" | "vanished" | "deck-gate" | "taken" | "cooldown" | "tags" | "condition";
+export type EvictReason = CheckReason | "outranked";
+/** The reasons a held card fails the check a deal and a load both make. */
+type CheckReason = "hand-condition" | "vanished" | "deck-gate" | "taken" | "cooldown" | "tags" | "condition";
 
 export type TraceVerdict =
   | "dealt"        // in the hand / the returned list
@@ -357,7 +359,10 @@ export type TraceEvent =
     }
   /** Hand and card gameIds. A card the build no longer has (`vanished`) has
    *  no gameId left and is named by the id the board carried. */
-  | { type: "evict"; hand: string; card: string; reason: TraceVerdict | "hand-condition" | "vanished" }
+  | { type: "evict"; hand: string; card: string; reason: TraceVerdict | "hand-condition" | "vanished" | "outranked" }
+  /** A card the game took out of a hand without playing it (`discard`):
+   *  card and hand gameIds. */
+  | { type: "discard"; hand: string; card: string; turn: number }
   /** Card and outcome gameIds; `outcome` is "" for a card with no outcomes,
    *  played with none. */
   | { type: "play"; card: string; outcome: string; turn: number }
@@ -417,7 +422,48 @@ const cardIsDurable = (card: Card<Expression>, deck: Deck<Expression>): boolean 
  *  `copies`, so the common case writes one number and only "five in the world,
  *  one to a customer" needs both. Meaningless on an unshared card, and the
  *  compiler warns when one sets it. */
-const sharedCap = (card: Card<Expression>): number => card.sharedCopies ?? card.copies ?? 1;
+const sharedCap = (card: Card<Expression>): number => card.sharedCopies ?? acrossLimit(card);
+
+/** How many hands of one flow may hold a card at once: one, or any number
+ *  (`acrossHands`), or a bundle from before it, its `copies`. */
+const acrossLimit = (card: Card<Expression>): number =>
+  card.acrossHands === "any" ? Infinity : card.acrossHands === "one" ? 1 : card.copies ?? 1;
+
+/**
+ * One run of equally ranked cards, in the order a deal takes them (the
+ * hands-on review, 2026-10, rulings 1 and 4). Cards the hand already holds
+ * come first, in the order they were scored, so a re-ranking deal never swaps
+ * one for an equal. The rest are shuffled, as runs always were, when their
+ * weights are all equal; otherwise drawn by weight, one draw per place but the
+ * last: each place takes the card whose share of the remaining weight the draw
+ * falls in, walking the remaining cards in scored order. Both forms draw
+ * (rest - 1) numbers, held cards none, so unweighted content deals exactly
+ * as it did.
+ */
+function orderRun<T extends { entry: CardEntry }>(run: T[], held: ReadonlyMap<string, number> | undefined, prng: Prng): T[] {
+  const first = held === undefined ? [] : run.filter((s) => held.has(s.entry.card.id));
+  const rest = held === undefined ? run : run.filter((s) => !held.has(s.entry.card.id));
+  const weight = (s: T): number => s.entry.card.weight ?? 1;
+  if (rest.length > 1 && rest.some((s) => weight(s) !== weight(rest[0]!))) {
+    const drawn: T[] = [];
+    const left = [...rest];
+    while (left.length > 1) {
+      let total = 0;
+      for (const s of left) total += weight(s);
+      let r = prng.next() * total;
+      let k = 0;
+      while (k < left.length - 1 && r >= weight(left[k]!)) { r -= weight(left[k]!); k++; }
+      drawn.push(left.splice(k, 1)[0]!);
+    }
+    drawn.push(left[0]!);
+    return [...first, ...drawn];
+  }
+  if (rest.length > 1) shuffleInPlace(rest, prng);
+  return [...first, ...rest];
+}
+
+/** How many slots of one hand a card may fill (`inOneHand`, default 1). */
+const inOneHandOf = (card: Card<Expression>): number => card.inOneHand ?? 1;
 
 type HandSource = { kind: "value"; id: string } | { kind: "hand"; id: string } | { kind: "criteria" };
 
@@ -2911,9 +2957,7 @@ export class Flow {
     return [...this.boardContents.values()].flat();
   }
 
-  private copiesOf(card: Card<Expression>): number {
-    return card.copies ?? 1;
-  }
+
 
   /** The claims step (schema 3.1 step 6) for one card, as a verdict or null
    *  for "available". Two caps apply to a shared card and they are different
@@ -2922,16 +2966,19 @@ export class Flow {
    *  participant told "claimed" about a card sitting on another person's
    *  table would read it as an engine fault (design/shared-scarcity 9.3.1).
    *
-   *  `mine` counts this flow's holdings, `world` every live flow's. */
+   *  `mine` counts this flow's holdings, `world` every live flow's, and `own`
+   *  what the hand being dealt holds already: those are the hand's to keep or
+   *  give up as it re-ranks, so they claim nothing against it. */
   private claimVerdict(
     card: Card<Expression>,
     shared: boolean,
     mine: Map<string, number>,
     world: Map<string, number>,
+    own = 0,
   ): "claimed" | "claimed-elsewhere" | null {
     const id = card.id;
-    if ((mine.get(id) ?? 0) >= this.copiesOf(card)) return "claimed";
-    if (shared && (world.get(id) ?? 0) >= sharedCap(card)) return "claimed-elsewhere";
+    if ((mine.get(id) ?? 0) - own >= acrossLimit(card)) return "claimed";
+    if (shared && (world.get(id) ?? 0) - own >= sharedCap(card)) return "claimed-elsewhere";
     return null;
   }
 
@@ -2966,6 +3013,9 @@ export class Flow {
     ask: AskDescriptor,
     claimed: (card: Card<Expression>, shared: boolean) => "claimed" | "claimed-elsewhere" | null,
     trace?: { id: string; verdict: TraceVerdict; priority?: number; specificity?: number }[],
+    /** The cards the hand being dealt holds: they win ties, so a re-ranking
+     *  deal never swaps one for an equal. */
+    held?: ReadonlyMap<string, number>,
   ): { ordered: CardEntry[]; handEnv: HandEnv } {
     const { box } = ask;
     const handEnv = this.buildHandEnv(ask);
@@ -3077,8 +3127,10 @@ export class Flow {
         && scored[j]!.priority === scored[i]!.priority
         && scored[j]!.spec === scored[i]!.spec) j++;
       if (j - i > 1) {
-        const run = scored.slice(i, j);
-        shuffleInPlace(run, this.prng);
+        // Held cards first, in the order they were scored; then the rest,
+        // shuffled, or drawn by weight when their weights differ. Held cards
+        // take no draws, so a deal draws what it always drew.
+        const run = orderRun(scored.slice(i, j), held, this.prng);
         // Written back element by element, as all three ports do. It used to be
         // `scored.splice(i, j - i, ...run)`, which SPREADS one argument per
         // element: with every card at the default priority 0 the tie run is the
@@ -3186,7 +3238,7 @@ export class Flow {
   /** Drop the cards a hand holds that are no longer available to it, as a deal
    *  does before it fills, and say which went and why: the deal's first pass,
    *  and the load's check of what it put back (`dropUnqualified`). */
-  private evictUnavailable(hand: Hand<Expression>, box: Box<Expression>): { card: string; reason: EvictReason }[] {
+  private evictUnavailable(hand: Hand<Expression>, box: Box<Expression>): { card: string; reason: CheckReason }[] {
     const ask = this.askForHand(hand, box);
     const handEnv = this.buildHandEnv(ask);
     const conditionOk = this.passes(ask.condition, this.evalCtx(box, undefined, handEnv), () => `hand ${effectiveGameId(hand)}`);
@@ -3200,12 +3252,12 @@ export class Flow {
       gateOk.set(deck.id, this.passes(deck.condition, ctx, () => `deck ${deck.gameId}`));
     }
     const turn = this.turnCounts.get(box.id) ?? 0;
-    const evicted: { card: string; reason: EvictReason }[] = [];
+    const evicted: { card: string; reason: CheckReason }[] = [];
     // The card is named by gameId (4.4). A card the build no longer has -
     // the `vanished` branch below - has no gameId left, so it is named by
     // the id the board carries, which is the rule a load report has always
     // used for the same reason.
-    const evict = (cardId: string, reason: EvictReason): false => {
+    const evict = (cardId: string, reason: CheckReason): false => {
       const known = this.internals.cardsById.get(cardId);
       evicted.push({ card: known ? effectiveGameId(known.card) : cardId, reason });
       return false;
@@ -3244,11 +3296,11 @@ export class Flow {
    *  card whose condition is now false, and nothing said so). Every hand, in
    *  id order, on a copy of the flow's generator, so the check draws nothing
    *  and the next deal is exactly what it would have been. */
-  dropUnqualified(): { hand: string; card: string; reason: EvictReason }[] {
+  dropUnqualified(): { hand: string; card: string; reason: CheckReason }[] {
     const own = this.prng;
     this.prng = makePrng(own.state());
     try {
-      const out: { hand: string; card: string; reason: EvictReason }[] = [];
+      const out: { hand: string; card: string; reason: CheckReason }[] = [];
       for (const handId of [...this.internals.handsById.keys()].sort()) {
         const { hand, box } = this.internals.handsById.get(handId)!;
         for (const e of this.evictUnavailable(hand, box)) out.push({ hand: effectiveGameId(hand), ...e });
@@ -3294,27 +3346,58 @@ export class Flow {
     // bundles): an empty map answers every question the same way.
     const worldClaims = this.internals.hasShared ? this.engine.sharedClaims() : new Map<string, number>();
     for (const { hand, box } of dealt) {
-      const contents = this.boardContents.get(hand.id) ?? [];
-      const free = this.handCapacity(hand) - contents.length;
-      if (free <= 0) continue;
+      // A deal makes the hand right (the hands-on review, 2026-10, ruling 1):
+      // it ranks everything eligible, the cards it holds included, and the hand
+      // becomes the top of that ranking, full or not. A held card wins a tie,
+      // so an equal card never displaces it; one a better card displaces goes
+      // back to the stock, "outranked".
+      const held = this.boardContents.get(hand.id) ?? [];
+      const own = new Map<string, number>();
+      for (const id of held) own.set(id, (own.get(id) ?? 0) + 1);
       const ask = this.askForHand(hand, box);
-      const own = new Set(contents);
       const trace = this.tracing ? [] : undefined;
-      // At most once in any one hand; at most `copies` hands here, and at most
-      // `sharedCopies` hands anywhere (schema 3.5, shared-scarcity 5).
+      // At most `inOneHand` times in this hand; in one hand of this flow at a
+      // time unless the card says any (or, from an older bundle, `copies`);
+      // at most `sharedCopies` hands anywhere (schema 3.5, shared-scarcity 5).
       const { ordered } = this.runAsk(ask,
-        (card, shared) => (own.has(card.id) ? "claimed" : this.claimVerdict(card, shared, claimCounts, worldClaims)), trace);
-      const taking = ordered.slice(0, free);
-      const added = taking.map((e) => e.card.id);
-      this.boardContents.set(hand.id, [...contents, ...added]);
-      for (const id of added) {
+        (card, shared) => this.claimVerdict(card, shared, claimCounts, worldClaims, own.get(card.id) ?? 0), trace, own);
+      // The top of the ranking, each card as many times as one hand may hold it.
+      const want = new Map<string, number>();
+      let room = this.handCapacity(hand);
+      for (const e of ordered) {
+        if (room <= 0) break;
+        const n = Math.min(inOneHandOf(e.card), room);
+        want.set(e.card.id, n);
+        room -= n;
+      }
+      // Held cards keep their places; newcomers follow, in rank order.
+      const next: string[] = [];
+      const outranked: string[] = [];
+      for (const id of held) {
+        const n = want.get(id) ?? 0;
+        if (n > 0) { next.push(id); want.set(id, n - 1); } else outranked.push(id);
+      }
+      for (const e of ordered) {
+        for (let n = want.get(e.card.id) ?? 0; n > 0; n--) next.push(e.card.id);
+        want.delete(e.card.id);
+      }
+      this.boardContents.set(hand.id, next);
+      for (const id of held) {
+        claimCounts.set(id, (claimCounts.get(id) ?? 1) - 1);
+        worldClaims.set(id, (worldClaims.get(id) ?? 1) - 1);
+      }
+      for (const id of next) {
         claimCounts.set(id, (claimCounts.get(id) ?? 0) + 1);
         worldClaims.set(id, (worldClaims.get(id) ?? 0) + 1);
       }
       // Emitted after the hand is set: a handler reading board() sees the deal.
       if (trace) {
-        this.capTrace(trace, new Set(taking.map((e) => effectiveGameId(e.card))));
-        this.emit({ type: "deal", hand: effectiveGameId(hand), cards: trace }, this.turnCounts.get(box.id) ?? 0);
+        const turn = this.turnCounts.get(box.id) ?? 0;
+        for (const id of outranked) {
+          this.emit({ type: "evict", hand: effectiveGameId(hand), card: effectiveGameId(this.internals.cardsById.get(id)!.card), reason: "outranked" }, turn);
+        }
+        this.capTrace(trace, new Set(next.map((id) => effectiveGameId(this.internals.cardsById.get(id)!.card))));
+        this.emit({ type: "deal", hand: effectiveGameId(hand), cards: trace }, turn);
       }
     }
 
@@ -3452,11 +3535,40 @@ export class Flow {
     }
     // The card leaves its hand, releasing its claim (schema 3.5/3.7).
     const handId = ask.hand!.id;
-    this.boardContents.set(handId,
-      (this.boardContents.get(handId) ?? []).filter((id) => id !== entry.card.id));
+    // One copy, for a card the hand holds more than once (`inOneHand`).
+    const contents = this.boardContents.get(handId) ?? [];
+    const at = contents.indexOf(entry.card.id);
+    this.boardContents.set(handId, [...contents.slice(0, at), ...contents.slice(at + 1)]);
     this.turnCounts.set(entry.box.id, newTurn);
     // Emitted last: a handler reading the board and the clock sees the play.
     if (this.tracing) this.emit({ type: "play", card: effectiveGameId(entry.card), outcome: outcomeId, turn: newTurn }, newTurn);
+  }
+
+  /**
+   * Take a card out of a hand without playing it: the player turned it down,
+   * or the game wants the room (the hands-on review, 2026-10, ruling: discard).
+   * No outcome, no play in the log, no move of the clock, no play count. It
+   * starts its Redraw as a play would, so a re-ranking deal doesn't hand it
+   * straight back: a finite Redraw waits that many turns from now, a "never"
+   * card is gone for good (for everyone, when it's shared), and an "always"
+   * card can come up at the next deal. One copy leaves, for a card the hand
+   * holds more than once.
+   */
+  discard(cardId: string, from: string): void {
+    this.assertOpen();
+    const { entry, ask } = this.resolveDealt(cardId, from);
+    const turn = this.turnCounts.get(entry.box.id) ?? 0;
+    if (entry.card.redraw === "never") {
+      if (cardIsShared(entry.card, entry.deck.shared ?? false)) this.engine.markTaken(entry.card.id);
+      else this.cooldowns[entry.card.id] = Number.MAX_SAFE_INTEGER;
+    } else if (typeof entry.card.redraw === "number") {
+      this.cooldowns[entry.card.id] = turn + entry.card.redraw;
+    }
+    const handId = ask.hand!.id;
+    const contents = this.boardContents.get(handId) ?? [];
+    const at = contents.indexOf(entry.card.id);
+    this.boardContents.set(handId, [...contents.slice(0, at), ...contents.slice(at + 1)]);
+    if (this.tracing) this.emit({ type: "discard", hand: effectiveGameId(ask.hand!), card: effectiveGameId(entry.card), turn }, turn);
   }
 
   /** One owned property's address, owner segment and all (4.4). */

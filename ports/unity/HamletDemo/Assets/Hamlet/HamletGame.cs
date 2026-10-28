@@ -168,8 +168,8 @@ namespace StoryletStudio.Hamlet
             Story.Play(card.Id, outcome, At);
             Log.Insert(0, outcome == "" ? (card.Title ?? card.GameId) : $"{card.Title ?? card.GameId}: {outcome}");
             Playing = null;
-            // Re-prime everywhere: a refresh evicts what is no longer eligible and fills
-            // EMPTY slots; a still-eligible card keeps its seat (the survivor rule).
+            // Re-prime everywhere: a deal makes each hand right, evicting what is no
+            // longer eligible and letting a better card take a lesser one's slot.
             Story.DealMany();
         }
 

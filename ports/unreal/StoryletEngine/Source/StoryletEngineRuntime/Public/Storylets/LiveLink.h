@@ -43,7 +43,8 @@ namespace storylets
     inline bool LiveLinkMovesBoard(TraceEvent::Kind kind)
     {
         return kind == TraceEvent::Kind::Deal || kind == TraceEvent::Kind::Play
-            || kind == TraceEvent::Kind::Evict || kind == TraceEvent::Kind::Turns;
+            || kind == TraceEvent::Kind::Discard || kind == TraceEvent::Kind::Evict
+            || kind == TraceEvent::Kind::Turns;
     }
 
     inline const char* TraceKindWire(TraceEvent::Kind kind)
@@ -56,6 +57,7 @@ namespace storylets
             case TraceEvent::Kind::Play: return "play";
             case TraceEvent::Kind::Write: return "write";
             case TraceEvent::Kind::Turns: return "turns";
+            case TraceEvent::Kind::Discard: return "discard";
             default: return "diagnostic";
         }
     }
@@ -113,6 +115,10 @@ namespace storylets
                 break;
             case TraceEvent::Kind::Turns:
                 out += ",\"box\":" + q(e.box) + ",\"turn\":" + StoryletValue::JsNumber(e.turn);
+                break;
+            case TraceEvent::Kind::Discard:
+                out += ",\"hand\":" + q(e.hand) + ",\"card\":" + q(e.card)
+                    + ",\"turn\":" + StoryletValue::JsNumber(e.turn);
                 break;
             default:
                 out += ",\"where\":" + q(e.where) + ",\"message\":" + q(e.message);

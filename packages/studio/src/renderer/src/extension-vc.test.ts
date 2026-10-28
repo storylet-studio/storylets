@@ -14,7 +14,7 @@ import type { BoxDto, CardDto, DeckDto, ExtensionDto, ProjectDto, VcStatusDto } 
 
 const card: CardDto = {
   id: "c_bell", gameId: "bell", title: "The bell", priority: "0", redraw: "always",
-  tags: [], copies: "", sharedCopies: "", fields: [{ name: "mood", value: "tense" }], outcomes: [],
+  tags: [], sharedCopies: "", fields: [{ name: "mood", value: "tense" }], outcomes: [],
 };
 const deck: DeckDto = { id: "k_rumours", gameId: "rumours", properties: [], cards: [card] };
 const box: BoxDto = {

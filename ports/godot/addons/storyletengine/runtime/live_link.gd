@@ -52,7 +52,8 @@ signal bundle_pushed(build: String, data: String)
 
 const DEFAULT_URL := "ws://127.0.0.1:4472"
 # The trace kinds that move the board, and so are followed by a snapshot.
-const BOARD_EVENTS := ["deal", "play", "evict", "turns"]
+# A discard changes the board as a play does.
+const BOARD_EVENTS := ["deal", "play", "discard", "evict", "turns"]
 
 ## The socket. A WebSocketPeer, created by open() when nothing is set; a test
 ## sets a stand-in with the same surface first (connect_to_url, poll,

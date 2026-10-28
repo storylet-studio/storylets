@@ -588,6 +588,7 @@ namespace
 			case storylets::TraceEvent::Kind::Play:       return EStoryletLogKind::Play;
 			case storylets::TraceEvent::Kind::Write:      return EStoryletLogKind::Write;
 			case storylets::TraceEvent::Kind::Turns:      return EStoryletLogKind::Turns;
+			case storylets::TraceEvent::Kind::Discard:    return EStoryletLogKind::Discard;
 			default:                                      return EStoryletLogKind::Diagnostic;
 		}
 	}
@@ -648,6 +649,9 @@ namespace
 			case storylets::TraceEvent::Kind::Turns:
 				return FString::Printf(TEXT("%sturns %s -> %s"),
 					*Stamp, *Ue(E.box), *Ue(storylets::StoryletValue::JsNumber(E.turn)));
+			case storylets::TraceEvent::Kind::Discard:
+				// A card the game took out of its hand unplayed.
+				return FString::Printf(TEXT("%sdiscard %s from %s"), *Stamp, *Ue(E.card), *Ue(E.hand));
 			default:
 				return FString::Printf(TEXT("%sdiagnostic %s: %s"),
 					*Stamp, *Ue(E.where), *Ue(E.message));
@@ -851,6 +855,30 @@ bool UStoryletFlow::PlayAdvancing(
 	storylets::PlayOptions Options;
 	Options.advanceTurns = AdvanceTurns;
 	return PlayOn(*GetCoreFlow(), CardRef, OutcomeGameId, FromHand, Options, OutError);
+}
+
+bool UStoryletFlow::Discard(const FString& CardRef, const FString& FromHand, FString& OutError)
+{
+	if (RefuseClosed(TEXT("Discard")))
+	{
+		OutError = ClosedMessage();
+		return false;
+	}
+	try
+	{
+		GetCoreFlow()->discard(Std(CardRef), Std(FromHand));
+		OutError.Reset();
+		return true;
+	}
+	catch (const std::exception& Ex)
+	{
+		OutError = Ue(Ex.what());
+	}
+	catch (...)
+	{
+		OutError = TEXT("an unknown exception");
+	}
+	return false;
 }
 
 void UStoryletFlow::AdvanceTurns(const FString& BoxRef, double Turns)

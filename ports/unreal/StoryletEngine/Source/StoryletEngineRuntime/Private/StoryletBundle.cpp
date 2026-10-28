@@ -93,6 +93,7 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 		Box.Title = Ue(B.title);
 		Box.bUsesMap = B.usesMap;
 		Box.bRankingSpecificity = B.rankingSpecificity;
+		Box.bGameClock = B.gameClock;
 		Box.TurnSeconds = B.turnSeconds.has_value() ? *B.turnSeconds : 0.0;
 		Box.DurableCards = B.durableCards;
 		for (const storylets::TagGroupSummary& G : B.tagGroups)

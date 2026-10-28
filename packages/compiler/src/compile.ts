@@ -166,6 +166,14 @@ export function bundleIsFresh(bundle: Bundle, source: SourceProject): boolean {
 const named = (entity: { gameId?: string; title?: string; id: string } | undefined, id: string): string =>
   (entity ? `"${effectiveGameId(entity)}"` : `an unknown group (id ${id})`);
 
+/** A card's own dealing rules, the keys it sets: laid over its box's Card
+ *  template defaults. */
+const definedOf = (card: { weight?: number; inOneHand?: number; acrossHands?: "one" | "any" }): { weight?: number; inOneHand?: number; acrossHands?: "one" | "any" } => ({
+  ...(card.weight !== undefined ? { weight: card.weight } : {}),
+  ...(card.inOneHand !== undefined ? { inOneHand: card.inOneHand } : {}),
+  ...(card.acrossHands !== undefined ? { acrossHands: card.acrossHands } : {}),
+});
+
 export function compileProject(source: SourceProject): CompileResult {
   const issues: Issue[] = [];
   const report = (issue: Issue): void => { issues.push(issue); };
@@ -691,14 +699,16 @@ export function compileProject(source: SourceProject): CompileResult {
     uniqueGameIds("box", boxGameIds, effectiveGameId(boxDecl), boxPath);
     legalPropertyName("box", boxDecl.properties, boxPath);
 
-    // A timed box (design/engine-server.md 4.8): `seconds` is how long one of
-    // this box's turns lasts, so a fraction or a zero says nothing a host
-    // could tick to.
-    const timed = boxDecl.turn !== undefined
-      && Number.isInteger(boxDecl.turn.seconds) && boxDecl.turn.seconds > 0;
-    if (boxDecl.turn !== undefined && !timed) {
+    // Who moves the clock. `turn` with no `seconds`: the game, on its own
+    // beat (a calendar). With `seconds`, a timed box (design/engine-server.md
+    // 4.8): how long one of its turns lasts, so a fraction or a zero says
+    // nothing a host could tick to.
+    const seconds = boxDecl.turn?.seconds;
+    const gameClock = boxDecl.turn !== undefined && seconds === undefined;
+    const timed = seconds !== undefined && Number.isInteger(seconds) && seconds > 0;
+    if (seconds !== undefined && !timed) {
       report({ severity: "error", path: boxPath, where: effectiveGameId(boxDecl), field: "turn",
-        message: `turn.seconds must be an integer >= 1 (got ${JSON.stringify(boxDecl.turn.seconds)})` });
+        message: `turn.seconds must be an integer >= 1 (got ${JSON.stringify(seconds)})` });
     }
 
     // Tag groups. A group gameId is addressed through the box that owns it
@@ -955,13 +965,28 @@ export function compileProject(source: SourceProject): CompileResult {
         if (card.copies !== undefined && (!Number.isInteger(card.copies) || card.copies < 1)) {
           report({ severity: "error", path, where: effectiveGameId(card), field: "copies", message: `copies must be an integer >= 1 (got ${JSON.stringify(card.copies)})` });
         }
+        // Weights, In one hand and Across hands (the hands-on review, 2026-10),
+        // the card's own or its Card template's.
+        const dealing = { ...boxDecl.cardDefaults, ...definedOf(card) };
+        if (dealing.weight !== undefined && !(typeof dealing.weight === "number" && Number.isFinite(dealing.weight) && dealing.weight > 0)) {
+          report({ severity: "error", path, where: effectiveGameId(card), field: "weight", message: `weight must be a number above 0 (got ${JSON.stringify(dealing.weight)})` });
+        }
+        if (dealing.inOneHand !== undefined && (!Number.isInteger(dealing.inOneHand) || dealing.inOneHand < 1)) {
+          report({ severity: "error", path, where: effectiveGameId(card), field: "inOneHand", message: `inOneHand must be an integer >= 1 (got ${JSON.stringify(dealing.inOneHand)})` });
+        }
+        if (dealing.acrossHands !== undefined && dealing.acrossHands !== "one" && dealing.acrossHands !== "any") {
+          report({ severity: "error", path, where: effectiveGameId(card), field: "acrossHands", message: `acrossHands is "one" or "any" (got ${JSON.stringify(dealing.acrossHands)})` });
+        }
+        if (card.copies !== undefined && card.acrossHands !== undefined) {
+          report({ severity: "warning", path, where: effectiveGameId(card), field: "copies", message: "copies is replaced by acrossHands, which this card also sets: copies does nothing (storyletengine format removes it)" });
+        }
         if (card.sharedCopies !== undefined && (!Number.isInteger(card.sharedCopies) || card.sharedCopies < 1)) {
           report({ severity: "error", path, where: effectiveGameId(card), field: "sharedCopies", message: `sharedCopies must be an integer >= 1 (got ${JSON.stringify(card.sharedCopies)})` });
         }
         // sharedCopies is the WORLD cap and copies the per-flow one, so a world
         // cap below the per-flow cap says two contradictory things and the
         // smaller silently wins. Refuse it rather than pick (design/shared-scarcity 9.1).
-        if (card.sharedCopies !== undefined && card.sharedCopies < (card.copies ?? 1)) {
+        if (card.sharedCopies !== undefined && dealing.acrossHands === undefined && card.sharedCopies < (card.copies ?? 1)) {
           report({ severity: "error", path, where: effectiveGameId(card), field: "sharedCopies", message: `sharedCopies (${card.sharedCopies}) is below copies (${card.copies ?? 1}): the world cannot hold fewer than one participant may` });
         }
         // sharedCopies only means anything on a shared card; the deck may be
@@ -1090,8 +1115,14 @@ export function compileProject(source: SourceProject): CompileResult {
           priority: typeof card.priority === "string"
             ? (blank(card.priority) ? 0 : expr(card.priority, deckSchema, path, effectiveGameId(card), "priority") ?? 0)
             : card.priority ?? 0,
-          redraw: card.redraw ?? "always",
-          ...(card.copies !== undefined ? { copies: card.copies } : {}),
+          // Each dealing rule the card's own, else its Card template's, else
+          // the engine's; written only when it isn't the engine's default, so
+          // a bundle that uses none of them is byte for byte what it was.
+          redraw: card.redraw ?? boxDecl.cardDefaults?.redraw ?? "always",
+          ...(dealing.weight !== undefined && dealing.weight !== 1 ? { weight: dealing.weight } : {}),
+          ...(dealing.inOneHand !== undefined && dealing.inOneHand !== 1 ? { inOneHand: dealing.inOneHand } : {}),
+          ...(dealing.acrossHands === "any" ? { acrossHands: "any" as const } : {}),
+          ...(card.copies !== undefined && dealing.acrossHands === undefined ? { copies: card.copies } : {}),
           ...(card.shared !== undefined ? { shared: card.shared } : {}),
           ...(card.sharedCopies !== undefined ? { sharedCopies: card.sharedCopies } : {}),
           ...(card.durable !== undefined ? { durable: card.durable } : {}),
@@ -1330,7 +1361,7 @@ export function compileProject(source: SourceProject): CompileResult {
       ...(title(boxDecl.title) !== undefined ? { title: boxDecl.title } : {}),
       ...(title(boxDecl.purpose) !== undefined ? { purpose: boxDecl.purpose } : {}),
       ranking: { specificity: boxDecl.ranking?.specificity ?? true },
-      ...(timed ? { turn: { seconds: boxDecl.turn!.seconds } } : {}),
+      ...(timed ? { turn: { seconds: seconds! } } : gameClock ? { turn: {} } : {}),
       fields: resolved(boxDecl.fields ?? []),
       // Only when the box declares some: a bundle from a project without them
       // stays byte for byte what it was.
