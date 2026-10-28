@@ -82,3 +82,28 @@ describe("Edit > Undo and Redo in a view's window (view extensions)", () => {
     expect(view.webContents.undo).not.toHaveBeenCalled();
   });
 });
+
+// Edit > Undo and Redo name the step they'd take, as Patterpad's do (Patter's hands-on step 6, Q20); plain
+// with nothing to take.
+describe("Edit > Undo and Redo name their step", () => {
+  const labels = (): string[] => {
+    const edit = state.template.find((m) => m.label === "Edit")!;
+    return (edit.submenu as MenuItemConstructorOptions[]).slice(0, 2).map((i) => i.label ?? "");
+  };
+
+  it("read plain Undo and Redo with nothing to take", () => {
+    refreshMenu(fakeWindow() as never, STATE, false, undefined, false, { open: true, deckFocused: false });
+    expect(labels()).toEqual(["Undo", "Redo"]);
+  });
+
+  it("name the step Undo and Redo would take", () => {
+    const main = fakeWindow();
+    refreshMenu(main as never, STATE, false, undefined, false, {
+      open: true, deckFocused: false, undo: "Rename deck", redo: "Delete box",
+    });
+    expect(labels()).toEqual(["Undo Rename deck", "Redo Delete box"]);
+    state.focused = main;
+    click("Undo Rename deck");
+    expect(main.webContents.send).toHaveBeenCalledWith("menu", { cmd: "undo" });
+  });
+});

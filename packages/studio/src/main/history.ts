@@ -30,6 +30,12 @@ interface StepMark { id: number; key: string }
  *  can never name a step of this one. */
 let nextStepId = 1;
 
+/** Told whenever what Undo or Redo would do may have changed (a step recorded, undone, redone or dropped), so
+ *  Edit > Undo and Redo can name their step, as Patterpad's do. One listener; main sets it, and compares the
+ *  labels before rebuilding the menu, as typing into one field records on every keystroke. */
+let onChange: (() => void) | undefined;
+export function setHistoryListener(fn: (() => void) | undefined): void { onChange = fn; }
+
 /**
  * The shell's history, each step named. `record` says which step a write went into (a new one, or the one it
  * coalesced with), and `newest` which step Undo would take back now.
@@ -45,6 +51,7 @@ export class StepHistory extends History {
     super.reset();
     this.undoMarks = [];
     this.redoMarks = [];
+    onChange?.();
   }
 
   /** Record a step, as the shell does, and say which: `merged` when it joined the step on top (the same key,
@@ -54,6 +61,7 @@ export class StepHistory extends History {
     const merged = top !== undefined && top.key === key;
     super.record(label, key, before, after);
     this.redoMarks = [];
+    onChange?.();
     if (merged) return { id: top.id, merged: true };
     const id = nextStepId++;
     this.undoMarks.push({ id, key });
@@ -64,6 +72,7 @@ export class StepHistory extends History {
   override clearRedo(): void {
     super.clearRedo();
     this.redoMarks = [];
+    onChange?.();
   }
 
   override async applyUndo(): Promise<StepOutcome | undefined> {
@@ -80,6 +89,7 @@ export class StepHistory extends History {
     if (!outcome) return outcome;
     if (outcome.ok) { const mark = from.pop(); if (mark) to.push(mark); }
     else if (outcome.drift) from.length = 0;
+    onChange?.();
     return outcome;
   }
 }

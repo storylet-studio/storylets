@@ -37,7 +37,7 @@
     "@ibm/plex-mono": "1.0.0",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^22.10.0",
-    "@wildwinter/toolkit": "^0.3.0",
+    "@wildwinter/toolkit": "^0.4.0",
     "esbuild": "^0.28.1",
     "fontkit": "^2.0.4",
     "jsdom": "^26.0.0",

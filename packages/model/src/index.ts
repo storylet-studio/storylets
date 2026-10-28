@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Expression, ScalarValue } from "@wildwinter/expr";
+import { gameIdify, isValidGameId } from "@wildwinter/toolkit";
 
 export type { Expression, ScalarValue, AstNode } from "@wildwinter/expr";
 
@@ -228,15 +229,10 @@ export type RedrawPolicy = "always" | "never" | number;
 // the title carries the address with it (no "new-deck" stuck placeholder).
 // The compiler fills a concrete gameId into every bundle entity.
 
-/** Slugify a human label into a filename- / address-safe gameId. */
-export function gameIdify(text: string): string {
-  return text.toLowerCase().replace(/['’]/g, "")
-    .replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-export function isValidGameId(gameId: string): boolean {
-  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(gameId);
-}
+// `gameIdify` (a human label slugified into a filename- and address-safe gameId) and
+// `isValidGameId` are the family's one rule, shared with Patter from `@wildwinter/toolkit`
+// (step 6, Q19), and re-exported here so this package's API is unchanged.
+export { gameIdify, isValidGameId };
 
 // --- property names (adopted 2026-08-18, with Patter, from one rule) ---------
 //

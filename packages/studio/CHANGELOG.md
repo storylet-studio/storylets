@@ -12,6 +12,11 @@ here is part of shipping, not a courtesy.
 
 ### Added
 
+- **Resolve clashes in the app.** When a returned Storyletpack or a pull from a server leaves clashes, a bar across
+  the top of the window says how many, and **Resolve…** (or File ▸ Resolve Clashes…) goes through them: each says
+  where it is ("Card 'Tavern Brawl' in Opening deck: priority") and shows both sides. Keep mine, Take theirs, or
+  Edit to go there and fix it by hand, then Mark resolved. Every decision is one Undo, and a file's
+  `.storyletconflict` record goes with its last clash. Settling them used to mean editing the files.
 - **Make a property from Changes.** In an outcome's Changes, "+ set property" takes a name no property has yet and
   offers + New property "gold" in story. Choosing it asks what kind of value it holds, as Patterpad does: Number
   (the default), Text, or True or false. It then declares the Story property as that kind, with one Undo, and goes
@@ -49,6 +54,10 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **Undo and Redo name their step.** Edit ▸ Undo and Redo say what they'll take back or put back ("Undo Rename
+  deck"), as Patterpad's do, and read plain Undo and Redo when there's nothing to take.
+- **Cmd+P reads Play on the Board.** The Play menu's item says what it does; the window it opens is still the Board.
+- **Game scopes sits under Story data.** In Project Settings, its group is called Story data, as in Patterpad.
 - **A deck keeps its colour when renamed.** A deck's stripe on the node canvas and its chip on a card face used to
   change colour with its title. Now the first rename keeps the colour the deck had, saved with the deck's layout
   (never in the bundle), and undoing the rename undoes that too. Tags and zones are still coloured by their names.
@@ -96,6 +105,8 @@ here is part of shipping, not a courtesy.
 
 ### Fixed
 
+- **Your name is filled in at first launch.** The name box that signs your comments offers the `user.name` git has
+  for you. It used to ask before any project was open, so it came back empty.
 - **The keyboard doesn't get lost after a dialog.** Closing a dialog whose button was redrawn while it was open (a
   refusal, a Board confirm) gives the keyboard back to that button, and when there's nothing to go back to it goes
   to the page you're working on, never to the top of the window. A closed navigator no longer takes Tab presses

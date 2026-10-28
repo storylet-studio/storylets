@@ -18,7 +18,7 @@ import { registerCommandPalette } from "@wildwinter/app-shell/palette-main";
 import { registerWhatsNew } from "@wildwinter/app-shell/whats-new-main";
 import { guardAllWindows } from "@wildwinter/app-shell/window-guard";
 import { clearParseCache } from "@storylet-studio/compiler";
-import { clearCanonicalCache } from "@storylet-studio/ops";
+import { clearCanonicalCache, countClashes } from "@storylet-studio/ops";
 import { StudioStore } from "./store.js";
 import type { SecretCodec } from "./store.js";
 import { refreshMenu } from "./menu.js";
@@ -26,6 +26,7 @@ import { forgetShardHashes, menuState } from "./remote.js";
 import { openProject, openResult } from "./project.js";
 import type { ProjectSession } from "./project.js";
 import { setProjectWrittenListener } from "./mutate/write-path.js";
+import { setHistoryListener } from "./history.js";
 import type { MainContext, ToolName } from "./context.js";
 import { createJobs } from "./jobs.js";
 import { registerAssetScheme, serveAssets, sweepOrphanAssets } from "./assets.js";
@@ -100,6 +101,11 @@ let session: ProjectSession | undefined;
 let deckFocused = false;
 /** Whether the menu last drew Show Scene in Patterpad (see `noteProjectWritten`). */
 let shownPatter = false;
+/** What Edit > Undo and Redo last named ("Rename deck"), so a history change rebuilds the menu only when the
+ *  step it names has changed (see `noteHistory`). */
+let shownUndo: { undo?: string; redo?: string } = {};
+/** How many clashes File > Resolve Clashes… last counted, so a write rebuilds the menu only when that moved. */
+let shownClashes = 0;
 
 const jobs = createJobs();
 const flush = createEditorFlush(() => window);
@@ -145,6 +151,8 @@ const menu = (): void => {
     server.remote, server.keyed, server.standing?.edits ?? 0, server.head,
   ), shownPatter = patterPaired(), {
     open: session !== undefined, deckFocused: session !== undefined && deckFocused,
+    ...(shownUndo = undoLabels()),
+    clashes: shownClashes = clashesNow(),
     views: {
       items: views.offered().map((v) => ({
         extension: v.extension, extensionName: v.extensionName, view: v.view, name: v.name,
@@ -156,13 +164,32 @@ const menu = (): void => {
   exchange.retitle(server.remote, server.standing);
 };
 
+/** The steps Edit > Undo and Redo would take now, named as Patterpad's are ("Undo Rename deck"); plain
+ *  Undo and Redo with nothing to take, or no project. */
+function undoLabels(): { undo?: string; redo?: string } {
+  const undo = session?.history.undoLabel;
+  const redo = session?.history.redoLabel;
+  return { ...(undo ? { undo } : {}), ...(redo ? { redo } : {}) };
+}
+
+/** The clashes a merge left in the open project (step 6, Q21). */
+const clashesNow = (): number => (session !== undefined ? countClashes(session.loaded.files) : 0);
+
+/** The history changed: the menu is rebuilt only when the step Undo or Redo names did, since typing into one
+ *  field records a step on every save. */
+function noteHistory(): void {
+  const next = undoLabels();
+  if (next.undo === shownUndo.undo && next.redo === shownUndo.redo) return;
+  menu();
+}
+
 /** After every write that lands - a commit, an undo, a redo - the count may
  *  have moved. Compared rather than rebuilt blindly, because a write happens on
  *  every autosave and a menu rebuild does not belong on that path. */
 function noteProjectWritten(): void {
   // An undone Add Extension... takes its views with it: worked out again, and drawn only when they changed.
   void views.refresh();
-  if (!exchange.countMoved() && patterPaired() === shownPatter) return;
+  if (!exchange.countMoved() && patterPaired() === shownPatter && clashesNow() === shownClashes) return;
   menu();
 }
 
@@ -302,6 +329,8 @@ void app.whenReady().then(() => {
   // Live Link: every saved edit reaches a connected game. And the unpushed
   // count may have moved with it, which the menu and the title say.
   setProjectWrittenListener(() => { live.schedulePush(); noteProjectWritten(); });
+  // Edit > Undo and Redo name their step, so a step recorded, undone, redone or dropped may change them.
+  setHistoryListener(() => noteHistory());
   registerCommandPalette();   // Cmd+K reads the live menu and runs what it picks
   // What's New after an update: the version that last ran, and the tickbox. A machine with a recent project
   // ran Storyletter before What's New began counting, so it hears about this version.

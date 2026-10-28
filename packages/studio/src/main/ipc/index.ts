@@ -7,6 +7,7 @@
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 import { registerCards } from "./cards.js";
+import { registerClashes } from "./clashes.js";
 import { registerComments } from "./comments.js";
 import { registerFind } from "./find.js";
 import { registerMap } from "./map.js";
@@ -33,6 +34,7 @@ export function registerAll(ipc: Ipc, deps: IpcDeps): void {
   registerCards(ipc, deps);
   registerMap(ipc, deps);
   registerComments(ipc, deps);
+  registerClashes(ipc, deps);
   registerFind(ipc, deps);
   registerPublish(ipc, deps);
   for (const host of deps.hosts) host.register(ipc);

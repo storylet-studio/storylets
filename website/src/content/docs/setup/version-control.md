@@ -78,14 +78,19 @@ real clash is flagged, never guessed at. There are four kinds:
 | `structural` | A post-merge structural failure, such as a duplicate id. |
 
 **Output is always parseable canonical source.** Where the two sides clash, your side is
-kept, and a **`.storyletconflict`** file is written beside the real shard with the full
-record of every conflict: id, path, base, ours, theirs, kind. `--path` is how the driver
-knows where the real shard is, because your version control system hands it temporary
-filenames.
+kept, and the clash is recorded twice: in the shard itself, under its `unresolved` key (the
+path, the kind, and the base, ours and theirs), and in a **`.storyletconflict`** file
+written beside the real shard with the full record of every conflict: id, path, base, ours,
+theirs, kind. `--path` is how the driver knows where the real shard is, because your version
+control system hands it temporary filenames.
 
-A leftover `.storyletconflict` is a **`validate` error**, so an unresolved merge can't reach
-CI, can't export, and can't ship. Resolve it the way you would any conflict, then delete the
-file.
+An `unresolved` entry and a leftover `.storyletconflict` are both **`validate` errors**, so
+an unresolved merge can't reach CI, can't export, and can't ship. In Storyletter, **File ▸
+Resolve Clashes…** (or **Resolve…** on the bar the project shows) goes through them one at a
+time: keep your side, take theirs, or edit it and mark it resolved, each as a step you can
+undo, and the `.storyletconflict` file goes with a shard's last clash. See [Resolving
+clashes](/storyletter/overview/#resolving-clashes). By hand, set the value you want, remove
+its entry from `unresolved`, then delete the file.
 
 ## Registering the driver on git
 
@@ -196,7 +201,8 @@ storyletengine unpack village-returned.storyletpack -o . \
 
 The merge is the same id-keyed one described above, so the same rules apply: different
 fields of the same card both survive, and a genuine collision writes your version with a
-`.storyletconflict` file beside it. Storyletter has the same three moves in its File menu.
+`.storyletconflict` file beside it. Storyletter has the same three moves in its File menu,
+and **File ▸ Resolve Clashes…** to settle what clashed.
 
 :::caution[Keep the pack you sent]
 `unpack --merge` is a three-way merge, so it needs the pack you sent as the common ancestor.

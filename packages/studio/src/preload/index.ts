@@ -102,6 +102,9 @@ const api: StudioApi = {
   undo: () => invoke("edit:undo"),
   redo: () => invoke("edit:redo"),
   undoStep: (id: number) => invoke("edit:undoStep", id),
+  listClashes: () => invoke("clashes:list"),
+  resolveClash: (id: string, side: "ours" | "theirs") => invoke("clashes:resolve", id, side),
+  markClashResolved: (id: string) => invoke("clashes:markResolved", id),
   // Find's toast Undo, run by the editor: it answers with the outcome, sent back
   // rather than invoked (the leaving prompt's way), so main can wait for it.
   onUndoStep: (handler) => {

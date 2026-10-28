@@ -1,18 +1,14 @@
-// The address rules exist TWICE on purpose, and this is the belt that keeps the
-// two copies honest.
+// The address rules are the family's one rule, in `@wildwinter/toolkit` (step 6, Q19): this
+// package re-exports the toolkit's, so the compiler, ops, the CLI and the JS runtime shipped to
+// game engines address content by exactly what Patter does, with no UI kit behind them.
 //
-// `@wildwinter/app-shell` owns them for the family: the gameId editor is shared,
-// and a new app in the collection should get working rules on day one. This
-// package owns them for the Node side - the compiler, ops, the CLI and the JS
-// runtime shipped to game engines all address content by them, and none of those
-// should carry a dependency on a UI kit to do it.
-//
-// Two copies that agree today drift tomorrow, and the failure would be quiet and
-// nasty: the editor accepting a name the compiler then rejects, or a bundle whose
-// addresses no longer match the ones a host was written against.
+// `@wildwinter/app-shell` exports the rules too, for the shared gameId editor. This is the belt
+// that keeps the editor honest: if the two drifted, the editor would accept a name the compiler
+// then rejects, or a bundle's addresses would no longer match the ones a host was written against.
 import { describe, expect, it } from "vitest";
 import { gameIdify, isValidGameId } from "../src/index.js";
 import { gameIdify as shellSlug, isValidGameId as shellValid } from "@wildwinter/app-shell";
+import { gameIdify as toolkitSlug, isValidGameId as toolkitValid } from "@wildwinter/toolkit";
 
 /** Enough shapes to catch a rule changing on one side: case, punctuation,
  *  apostrophes, accents, collapsing, trimming, and the empty result. */
@@ -24,6 +20,11 @@ const CASES = [
 ];
 
 describe("the model's address rules match the shell's", () => {
+  it("are the toolkit's own, re-exported", () => {
+    expect(gameIdify).toBe(toolkitSlug);
+    expect(isValidGameId).toBe(toolkitValid);
+  });
+
   it("slugifies identically", () => {
     for (const input of CASES) {
       expect(gameIdify(input), `gameIdify(${JSON.stringify(input)})`).toBe(shellSlug(input));

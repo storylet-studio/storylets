@@ -62,6 +62,9 @@ export {
 } from "./extensions.js";
 export type { ExtensionTake, ExtensionUpgrade, ExtensionValueEdit } from "./extensions.js";
 export type { ShardMergeInput, ShardMergeStep } from "./merge.js";
+// Resolving a merge's clashes from the shard's own `unresolved` mark (step 6, Q21)
+export { applyResolutions, clashesOf, countClashes, isSettable, parseClashPath, ResolutionError } from "./clashes.js";
+export type { ClashDecision, ShardClash } from "./clashes.js";
 export { analyseInfluence, cardNeighbourhood, describeContribution } from "./influence.js";
 // Find: property usage (the Property tab), field usage (the Field tab) and find-and-replace over item text (the Replace tab)
 export { runPropertyUsage, runPropertyUsageMany, parsePropertyQuery, propertyUsageReport } from "./usage.js";

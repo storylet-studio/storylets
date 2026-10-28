@@ -10,7 +10,7 @@ import { basename } from "node:path";
 import { PROJECT_FOLDER_EXTENSION } from "@storylet-studio/model";
 import {
   APP_MENU, EDIT_MENU, FILE_MENU, GO_MENU, HELP_MENU, PANE_MENU, PLAY_MENU, PUBLISH_MENU, REVIEW_MENU, VIEW_MENU,
-  namedMenuItems, recentsSubmenu,
+  namedMenuItems, recentsSubmenu, resolveClashesMenuItem,
 } from "@wildwinter/app-shell/menu";
 import type { MenuCommand, StudioState } from "../shared/api.js";
 import { EXAMPLES } from "../shared/examples.js";
@@ -43,6 +43,13 @@ export interface MenuProject {
   deckFocused: boolean;
   /** The open project's view extensions, for the Window menu, and how to tell one's window. */
   views?: MenuViews;
+  /** The step Edit > Undo would take back ("Rename deck"), so the item reads "Undo Rename deck", as Patterpad's
+   *  does; absent, plain "Undo". */
+  undo?: string;
+  /** The same for Redo. */
+  redo?: string;
+  /** How many clashes a merge left in the project, so Resolve Clashes… is enabled only while there are some. */
+  clashes?: number;
 }
 
 /** One view the project offers: opened by name, or, when this machine hasn't installed it, why not. */
@@ -195,6 +202,9 @@ export function refreshMenu(
         // no shared version control, and taking their edits back afterwards.
         { label: "Export as Storyletpack\u2026", enabled: open, click: send({ cmd: "export-pack" }) },
         { label: "Merge Returned Storyletpack\u2026", enabled: open, click: send({ cmd: "merge-pack" }) },
+        // The family's clash resolver (step 6, Q21), beside the merge that leaves clashes. The shell's item lives
+        // on a Project menu; neither app has one, and Project Settings is here, so it's here too.
+        { ...resolveClashesMenuItem(open ? project.clashes ?? 0 : 0), click: send({ cmd: "resolve-clashes" }) },
         // The pack exchange's one door, beside the other pack items because it
         // is the same act over a wire: it asks for an address and a code, and
         // it is for somebody who already has both. Everything else the exchange
@@ -253,6 +263,7 @@ export function refreshMenu(
         // rule, patter ee3b612).
         {
           ...EDIT_MENU.undo,
+          ...(project.undo ? { label: `${EDIT_MENU.undo.label} ${project.undo}` } : {}),
           click: () => {
             const focused = BrowserWindow.getFocusedWindow();
             // A view's window has no undo of its own: its Undo is the project's, which the editor runs.
@@ -263,6 +274,7 @@ export function refreshMenu(
         },
         {
           ...EDIT_MENU.redo,
+          ...(project.redo ? { label: `${EDIT_MENU.redo.label} ${project.redo}` } : {}),
           click: () => {
             const focused = BrowserWindow.getFocusedWindow();
             if (views?.isView(focused)) { send({ cmd: "redo", project: true })(); return; }
@@ -310,7 +322,9 @@ export function refreshMenu(
       submenu: [
         // Cmd+P, as Play Scene is in Patterpad (ruling O, 2026-10-06): both
         // topbar buttons say Play, and Patterpad's Cmd+T changes a line's type.
-        { label: "The Board", ...PLAY_MENU.play, enabled: open, click: send({ cmd: "table" }) },
+        // "Play on the Board" (Patter's hands-on step 6, Q20): the item says what it does; the window it
+        // opens is still called the Board.
+        { label: "Play on the Board", ...PLAY_MENU.play, enabled: open, click: send({ cmd: "table" }) },
         { type: "separator" },
         // Live Link (design/live-link.md): Patterpad's item, label and place.
         // Ticked while the server is up (listening or connected); the

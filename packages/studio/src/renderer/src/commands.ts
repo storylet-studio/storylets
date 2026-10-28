@@ -20,6 +20,7 @@ import type { Navigation } from "./navigation.js";
 import type { SaveQueue } from "./save-queue.js";
 import type { Comments } from "./comments.js";
 import type { Exchange } from "./exchange.js";
+import type { Clashes } from "./clashes.js";
 import type { ViewActions } from "./views.js";
 import type { Session } from "./session.js";
 import type { MenuCommand, OpenResult, ThemeChoice } from "../../shared/api.js";
@@ -31,6 +32,8 @@ export interface CommandsContext {
   saves: SaveQueue;
   comments: Comments;
   exchange: Exchange;
+  /** The clash resolver: File > Resolve Clashes…, and asked again after an undo or redo. */
+  clashes: Clashes;
   shell: () => PaneShell;
   render: () => void;
   renderCentre: () => void;
@@ -140,6 +143,8 @@ export function createCommands(ctx: CommandsContext) {
     }
     ctx.render();
     ctx.refreshVc();
+    // An open resolver asks again: the step may have put a clash back or taken one away.
+    ctx.clashes.refresh();
   }
 
   /** Edit > Duplicate: clone the open document (outcomes duplicate from their
@@ -255,6 +260,7 @@ export function createCommands(ctx: CommandsContext) {
       case "server-pull": if (project) void exchange.serverPull(); break;
       case "server-push": if (project) void exchange.serverPush(command.breaks); break;
       case "merge-pack": if (project) void exchange.mergePack(); break;
+      case "resolve-clashes": if (project) ctx.clashes.open(); break;
       case "project-settings": if (project) ctx.openSettings(command.section); break;
       case "identity": void ctx.saveIdentity("edit"); break;
       case "about": void showAbout({

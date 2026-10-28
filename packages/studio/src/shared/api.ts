@@ -965,11 +965,42 @@ export interface OpenResult {
   step?: ProjectStep;
   /** Absent for an ordinary project. */
   remote?: RemoteDto;
+  /** How many clashes a merge left in the project's shards (their `unresolved` entries), for the banner and
+   *  Resolve Clashes…; absent at none. */
+  clashes?: number;
   /** Launch at an item (`storyletter <path> --at <where>`): land HERE instead
    *  of the remembered place. Main resolves the query; the renderer goes there
    *  the way it goes to a Find hit. Absent on every ordinary open. */
   at?: ReviewAt;
 }
+
+/** Where a clash's Edit goes: anywhere a comment can live, or the project's own page. */
+export type ClashGoto = ReviewAt | { kind: "project" };
+
+/**
+ * One clash a merge left, as the resolver lists it (app-shell's `Clash`, which this is, with where Edit goes).
+ * `id` is the shard and the path; `ours`, `theirs` and `base` are display text, absent where that side has none.
+ */
+export interface ClashDto {
+  id: string;
+  /** For a person: "Card 'Tavern Brawl' in Opening deck: priority", "@story.trust's default". */
+  where: string;
+  /** The shard and the mark's path, shown small. */
+  path: string;
+  kind: string;
+  ours?: string;
+  theirs?: string;
+  base?: string;
+  /** Whether Take theirs can be written as a value; a structural clash, or one whose place has gone, can't. */
+  settable: boolean;
+  /** What the merge's `.storyletconflict` sidecar adds, when it has anything. */
+  detail?: string;
+  /** Where Edit goes. */
+  goto?: ClashGoto;
+}
+
+/** A decision's answer: the fresh project, and the clashes left. */
+export type ClashesAnswer = { result: OpenResult; clashes: ClashDto[] } | { error: string };
 
 /** A box's Card template defaults for its cards' dealing rules, as typed:
  *  blank (or absent) is the engine's own default. */
@@ -1839,6 +1870,8 @@ export type MenuCommand =
   | { cmd: "export-pack" }
   | { cmd: "share-scopes" }
   | { cmd: "merge-pack" }
+  // File ▸ Resolve Clashes…: the clashes a merge left (step 6, Q21).
+  | { cmd: "resolve-clashes" }
   // The pack exchange (File ▸ Connect to a server…, and the Server menu that
   // appears once a project has come from one).
   | { cmd: "connect-server" }
@@ -2036,6 +2069,13 @@ export interface StudioApi {
    *  still the newest. `stale` when anything has been done since, and nothing
    *  changes. */
   undoStep(id: number): Promise<OpenResult | { error: string } | { stale: true }>;
+  /** Every clash a merge left in the project's shards, worded for the resolver. Empty with none, or no project. */
+  listClashes(): Promise<ClashDto[]>;
+  /** Keep mine ("ours") or Take theirs ("theirs") for one clash, as one undoable step; the sidecar goes with the
+   *  shard's last clash. Answers the fresh project and the clashes left. */
+  resolveClash(id: string, side: "ours" | "theirs"): Promise<ClashesAnswer>;
+  /** Mark resolved, after Edit: what's there now stands. One undoable step. */
+  markClashResolved(id: string): Promise<ClashesAnswer>;
   /** Editor window only: another window's toast (Find's Replace) asks for
    *  `undoStep`; the editor owns the page it redraws, so it runs it and says
    *  how it went. */
@@ -2704,6 +2744,9 @@ export const INVOKE_CHANNELS = {
   "edit:undo": "undo",
   "edit:redo": "redo",
   "edit:undoStep": "undoStep",
+  "clashes:list": "listClashes",
+  "clashes:resolve": "resolveClash",
+  "clashes:markResolved": "markClashResolved",
   "search:undoStep": "searchUndoStep",
   "table:open": "openTable",
   "board:setPin": "setBoardPinned",

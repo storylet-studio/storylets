@@ -44,6 +44,7 @@ import "@wildwinter/app-shell/vc.css";
 import "@wildwinter/app-shell/identity.css";
 import "@wildwinter/app-shell/notes-editor.css";
 import "@wildwinter/app-shell/comments.css";
+import "@wildwinter/app-shell/clashes.css"; // the clash resolver and its banner (step 6, Q21)
 import "@wildwinter/app-shell/toast.css";
 import "@wildwinter/app-shell/updater.css"; // the updater's prompt and its "Restart to update" chip
 import "@wildwinter/app-shell/command-palette.css"; // Cmd+K (openCommandPalette)
@@ -100,6 +101,7 @@ import { createDeckCanvas } from "./deck-canvas.js";
 import { createExchange } from "./exchange.js";
 import { createActions } from "./actions.js";
 import { createCommands } from "./commands.js";
+import { createClashes } from "./clashes.js";
 import { createLifecycle } from "./lifecycle.js";
 import { toastWithUndo } from "./undo-toast.js";
 import type { Session } from "./session.js";
@@ -341,8 +343,19 @@ const exchange = createExchange({
   reportWithUndo: (message, step, kind) => reportWithUndo(message, step, kind),
 });
 
+// The clashes a merge left: File > Resolve Clashes…, and the banner at the top of the workspace (step 6, Q21).
+const clashes = createClashes({
+  studio,
+  open: () => session.project !== undefined,
+  flushSaves: saves.flush,
+  // The open page redraws from the fresh project, as after a merge: a decision may have changed what it shows.
+  applied: (r) => { const landed = applied(r); if (landed) renderWorkspace(); return landed; },
+  refreshProject: () => refreshProject(),
+  goTo: (at) => { if (at.kind === "project") actions.focus({ kind: "project" }); else nav.goTo(at); },
+});
+
 const commands = createCommands({
-  session, nav, saves, comments, exchange,
+  session, nav, saves, comments, exchange, clashes,
   actions: () => actions,
   shell: () => shell,
   render: () => renderWorkspace(),
@@ -455,6 +468,8 @@ function applyResult(result: OpenResult): void {
   // through here.
   setPlayRung(result.project.play);
   problems.take(result.problems);
+  // The clashes a merge left, counted on every result: the banner shows or hides with it.
+  clashes.take(result);
   views.changed("all");
 }
 
@@ -579,7 +594,8 @@ function mountShell(): void {
   // The walk's bar above the problems bar: a mode you entered outranks an
   // ambient one, and the pair keeps a stable order however they come and go.
   // And at the very foot, the status row (status-row.ts), with Live Link at its end.
-  workspace.append(shell.root, exchange.jobStrip, comments.reviewbar, problems.bar, statusRow);
+  // The clash banner first, at the very top: a merge left something to settle before the project validates.
+  workspace.append(clashes.banner, shell.root, exchange.jobStrip, comments.reviewbar, problems.bar, statusRow);
   app.replaceChildren(welcomeHost, workspace);
 }
 

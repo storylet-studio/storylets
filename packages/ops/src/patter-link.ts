@@ -31,7 +31,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { parseSource } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
-import { effectiveGameId, gameIdify, isValidGameId } from "@storylet-studio/model";
+import { effectiveGameId } from "@storylet-studio/model";
+import { gameIdify, isValidGameId } from "@wildwinter/toolkit";
 import type { Card } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 import { optionsOf, outcomesReported, resolveSceneRef, sceneAddressIndex } from "@storylet-studio/with-patter";
@@ -86,7 +87,9 @@ export interface PatterLink {
 
 const posix = (path: string): string => path.split("\\").join("/");
 
-/** A scene's address, as Patter's runtime resolves it. */
+/** A scene's address, as Patter's runtime resolves it: Patter's `effectiveGameId` (a pinned gameId, trimmed,
+ *  else the name's slug), over the family's one `gameIdify`. Storylets' own `effectiveGameId` differs on
+ *  purpose (it derives from a title and falls back to the id), so it isn't used here. */
 const sceneAddress = (scene: PatterSceneShape): string => scene.gameId?.trim() || gameIdify(scene.name);
 
 /**

@@ -5,7 +5,8 @@
 // ---------------------------------------------------------------------------
 
 import { shell } from "electron";
-import { currentUserAsync } from "@wildwinter/simple-vc-lib";
+import { homedir } from "node:os";
+import { GitProvider, currentUserAsync } from "@wildwinter/simple-vc-lib";
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 import { push } from "./push.js";
@@ -16,6 +17,21 @@ const ABOUT_LINKS = new Set(["https://storylets.dev", "https://ian.wildwinter.ne
 export interface StateIpcDeps extends Pick<MainContext, "session" | "editor" | "store" | "windows" | "menu"> {
   /** The editor's page has a deck in focus, or not; true when that changed. */
   setDeckFocused(on: boolean): boolean;
+}
+
+/**
+ * What the VCS thinks the author is called, to OFFER in the comment-name box (simple-vc-lib's currentUser, and
+ * the vc-current-user brief). With a project open it asks THAT working copy, since git's user.name is
+ * per-repository as often as not. With none open, which is when the box first asks, it asks git from the home
+ * folder, where git reads the machine's own (global) user.name: asking from the app's own folder found no
+ * version control there and came back empty (Patter's hands-on step 6, Q20). Undefined when nothing can say,
+ * which the dialog treats as "ask with an empty box".
+ */
+export async function offeredIdentity(dir: string | undefined): Promise<string | undefined> {
+  try {
+    if (dir !== undefined) return await currentUserAsync(dir);
+    return await new GitProvider().currentUserAsync(homedir());
+  } catch { return undefined; }   // a suggestion is never worth failing a dialog over
 }
 
 export function registerState(ipc: Ipc, deps: StateIpcDeps): void {
@@ -64,16 +80,8 @@ export function registerState(ipc: Ipc, deps: StateIpcDeps): void {
   });
 
   ipc.handle("identity:get", () => store().get().identity);
-  // What the VCS thinks the author is called, to OFFER when nothing is stored
-  // (simple-vc-lib 0.4.1's currentUser, and the vc-current-user brief). Keyed to
-  // the open project so it reads THAT working copy - git's user.name is
-  // per-repository as often as not - and undefined when nothing is open or the
-  // VCS cannot say, which the dialog treats as "ask with an empty box".
-  ipc.handle("identity:offer", async (): Promise<string | undefined> => {
-    const dir = deps.session()?.loaded.dir;
-    if (dir === undefined) return undefined;
-    try { return await currentUserAsync(dir); } catch { return undefined; }
-  });
+  // What the VCS thinks the author is called, to OFFER when nothing is stored (`offeredIdentity`).
+  ipc.handle("identity:offer", (): Promise<string | undefined> => offeredIdentity(deps.session()?.loaded.dir));
   ipc.handle("identity:set", (_event, identity) => {
     store().setIdentity(identity);
   });

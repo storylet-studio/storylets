@@ -18,8 +18,9 @@ This section is a full tour of the editor. If you only read one other page, make
 
 ## First run
 
-The first time you launch, Storyletter asks once for your **name**. That's all. Your name
-signs your review comments, and you can skip the prompt. Change it at any time from
+The first time you launch, Storyletter asks once for your **name**, filled in with the
+`user.name` git has for you, if it has one. That's all. Your name signs your review
+comments, and you can skip the prompt. Change it at any time from
 **User Information…** (in the Storyletter app menu on macOS, or the File menu on Windows
 and Linux).
 
@@ -106,6 +107,28 @@ says so before anything is written.
 See [the send envelope](/format/overview/#the-send-envelope-storyletpack) for what travels
 and what doesn't.
 
+### Resolving clashes
+
+Most of a merge combines on its own: different cards, or different fields of the same card,
+all survive. Where you and the other person changed the same thing differently, the merge
+keeps your side and records the clash in the file. A pull from a server does the same. Until
+each clash is settled, the project won't validate, and a bar across the top of the window
+says how many there are.
+
+Click **Resolve…** on that bar, or choose **File ▸ Resolve Clashes…**, to go through them.
+Each clash says where it is in words ("Card 'Tavern Brawl' in Opening deck: priority",
+"@story.trust's default"), what kind of clash it is, and both sides. For each one, choose:
+
+- **Keep mine** keeps what's there now, your side.
+- **Take theirs** writes their side in its place.
+- **Edit** takes you to the card, deck, box or setting, so you can combine the two by hand.
+  Open the resolver again and that clash offers **Mark resolved**, which keeps what you've
+  written.
+
+A clash that isn't a single value, such as a structural one, offers Keep mine and Edit only.
+Every decision is one step you can undo. When a file's last clash is settled, the
+`.storyletconflict` record the merge left beside it goes too.
+
 ## Publishing
 
 Everything under the **Publish** menu turns your project into something you hand to others.
@@ -182,11 +205,7 @@ the Board watches what it deals and plays.
 
 ## Not yet in the editor
 
-Two things you might go looking for aren't there yet.
-
-There's no merge conflict view. Conflicts land as a `.storyletconflict` sidecar and
-`validate` refuses to ignore them, but reading one and picking sides is a command-line and
-text-editor job today.
+One thing you might go looking for isn't there yet.
 
 There's no writing status. Comments and the review walk exist, but there's no per-card
 "draft / needs review / final" state to filter or report on.

@@ -22,7 +22,7 @@ Shortcuts are shown for macOS (`Cmd`). On Windows and Linux, use Ctrl wherever y
 | `Cmd+D` | Duplicate the selection |
 | `Cmd+F` | Find, across the project |
 | `Cmd+Alt+F` (`Ctrl+H` on Windows and Linux) | Replace text across the project: the Find window's Replace tab |
-| `Cmd+P` | The Board |
+| `Cmd+P` | Play on the Board |
 | `Shift+Cmd+R` | Review Feedback (toggle the [review walk](/storyletter/reviewing/)) |
 | `F8` / `Shift+F8` | Next / Previous Feedback |
 | `Shift+Cmd+C` | Coverage Test |

@@ -53,7 +53,7 @@ const everyItem = (items: MenuItemConstructorOptions[]): MenuItemConstructorOpti
 describe("the Board's key (ruling O)", () => {
   it("is Cmd+P, as Play Scene is in Patterpad, and nothing else uses it", async () => {
     const menu = await menuOn("darwin");
-    expect(item(submenu(menu, "Play"), "The Board")?.accelerator).toBe("CmdOrCtrl+P");
+    expect(item(submenu(menu, "Play"), "Play on the Board")?.accelerator).toBe("CmdOrCtrl+P");
     const onP = everyItem(menu).filter((i) => i.accelerator === "CmdOrCtrl+P");
     expect(onP).toHaveLength(1);
   });
@@ -121,7 +121,7 @@ describe("View (item 24)", () => {
 });
 
 describe("items that need a project (item 24)", () => {
-  const needing = ["Close Project", "Share Scopes with Other Tools…", "New Card", "Save", "The Board",
+  const needing = ["Close Project", "Share Scopes with Other Tools…", "New Card", "Save", "Play on the Board",
     "Publish Playable HTML…", "Publish Spreadsheet…", "Publish Bundle", "Export as Storyletpack…",
     "Merge Returned Storyletpack…",
     // and the rest of the one rule (the Patterpad review, 2026-10-07)
@@ -146,6 +146,18 @@ describe("items that need a project (item 24)", () => {
   it("New Card waits for a deck to be in focus", async () => {
     const file = submenu(await menuOn("darwin", { open: true, deckFocused: false }), "File");
     expect(item(file, "New Card")?.enabled).toBe(false);
+  });
+});
+
+describe("Resolve Clashes… (step 6, Q21)", () => {
+  it("sits under Merge Returned Storyletpack…, enabled only while a merge has left clashes", async () => {
+    const menuWith = (clashes: number, open = true): Promise<MenuItemConstructorOptions[]> =>
+      menuOn("darwin", { open, deckFocused: false, clashes } as { open: boolean; deckFocused: boolean });
+    const file = shape(submenu(await menuWith(2), "File"));
+    expect(file[file.indexOf("Merge Returned Storyletpack\u2026") + 1]).toBe("Resolve Clashes\u2026");
+    expect(item(submenu(await menuWith(2), "File"), "Resolve Clashes\u2026")?.enabled).toBe(true);
+    expect(item(submenu(await menuWith(0), "File"), "Resolve Clashes\u2026")?.enabled).toBe(false);
+    expect(item(submenu(await menuWith(2, false), "File"), "Resolve Clashes\u2026")?.enabled).toBe(false);
   });
 });
 

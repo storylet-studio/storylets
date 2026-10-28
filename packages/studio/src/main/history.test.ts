@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openProject } from "./project.js";
 import { createCard, createDeck, deleteCard, deleteDeck, redo, renameDeck, saveCard, undo, undoStep } from "./mutate.js";
-import { StepHistory, UNDO_LIMIT } from "./history.js";
+import { StepHistory, UNDO_LIMIT, setHistoryListener } from "./history.js";
 import type { ProjectSession } from "./project.js";
 
 const exampleDir = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
@@ -181,5 +181,27 @@ describe("undoing one step by its id", () => {
     }
     expect(steps).toBe(UNDO_LIMIT);
     expect(history.newest).toBeUndefined();
+  });
+});
+
+// The history says when what Undo and Redo would take may have changed, so the menu can name the step
+// (Patter's hands-on step 6, Q20).
+describe("the history's change listener", () => {
+  it("hears a step recorded, undone and redone, with the labels the menu would show", async () => {
+    const session = scratchProject();
+    const heard: Array<[string | undefined, string | undefined]> = [];
+    setHistoryListener(() => heard.push([session.history.undoLabel, session.history.redoLabel]));
+    try {
+      await renameDeck(session, docks, { title: "Quayside" });
+      expect(heard.at(-1)).toEqual(["Rename deck", undefined]);
+      await undo(session);
+      expect(heard.at(-1)).toEqual([undefined, "Rename deck"]);
+      await redo(session);
+      expect(heard.at(-1)).toEqual(["Rename deck", undefined]);
+      session.history.reset();
+      expect(heard.at(-1)).toEqual([undefined, undefined]);
+    } finally {
+      setHistoryListener(undefined);
+    }
   });
 });

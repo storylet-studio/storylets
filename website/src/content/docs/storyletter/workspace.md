@@ -193,9 +193,9 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 | Menu | Items |
 |---|---|
 | Storyletter (macOS only) | About Storyletter, User Information… |
-| File | New Project… (`Cmd+N`), Open Project… (`Cmd+O`), Open Storyletpack…, Open Recent, Close Project, Save (`Cmd+S`), Export as Storyletpack…, Merge Returned Storyletpack…, Connect to a Server…, New Card (`Shift+Cmd+N`), Project Settings… (`Cmd+,`), Share Scopes with Other Tools…, User Information… (Windows and Linux), Exit (Windows) or Quit (Linux) |
+| File | New Project… (`Cmd+N`), Open Project… (`Cmd+O`), Open Storyletpack…, Open Recent, Close Project, Save (`Cmd+S`), Export as Storyletpack…, Merge Returned Storyletpack…, Resolve Clashes… (while a merge has left clashes), Connect to a Server…, New Card (`Shift+Cmd+N`), Project Settings… (`Cmd+,`), Share Scopes with Other Tools…, User Information… (Windows and Linux), Exit (Windows) or Quit (Linux) |
 | Edit | Undo (`Cmd+Z`), Redo (`Shift+Cmd+Z`), Cut, Copy, Paste, Select All, Duplicate (`Cmd+D`), Show Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)), Find… (`Cmd+F`), Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
-| Play | The Board (`Cmd+P`), Live Link |
+| Play | Play on the Board (`Cmd+P`), Live Link |
 | Review | Review Feedback (`Shift+Cmd+R`), Next Feedback (`F8`), Previous Feedback (`Shift+F8`), Coverage Test… (`Shift+Cmd+C`), Links…, Find Property Usage…, Find by Field…, Show Resolved Comments |
 | Publish | Publish Playable HTML…, Publish Spreadsheet…, Publish Bundle (`Shift+Cmd+B`), Auto Rebuild |
 | View | Command Palette… (`Cmd+K`), Project Overview, Up a Level (`Cmd+[`), Back, Forward, Show Navigator (`Cmd+1`), Reset View, Coverage Overlay, Colour Theme, Actual Size, Zoom In, Zoom Out, Toggle Full Screen (Windows and Linux; macOS adds its own) |
@@ -203,7 +203,8 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 | Help | Open an Example ▸ (The Hamlet…, The Village…, Port Meridian…, The Hamlet (Patter Version)…), Storyletter Documentation, Storylet Studio Documentation Home, Check for Updates…, About Storyletter (Windows and Linux) |
 
 A few of these deserve a note. **Undo** and **Redo** reverse any edit to any kind of item,
-through the same version-control path a save takes, not just the text field you're in.
+through the same version-control path a save takes, not just the text field you're in. Each
+names the step it takes, such as **Undo Rename deck**.
 **Connect to a Server…** asks for an address and a code.
 
 **Publish Playable HTML…** writes one self-contained `.html` file that plays the project

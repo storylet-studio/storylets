@@ -203,7 +203,7 @@ export function createProjectSettings(
         // declarations say what the game owns, the drivers say what the test harness should
         // feed them (Patterpad's World Properties tab). The id stays "world", which every
         // surface that lands an author here already names.
-        { id: "world", label: "Game scopes", group: "State", mount: (h) => mountHostScopes(h, data!, {
+        { id: "world", label: "Game scopes", group: "Story data", mount: (h) => mountHostScopes(h, data!, {
           // A stage or property renamed here waits for Save with the rest of the dialog, and is
           // carried first, in order, so the save that follows finds it done.
           renameStage: (target, from, to) => { worldRenames.push({ target, from, to }); },

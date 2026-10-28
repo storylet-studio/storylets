@@ -7,7 +7,7 @@
 
 import { plannedColours } from "./box-colours.js";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { boxColourOf, contractNotes, deckColourOf, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
+import { boxColourOf, contractNotes, countClashes, deckColourOf, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { planProject } from "@patterkit/core";
 import { planCardScene } from "./patter-scene.js";
@@ -663,7 +663,10 @@ export function openResult(session: ProjectSession, problems: Problem[]): OpenRe
   // count - changes on the same beat as the project does. It is one small file
   // read beside a re-validate, and nothing at all for a project with no server.
   const remote = remoteDto(session.loaded.dir);
-  return { project: session.dto, problems, ...(remote !== undefined ? { remote } : {}) };
+  // The clashes a merge left (step 6, Q21), counted on every result so the banner is never a beat behind: after
+  // an open, a merge, a pull, an undo or a decision in the resolver alike.
+  const clashes = countClashes(session.loaded.files);
+  return { project: session.dto, problems, ...(remote !== undefined ? { remote } : {}), ...(clashes > 0 ? { clashes } : {}) };
 }
 
 /** The open project's remote, as the renderer is told it. Never the key. */
