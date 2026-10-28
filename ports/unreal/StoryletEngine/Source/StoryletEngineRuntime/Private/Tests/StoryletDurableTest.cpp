@@ -6,8 +6,8 @@
 // installation's memory) and a flow's half (the player's pocket), each a JSON
 // string as a parked flow is. The clang TestHost runs the corpus's durable
 // cases through the core's string pair; this is the UE-boundary half it cannot
-// reach: SaveDurableToJson on the engine and on a flow, LoadDurableFromJson and
-// OpenFlowWithDurableJson with their reports, and every refusal logged and
+// reach: SaveDurableToJson on the engine and on a flow, LoadDurable and
+// OpenFlowWithDurable with their reports, and every refusal logged and
 // answered with an empty result, never an exception.
 
 #include "Misc/AutomationTest.h"
@@ -102,19 +102,19 @@ bool FStoryletDurableTest::RunTest(const FString& Parameters)
 	// --- a new run: the memory in, then alice's pocket ---------------------------------
 	UStoryletEngine* Next = UStoryletEngine::Create(Bundle, {});
 	if (!TestNotNull(TEXT("next engine"), Next)) return false;
-	FString MemoryReport;
-	TestTrue(TEXT("the memory loads"), Next->LoadDurableFromJson(Memory, MemoryReport));
-	TestTrue(TEXT("its report is exact"), MemoryReport.Contains(TEXT("\"exact\": true")));
-	TestTrue(TEXT("and restores no flow"), MemoryReport.Contains(TEXT("\"flows\": []")));
+	FStoryletLoadReport MemoryReport;
+	TestTrue(TEXT("the memory loads"), Next->LoadDurable(Memory, MemoryReport));
+	TestTrue(TEXT("its report is exact"), MemoryReport.bExact);
+	TestEqual(TEXT("and restores no flow"), MemoryReport.Flows.Num(), 0);
 	TestEqual(TEXT("souls came across"), Next->GetPropertyNumber(TEXT("story.souls")), 3.0);
 	TestEqual(TEXT("gold did not"), Next->GetPropertyNumber(TEXT("story.gold")), 0.0);
 	TestEqual(TEXT("a new run has no flows"), Next->Flows().Num(), 0);
 
-	FString PocketReport;
-	UStoryletFlow* Back = Next->OpenFlowWithDurableJson(TEXT("alice"), Pocket, PocketReport);
+	FStoryletLoadReport PocketReport;
+	UStoryletFlow* Back = Next->OpenFlowWithDurable(TEXT("alice"), Pocket, PocketReport);
 	if (!TestNotNull(TEXT("alice opens with her pocket"), Back)) return false;
-	TestTrue(TEXT("the pocket's report is exact"), PocketReport.Contains(TEXT("\"exact\": true")));
-	TestTrue(TEXT("and names her flow"), PocketReport.Contains(TEXT("\"flows\": [\"alice\"]")));
+	TestTrue(TEXT("the pocket's report is exact"), PocketReport.bExact);
+	TestEqual(TEXT("and names her flow"), FString::Join(PocketReport.Flows, TEXT(",")), FString(TEXT("alice")));
 	TestEqual(TEXT("visits came across"), Back->GetPropertyNumber(TEXT("story.visits")), 2.0);
 	TestEqual(TEXT("a value the story may not write still goes back"), Back->GetPropertyNumber(TEXT("story.seal")), 9.0);
 	TestEqual(TEXT("her spend is still spent, and the relic for everyone"), Back->Deal(TEXT("q")).Num(), 0);
@@ -131,12 +131,12 @@ bool FStoryletDurableTest::RunTest(const FString& Parameters)
 		UStoryletEngine* Seeded = UStoryletEngine::Create(Bundle, {});
 		UStoryletEngine* ByEngine = UStoryletEngine::CreateWithOptions(Bundle, FStoryletEngineOptions{ 7, false }, {});
 		if (!TestNotNull(TEXT("engines"), Seeded) || !TestNotNull(TEXT("seeded engine"), ByEngine)) return false;
-		FString SeededReport;
-		UStoryletFlow* SeededFlow = Seeded->OpenFlowWithDurableJsonSeeded(TEXT("alice"), Pocket, 7, SeededReport);
-		FString ByEngineReport;
-		ByEngine->OpenFlowWithDurableJson(TEXT("alice"), Pocket, ByEngineReport);
+		FStoryletLoadReport SeededReport;
+		UStoryletFlow* SeededFlow = Seeded->OpenFlowWithDurableSeeded(TEXT("alice"), Pocket, 7, SeededReport);
+		FStoryletLoadReport ByEngineReport;
+		ByEngine->OpenFlowWithDurable(TEXT("alice"), Pocket, ByEngineReport);
 		if (!TestNotNull(TEXT("the seeded durable open opens"), SeededFlow)) return false;
-		TestTrue(TEXT("with the pocket's report"), SeededReport.Contains(TEXT("\"exact\": true")));
+		TestTrue(TEXT("with the pocket's report"), SeededReport.bExact);
 		TestEqual(TEXT("the pocket is in"), SeededFlow->GetPropertyNumber(TEXT("story.visits")), 2.0);
 		TestEqual(TEXT("a pocket opened on seed 7 starts where an engine seeded 7 starts"),
 			Seeded->SaveFlowToJson(TEXT("alice")), ByEngine->SaveFlowToJson(TEXT("alice")));
@@ -148,37 +148,41 @@ bool FStoryletDurableTest::RunTest(const FString& Parameters)
 	{
 		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("fresh engine"), Fresh)) return false;
-		FString NullReport;
+		FStoryletLoadReport NullReport;
 		TestTrue(TEXT("a memory holding a null loads"),
-			Fresh->LoadDurableFromJson(Memory.Replace(TEXT("\"story.souls\": 3"), TEXT("\"story.souls\": null")), NullReport));
-		TestTrue(TEXT("and reports the null as retyped"),
-			NullReport.Contains(TEXT("\"retypedProperties\": [{ \"path\": \"story.souls\" }]")));
+			Fresh->LoadDurable(Memory.Replace(TEXT("\"story.souls\": 3"), TEXT("\"story.souls\": null")), NullReport));
+		TestTrue(TEXT("and reports the null as retyped, in the shared half"),
+			NullReport.RetypedProperties.Num() == 1
+			&& NullReport.RetypedProperties[0].Path == TEXT("story.souls")
+			&& NullReport.RetypedProperties[0].Flow.IsEmpty());
 		TestEqual(TEXT("souls keeps its default"), Fresh->GetPropertyNumber(TEXT("story.souls")), 0.0);
 	}
 
 	// --- refusals: logged, an empty answer, and nothing moved ----------------------------
 	const FString Foreign = Memory.Replace(TEXT("\"proj_durable\""), TEXT("\"other\""));
-	AddExpectedError(TEXT("LoadDurableFromJson - durable state is for project \"other\", bundle is \"proj_durable\""),
+	AddExpectedError(TEXT("LoadDurable - durable state is for project \"other\", bundle is \"proj_durable\""),
 		EAutomationExpectedErrorFlags::Contains, 1);
-	FString ForeignReport = TEXT("stale");
-	TestFalse(TEXT("another project's memory is refused"), Next->LoadDurableFromJson(Foreign, ForeignReport));
-	TestTrue(TEXT("with an empty report"), ForeignReport.IsEmpty());
+	FStoryletLoadReport ForeignReport;
+	ForeignReport.Project = TEXT("stale");
+	TestFalse(TEXT("another project's memory is refused"), Next->LoadDurable(Foreign, ForeignReport));
+	TestTrue(TEXT("with a default report"), ForeignReport.Project.IsEmpty() && ForeignReport.bExact);
 
 	const FString Unknown = Memory.Replace(TEXT("storylets/durable@1"), TEXT("storylets/durable@9"));
-	AddExpectedError(TEXT("LoadDurableFromJson - unsupported durable schema: storylets/durable@9"),
+	AddExpectedError(TEXT("LoadDurable - unsupported durable schema: storylets/durable@9"),
 		EAutomationExpectedErrorFlags::Contains, 1);
-	TestFalse(TEXT("an unknown schema is refused"), Next->LoadDurableFromJson(Unknown, ForeignReport));
+	TestFalse(TEXT("an unknown schema is refused"), Next->LoadDurable(Unknown, ForeignReport));
 
-	AddExpectedError(TEXT("LoadDurableFromJson - JSON parse error"), EAutomationExpectedErrorFlags::Contains, 1);
-	TestFalse(TEXT("malformed JSON is refused"), Next->LoadDurableFromJson(TEXT("{ not json"), ForeignReport));
+	AddExpectedError(TEXT("LoadDurable - JSON parse error"), EAutomationExpectedErrorFlags::Contains, 1);
+	TestFalse(TEXT("malformed JSON is refused"), Next->LoadDurable(TEXT("{ not json"), ForeignReport));
 	TestEqual(TEXT("and the refusals moved nothing"), Next->SaveDurableToJson(), Memory);
 
-	AddExpectedError(TEXT("OpenFlowWithDurableJson - durable state is for project \"other\""),
+	AddExpectedError(TEXT("OpenFlowWithDurable - durable state is for project \"other\""),
 		EAutomationExpectedErrorFlags::Contains, 1);
 	const FString ForeignPocket = Pocket.Replace(TEXT("\"proj_durable\""), TEXT("\"other\""));
-	FString RefusedReport = TEXT("stale");
-	TestNull(TEXT("another project's pocket is refused"), Next->OpenFlowWithDurableJson(TEXT("alice"), ForeignPocket, RefusedReport));
-	TestTrue(TEXT("with an empty report"), RefusedReport.IsEmpty());
+	FStoryletLoadReport RefusedReport;
+	RefusedReport.Project = TEXT("stale");
+	TestNull(TEXT("another project's pocket is refused"), Next->OpenFlowWithDurable(TEXT("alice"), ForeignPocket, RefusedReport));
+	TestTrue(TEXT("with a default report"), RefusedReport.Project.IsEmpty());
 	TestFalse(TEXT("and the flow open under that name stays open"), Back->IsClosed());
 	TestEqual(TEXT("as it was"), Back->GetPropertyNumber(TEXT("story.visits")), 2.0);
 

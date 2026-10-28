@@ -336,6 +336,26 @@ UStoryletEngine* UStoryletEngine::CreateOn(UStoryletBundle* Bundle, std::shared_
 			}
 			Self->OnError.Broadcast(Out);
 		};
+		// A saved value a refitting load put back: the Blueprint event, or with
+		// nothing bound a Warning in the log, so a drifted save is never silent.
+		// One claimed while the core is being built comes before a game can bind
+		// OnRefit: it is logged, as Patterplay's is.
+		Opts.onRefit = [Weak](const std::vector<storylets::LoadMisfit>& Misfits)
+		{
+			UStoryletEngine* Self = Weak.Get();
+			for (const storylets::LoadMisfit& M : Misfits)
+			{
+				if (Self && !Self->bBuilding && Self->OnRefit.IsBound())
+				{
+					Self->OnRefit.Broadcast(Ue(M.scope), Ue(M.name), StoryletValueToUe(M.value));
+				}
+				else
+				{
+					UE_LOG(LogStoryletEngine, Warning, TEXT("Storylet Engine: the save's %s.%s was %s, which no longer fits its declaration; it is back at its default"),
+						*Ue(M.scope), *Ue(M.name), *Ue(M.value.toJsonString()));
+				}
+			}
+		};
 		TPimplPtr<FStoryletEngineImpl> Impl = MakePimpl<FStoryletEngineImpl>();
 		Impl->Bundle = Bundle->GetCompiled()->Bundle;
 		E->bBuilding = true;
@@ -397,7 +417,14 @@ bool UStoryletFlow::RefuseClosed(const TCHAR* Verb, bool bRead) const
 bool UStoryletFlow::RefuseClosedCall(const TCHAR* Verb) const
 {
 	LastError.Reset();
-	if (!IsClosed()) return false;
+	if (!IsClosed())
+	{
+		// Every flow verb passes here first, so this is where the engine's
+		// OnTrace is noticed: a dynamic delegate says nothing when it is bound
+		// or unbound, so the trace is switched on or off as the next verb starts.
+		if (Owner) Owner->SyncCoreTraceHook();
+		return false;
+	}
 	LastError = ClosedMessage();
 	LogRefusal(Verb, LastError, false);
 	return true;
@@ -492,16 +519,43 @@ FString UStoryletEngine::SaveFlowToJson(const FString& FlowId) const
 	});
 }
 
+namespace
+{
+	/** The report as the struct, for the struct forms. */
+	TFunction<void(const storylets::LoadReport&)> ReportInto(FStoryletLoadReport& Out)
+	{
+		Out = FStoryletLoadReport();
+		return [&Out](const storylets::LoadReport& Report) { Out = StoryletLoadReportToUe(Report); };
+	}
+
+	/** The report as JSON text, for the deprecated forms. */
+	TFunction<void(const storylets::LoadReport&)> ReportJsonInto(FString& Out)
+	{
+		Out.Reset();
+		return [&Out](const storylets::LoadReport& Report) { Out = Ue(storylets::reportToJson(Report)); };
+	}
+}
+
+UStoryletFlow* UStoryletEngine::OpenFlowRestoring(const FString& FlowId, const FString& Json, FStoryletLoadReport& OutReport)
+{
+	return OpenFlowRestoringWith(FlowId, Json, ReportInto(OutReport), TEXT("OpenFlowRestoring"));
+}
+
 UStoryletFlow* UStoryletEngine::OpenFlowFromJson(const FString& FlowId, const FString& Json, FString& OutReportJson)
 {
-	OutReportJson.Reset();
+	return OpenFlowRestoringWith(FlowId, Json, ReportJsonInto(OutReportJson), TEXT("OpenFlowFromJson"));
+}
+
+UStoryletFlow* UStoryletEngine::OpenFlowRestoringWith(const FString& FlowId, const FString& Json, const FReportSink& Sink,
+	const TCHAR* Verb)
+{
 	if (!IsValidEngine())
 	{
-		NoteRefusal(TEXT("OpenFlowFromJson"), InvalidEngine);
+		NoteRefusal(Verb, InvalidEngine);
 		return nullptr;
 	}
 	storylets::OpenFlowOptions Options;
-	const bool bParsed = Refusing(LastError, TEXT("OpenFlowFromJson"), false, [&]
+	const bool bParsed = Refusing(LastError, Verb, false, [&]
 	{
 		Options.restore = storylets::deserializeFlow(Std(Json));
 		return true;
@@ -509,24 +563,35 @@ UStoryletFlow* UStoryletEngine::OpenFlowFromJson(const FString& FlowId, const FS
 	if (!bParsed) return nullptr;
 	// The restore's report has nowhere else to go, since the call hands back
 	// the flow: the core passes it here as the restore lands.
-	Options.onRestoreReport = [&OutReportJson](const storylets::LoadReport& Report)
-	{
-		OutReportJson = Ue(storylets::reportToJson(Report));
-	};
-	return OpenFlowWith(FlowId, Options, TEXT("OpenFlowFromJson"));
+	Options.onRestoreReport = [&Sink](const storylets::LoadReport& Report) { Sink(Report); };
+	return OpenFlowWith(FlowId, Options, Verb);
+}
+
+bool UStoryletEngine::PreviewFlowRestore(const FString& FlowId, const FString& Json, FStoryletLoadReport& OutReport) const
+{
+	return PreviewFlowRestoreWith(FlowId, Json, ReportInto(OutReport), TEXT("PreviewFlowRestore"));
 }
 
 FString UStoryletEngine::PreviewFlowRestoreJson(const FString& FlowId, const FString& Json) const
 {
+	FString Out;
+	PreviewFlowRestoreWith(FlowId, Json, ReportJsonInto(Out), TEXT("PreviewFlowRestoreJson"));
+	return Out;
+}
+
+bool UStoryletEngine::PreviewFlowRestoreWith(const FString& FlowId, const FString& Json, const FReportSink& Sink,
+	const TCHAR* Verb) const
+{
 	if (!IsValidEngine())
 	{
-		NoteRefusal(TEXT("PreviewFlowRestoreJson"), InvalidEngine);
-		return FString();
+		NoteRefusal(Verb, InvalidEngine);
+		return false;
 	}
-	return Refusing(LastError, TEXT("PreviewFlowRestoreJson"), FString(), [&]
+	return Refusing(LastError, Verb, false, [&]
 	{
 		const storylets::FlowSave Saved = storylets::deserializeFlow(Std(Json));
-		return Ue(storylets::reportToJson(Impl->Engine->previewFlowRestore(Std(FlowId), Saved)));
+		Sink(Impl->Engine->previewFlowRestore(Std(FlowId), Saved));
+		return true;
 	});
 }
 
@@ -545,39 +610,58 @@ FString UStoryletEngine::SaveDurableToJson() const
 	});
 }
 
+bool UStoryletEngine::LoadDurable(const FString& Json, FStoryletLoadReport& OutReport)
+{
+	return LoadDurableWith(Json, ReportInto(OutReport), TEXT("LoadDurable"));
+}
+
 bool UStoryletEngine::LoadDurableFromJson(const FString& Json, FString& OutReportJson)
 {
-	OutReportJson.Reset();
+	return LoadDurableWith(Json, ReportJsonInto(OutReportJson), TEXT("LoadDurableFromJson"));
+}
+
+bool UStoryletEngine::LoadDurableWith(const FString& Json, const FReportSink& Sink, const TCHAR* Verb)
+{
 	if (!IsValidEngine())
 	{
-		NoteRefusal(TEXT("LoadDurableFromJson"), InvalidEngine);
+		NoteRefusal(Verb, InvalidEngine);
 		return false;
 	}
 	// The core refuses a malformed, foreign or unknown half before anything
 	// moves, so a false here leaves the engine as it was.
-	return Refusing(LastError, TEXT("LoadDurableFromJson"), false, [&]
+	return Refusing(LastError, Verb, false, [&]
 	{
 		const storylets::DurableSave Memory = storylets::deserializeDurable(Std(Json));
-		OutReportJson = Ue(storylets::reportToJson(Impl->Engine->loadDurable(Memory)));
+		Sink(Impl->Engine->loadDurable(Memory));
 		return true;
 	});
 }
 
+UStoryletFlow* UStoryletEngine::OpenFlowWithDurable(const FString& FlowId, const FString& Json, FStoryletLoadReport& OutReport)
+{
+	return OpenFlowDurableWith(FlowId, Json, TOptional<int32>(), ReportInto(OutReport), TEXT("OpenFlowWithDurable"));
+}
+
+UStoryletFlow* UStoryletEngine::OpenFlowWithDurableSeeded(const FString& FlowId, const FString& Json, int32 Seed,
+	FStoryletLoadReport& OutReport)
+{
+	return OpenFlowDurableWith(FlowId, Json, Seed, ReportInto(OutReport), TEXT("OpenFlowWithDurableSeeded"));
+}
+
 UStoryletFlow* UStoryletEngine::OpenFlowWithDurableJson(const FString& FlowId, const FString& Json, FString& OutReportJson)
 {
-	return OpenFlowWithDurable(FlowId, Json, TOptional<int32>(), OutReportJson, TEXT("OpenFlowWithDurableJson"));
+	return OpenFlowDurableWith(FlowId, Json, TOptional<int32>(), ReportJsonInto(OutReportJson), TEXT("OpenFlowWithDurableJson"));
 }
 
 UStoryletFlow* UStoryletEngine::OpenFlowWithDurableJsonSeeded(const FString& FlowId, const FString& Json, int32 Seed,
 	FString& OutReportJson)
 {
-	return OpenFlowWithDurable(FlowId, Json, Seed, OutReportJson, TEXT("OpenFlowWithDurableJsonSeeded"));
+	return OpenFlowDurableWith(FlowId, Json, Seed, ReportJsonInto(OutReportJson), TEXT("OpenFlowWithDurableJsonSeeded"));
 }
 
-UStoryletFlow* UStoryletEngine::OpenFlowWithDurable(const FString& FlowId, const FString& Json, TOptional<int32> Seed,
-	FString& OutReportJson, const TCHAR* Verb)
+UStoryletFlow* UStoryletEngine::OpenFlowDurableWith(const FString& FlowId, const FString& Json, TOptional<int32> Seed,
+	const FReportSink& Sink, const TCHAR* Verb)
 {
-	OutReportJson.Reset();
 	if (!IsValidEngine())
 	{
 		NoteRefusal(Verb, InvalidEngine);
@@ -591,13 +675,10 @@ UStoryletFlow* UStoryletEngine::OpenFlowWithDurable(const FString& FlowId, const
 		return true;
 	});
 	if (!bParsed) return nullptr;
-	// The pocket's report, handed over as it lands, as OpenFlowFromJson's is.
+	// The pocket's report, handed over as it lands, as OpenFlowRestoring's is.
 	// A refusal (an unknown schema, another project's pocket) comes before the
 	// name is touched, so the flow open under it stays as it was.
-	Options.onRestoreReport = [&OutReportJson](const storylets::LoadReport& Report)
-	{
-		OutReportJson = Ue(storylets::reportToJson(Report));
-	};
+	Options.onRestoreReport = [&Sink](const storylets::LoadReport& Report) { Sink(Report); };
 	return OpenFlowWith(FlowId, Options, Verb);
 }
 
@@ -1138,12 +1219,13 @@ void UStoryletEngine::UnsubscribeTrace(int32 Handle)
 	SyncCoreTraceHook();
 }
 
-/** One core subscription behind however many wrapper handlers there are, taken
- *  and dropped with the first and last of them, and re-taken after a swap. */
+/** One core subscription behind however many wrapper handlers there are, and
+ *  OnTrace: taken and dropped with the first and last of them, and re-taken
+ *  after a swap. The core does no trace work while nothing is subscribed. */
 void UStoryletEngine::SyncCoreTraceHook()
 {
 	if (!Impl.IsValid()) return;
-	const bool bWant = Impl->TraceHandlers.Num() > 0 && IsValidEngine();
+	const bool bWant = (Impl->TraceHandlers.Num() > 0 || OnTrace.IsBound()) && IsValidEngine();
 	if (bWant == static_cast<bool>(Impl->UnsubscribeCore)) return;
 	if (!bWant)
 	{
@@ -1162,6 +1244,16 @@ void UStoryletEngine::SyncCoreTraceHook()
 			TArray<TFunction<void(const FString&, const storylets::TraceEvent&)>> Handlers;
 			for (const auto& Pair : Self->Impl->TraceHandlers) Handlers.Add(Pair.Value);
 			for (const auto& H : Handlers) H(Id, Event);
+			// Only a bound event pays for the entry's conversion. The event
+			// carries its own turn where it has one; a live event has no Seq.
+			if (Self->OnTrace.IsBound())
+			{
+				const bool bTurned = Event.kind == storylets::TraceEvent::Kind::Play
+					|| Event.kind == storylets::TraceEvent::Kind::Turns
+					|| Event.kind == storylets::TraceEvent::Kind::Discard;
+				const std::optional<double> Turn = bTurned ? std::optional<double>(Event.turn) : std::nullopt;
+				Self->OnTrace.Broadcast(ConvertLogEntry(Event, 0, Turn, Id));
+			}
 		});
 }
 
@@ -1261,13 +1353,21 @@ FString UStoryletEngine::SetPropertyFlags(const FString& Path, const TArray<FStr
 
 bool UStoryletEngine::ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutError)
 {
-	FString Report;
-	return ApplyLiveBundleWithReport(NewBundle, OutError, Report);
+	return ApplyLiveBundleWith(NewBundle, OutError, FReportSink([](const storylets::LoadReport&) {}));
+}
+
+bool UStoryletEngine::ApplyLiveBundleWithLoadReport(UStoryletBundle* NewBundle, FString& OutError, FStoryletLoadReport& OutReport)
+{
+	return ApplyLiveBundleWith(NewBundle, OutError, ReportInto(OutReport));
 }
 
 bool UStoryletEngine::ApplyLiveBundleWithReport(UStoryletBundle* NewBundle, FString& OutError, FString& OutReportJson)
 {
-	OutReportJson.Reset();
+	return ApplyLiveBundleWith(NewBundle, OutError, ReportJsonInto(OutReportJson));
+}
+
+bool UStoryletEngine::ApplyLiveBundleWith(UStoryletBundle* NewBundle, FString& OutError, const FReportSink& Sink)
+{
 	LastError.Reset();
 	if (!IsValidEngine())
 	{
@@ -1315,7 +1415,7 @@ bool UStoryletEngine::ApplyLiveBundleWithReport(UStoryletBundle* NewBundle, FStr
 		// Patterplay precedent - a Blueprint variable holding a flow keeps
 		// working across a live refresh.
 		RebindFlowsAfterLoad();
-		OutReportJson = Ue(storylets::reportToJson(Swap.report));
+		Sink(Swap.report);
 		OutError.Reset();
 		return true;
 	}

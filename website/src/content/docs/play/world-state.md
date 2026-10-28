@@ -293,6 +293,11 @@ did. `loadGame` returns a report of everything it dropped, defaulted, or reset, 
 `openFlow(id, { restore })` do the same for one flow, for a playthrough that steps away and
 comes back.
 
+A game that loads its own registry can ask it to refit: a saved value that no longer fits its
+declaration, an enum value or a stage you've since deleted, goes back to its default rather than
+reaching a condition that can't hold it. Each engine tells you its share through its `onRefit`
+hook (`OnRefit`, `"on_refit"`), with what the save held; without one, it's a warning.
+
 **A host scope your game binds is deliberately not in the envelope.** It's your game's state
 (the engine only borrows it), so your game saves it, next to the envelope. A self-backed one is
 different: nobody else holds those values, so the engine's own registry stores them and they ride

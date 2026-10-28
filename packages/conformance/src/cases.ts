@@ -4133,6 +4133,29 @@ export const fixtures: Fixtures = {
         // newcomers follow.
         { op: "deal", expectBoard: { h_a: ["c_a", "c_b"], h_b: ["c_c", "c_f"] } },
       ] },
+
+    // --- Patter's path form (corpus 25; ruling 3, 2026-10-28) ---------------
+    //
+    // The game may write a property path as Patter does, with a leading `@`:
+    // `@story.gold` is `story.gold`, `@world.clock` is `world.clock`, and a bare
+    // `@gold` is the story's, as it is in an expression. Both forms read and
+    // write, on a flow and on the engine; the plain form is unchanged.
+
+    { name: "a property path takes Patter's leading @, and a bare @name is the story's",
+      story: [{ name: "gold", type: "number", default: 3 }],
+      world: [{ name: "clock", type: "number", default: 0 }],
+      cards: [{ id: "c_any" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "assertState", expect: { "@story.gold": 3, "@gold": 3, "story.gold": 3, "@world.clock": 0 } },
+        { op: "setPath", path: "@gold", value: 5 },
+        { op: "assertState", expect: { "story.gold": 5 } },
+        { op: "setPath", engine: true, path: "@world.clock", value: 2 },
+        { op: "assertEngineRead", path: "@world.clock", expect: 2 },
+        { op: "assertEngineRead", path: "world.clock", expect: 2 },
+        { op: "assertEngineRead", path: "@story.gold", expect: 5 },
+        { op: "assertEngineRead", path: "@@story.gold", expectError: true },
+      ] },
   ],
 
   // --- Family L - load ---------------------------------------------------------

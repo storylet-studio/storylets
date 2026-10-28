@@ -122,6 +122,8 @@ func _init(engine: StoryletEngine, flow_id: String, seed_value: int) -> void:
 	for kind in StoryletEngine.OWNED_KINDS:
 		for owner_id in stores[kind]:
 			_put(StoryletEngine.flow_key(flow_id, kind, owner_id), stores[kind][owner_id])
+	# A bag that claimed values a refitting load parked says what it put back.
+	engine.report_refits()
 	for box in engine._bundle["boxes"]:
 		_turn_counts[box["id"]] = 0.0
 		for hand in box["hands"]:
@@ -1971,6 +1973,7 @@ func get_property(path: String) -> Variant:
 	if _closed:
 		_refuse("get_property", _closed_message())
 		return null
+	path = StoryletEngine.property_path(path)
 	var parts := path.split(".")
 	var value = null
 	if parts.size() == 2 and _engine.is_host_scope(parts[0]):
@@ -2009,7 +2012,8 @@ func set_property(path: String, value) -> String:
 	return _last_error
 
 
-func _set_property(path: String, value) -> String:
+func _set_property(given: String, value) -> String:
+	var path := StoryletEngine.property_path(given)
 	if _closed:
 		var closed_msg := _closed_message()
 		_refuse("set_property", closed_msg)

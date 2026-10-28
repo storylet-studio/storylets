@@ -58,7 +58,10 @@ same cards. `bLog` keeps the event logs so the state panel, or a Blueprint polli
 `Log()`, can read them. There are two. `Flow->Log()` is that flow's own, and
 `Engine->GetRunLog()` is the run's: every flow's events in one order, each entry naming its
 `Flow`. The run log is the only place a story action in another flow moving shared state
-is visible.
+is visible. To hear each event as it happens instead, with the log on or off, bind the engine's
+`OnTrace`: it fires with an `FStoryletLogEntry` for every deal, peek, eviction, play, write,
+turn, discard and diagnostic in every flow, naming its `Flow`, as Patterplay's `OnTrace` does.
+The engine only traces while something is bound.
 
 Open as many flows as you have parallel plays. `OpenFlow` / `GetFlow` / `Flows` / `CloseFlow`
 are all Blueprint-callable, and re-opening a name replaces that flow with a fresh one. What
@@ -126,6 +129,13 @@ doesn't declare binds nothing the story reads, and is reported through `OnError`
 `setup`, naming the declared spelling when only the case differs. Since `OnError` can only be
 bound once `Create` has returned, that report is logged as a Warning at once and reaches
 `OnError` when you open the first flow. This is Patterplay's `Create`, parameter for parameter.
+
+`OnRefit` fires with each saved value a refitting load put back to its default because it no
+longer fits its declaration (an enum value, a stage or a flag deleted since the save): its
+`Scope`, its `Name`, and the value the save held. On your own registry (`CreateWithRegistry`),
+load it with refit and the engine passes on its share as a flow opens and as a save loads. With
+nothing bound, each is logged as a Warning. A value the registry already held when you made the
+engine is claimed before `OnRefit` can be bound, so that one is only logged.
 
 `SetReadOnly` is your policy. A story write to that name makes `Play` return false with
 `@world.x is the game's alone`. It is distinct from `writable: false` on the property's
@@ -200,7 +210,7 @@ game-wide scope directly, with no setting in either project: gate on `@patter.vi
 `@patter.gold` in an outcome, which writes it through your registry under Patter's rules. Only
 Patter's shared values are visible this way. If a project names `@patter` and no Patter engine
 is on the Storylet Engine's registry, it refuses the content before anything changes: `OpenFlow`
-returns null and `UStoryletSave::LoadStateFromJson` returns false, each logging `this content
+returns null and `UStoryletSave::DeserializeState` returns false, each logging `this content
 names @patter, which no engine on this registry registered: give every engine the game's one
 registry` as an error. So build every engine on the game's one registry before opening a flow or
 loading a save. If Patter's engine goes away mid-game, an outcome writing `@patter` fails naming
@@ -221,9 +231,9 @@ touch stays as it was.
 
 ## Save and load
 
-`UStoryletSave::SaveStateToJson(Engine)` and `LoadStateFromJson(Engine, Json)` are the
-`.storyletsave` string boundary, in the runtime module and Blueprint-callable (the shape of
-Patterplay's `UPatterSave`). The file carries the engine's envelope, `storylets/save@3`, with
+`UStoryletSave::SerializeState(Engine)` and `DeserializeState(Engine, Json)` are the
+`.storyletsave` string boundary, in the runtime module and Blueprint-callable (Patterplay's
+`UPatterSave`, name for name). The file carries the engine's envelope, `storylets/save@3`, with
 every live flow inside it, plus a bound `UStoryletWorld`'s values, and a load applies all of it,
 the world first, because the load checks every card it puts back in a hand against the world as
 it will be. A refused load leaves the world as it was. The
@@ -247,11 +257,11 @@ order:
 #include "Storylets/Save.h"
 
 const std::string RegistryText = storylets::saveRegistry(*Registry);   // every property, once
-const FString StoryletsText = UStoryletSave::SaveStateToJson(Engine);  // everything else
+const FString StoryletsText = UStoryletSave::SerializeState(Engine);   // everything else
 
 // Loading, into a freshly made registry and engine:
 storylets::loadRegistry(*Registry, RegistryText);
-UStoryletSave::LoadStateFromJson(Engine, StoryletsText);
+UStoryletSave::DeserializeState(Engine, StoryletsText);
 UStoryletFlow* Flow = Engine->GetFlow(TEXT("main"));
 ```
 
@@ -261,23 +271,25 @@ it. A flow you open fresh with `OpenFlow` never picks up a value a load left for
 
 A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word.
-`UStoryletSave::PreviewLoadFromJson(Engine, Json)` says what that would cost before you spend
-it, and changes nothing. It hands back a report as a JSON string (`exact`, `project`, the
-`version` / `hash` pairs, `flows`, `evicted`, `droppedCooldowns`, `droppedSpent`,
-`droppedProperties`, `defaultedProperties`, and `retypedProperties`), because no report struct crosses a Blueprint pin.
+`UStoryletSave::PreviewLoad(Engine, Json, Report)` says what that would cost before you spend
+it, and changes nothing. It fills an `FStoryletLoadReport` (`bExact`, `Project`, the
+`Version` / `Hash` pairs, `Flows`, `Evicted`, `DroppedCooldowns`, `DroppedSpent`,
+`DroppedProperties`, `DefaultedProperties` and `RetypedProperties`), and
+`DeserializeStateWithReport(Engine, Json, Report)` loads and hands back the same report for what
+the load did.
 
 To park one playthrough rather than the whole run, `SaveFlowToJson(Id)` on the engine takes
-that flow's state, its property values included, and `OpenFlowFromJson(Id, Json)` puts it
-back. `CloseFlow` in between is what releases the cards it was holding and takes its values out
-of the registry, and `PreviewFlowRestoreJson(Id, Json)` says what coming back would cost.
+that flow's state, its property values included, and `OpenFlowRestoring(Id, Json, Report)` puts
+it back. `CloseFlow` in between is what releases the cards it was holding and takes its values
+out of the registry, and `PreviewFlowRestore(Id, Json, Report)` says what coming back would cost.
 
 What outlives a run has a pair of its own. `SaveDurableToJson()` on the engine takes the
 installation's memory (the shared `durable` values and the durable one-shots that have been
 spent), and on a flow it takes that player's pocket. In the next run's fresh engine,
-`LoadDurableFromJson(Json, Report)` puts the memory back and
-`OpenFlowWithDurableJson(Id, Json, Report)` opens the player's flow with their pocket in
-(`OpenFlowWithDurableJsonSeeded` takes the flow's own seed as well). Both
-hand back the report as JSON, naming whatever no longer fits the build
+`LoadDurable(Json, Report)` puts the memory back and
+`OpenFlowWithDurable(Id, Json, Report)` opens the player's flow with their pocket in
+(`OpenFlowWithDurableSeeded` takes the flow's own seed as well). Both
+fill an `FStoryletLoadReport`, naming whatever no longer fits the build
 ([what carries and what the report lists](/play/world-state/#carrying-it-to-the-next-run)).
 From C++, `Engine::saveDurable()`, `Flow::saveDurable()`, `Engine::loadDurable()` and the
 `durable` open option take a `storylets::DurableSave`, and `storylets::serializeDurable` /
@@ -335,7 +347,13 @@ reference runtime. Everything else is the Unreal wrapper: `UStoryletBundle`, `US
 Blueprint structs, the factory, the bundle's Details panel, and the Runtime State panel. Exceptions from the core are caught
 at that boundary and surfaced as error strings and logs, so Blueprint never sees one.
 
-Some things stay C++ only: `SubscribeTrace` (Blueprint polls `Log()` instead), a generic value
+The names these calls had before 1.0 (`SaveStateToJson`, `LoadStateFromJson`,
+`LoadStateFromJsonWithReport`, `PreviewLoadFromJson`, `OpenFlowFromJson`,
+`PreviewFlowRestoreJson`, `LoadDurableFromJson`, `OpenFlowWithDurableJson` and its seeded form,
+and `ApplyLiveBundleWithReport`, the last six handing the report back as JSON text) still work,
+and are marked deprecated.
+
+Some things stay C++ only: `SubscribeTrace` (Blueprint binds `OnTrace` instead), a generic value
 on the flow and engine property calls (Blueprint uses the typed accessors above), the registry
 (`CreateWithRegistry` and `GetRegistry`), and the engine core itself (`GetCoreEngine()`,
 `GetCoreFlow()`, and the core's `listBags()`). Numbers cross the boundary as `double`.

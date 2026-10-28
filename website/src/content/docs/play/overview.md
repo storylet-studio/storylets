@@ -140,8 +140,9 @@ hand.the-inn.owner
 value.forest.peril
 ```
 
-`listProperties()` returns rows carrying these paths, and the in-engine examiners are built on
-those rows. The full list is on [Your game's state](/play/world-state/).
+Patter's form works too: a leading `@` is accepted, so `@world.gold` is `world.gold`, and a bare
+`@reputation` is the story's, as it is in an expression. `listProperties()` returns rows carrying
+the plain paths, and the in-engine examiners are built on those rows. The full list is on [Your game's state](/play/world-state/).
 
 ## Determinism
 

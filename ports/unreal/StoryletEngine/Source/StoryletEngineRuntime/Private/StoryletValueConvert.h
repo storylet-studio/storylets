@@ -134,3 +134,48 @@ inline TArray<FStoryletExtensionValues> StoryletExtensionsToUe(const storylets::
 	}
 	return Out;
 }
+
+/** A core LoadReport as the Blueprint struct, field for field. */
+inline FStoryletLoadReport StoryletLoadReportToUe(const storylets::LoadReport& Report)
+{
+	using StoryletConvert::Ue;
+	const auto Properties = [](const std::vector<storylets::LoadProperty>& List)
+	{
+		TArray<FStoryletLoadProperty> Out;
+		Out.Reserve(static_cast<int32>(List.size()));
+		for (const storylets::LoadProperty& P : List)
+		{
+			FStoryletLoadProperty& Row = Out.AddDefaulted_GetRef();
+			Row.Flow = Ue(P.flow);
+			Row.Path = Ue(P.path);
+		}
+		return Out;
+	};
+	FStoryletLoadReport Out;
+	Out.bExact = Report.exact;
+	Out.Project = Ue(Report.project);
+	Out.Version.Saved = Ue(Report.version.saved);
+	Out.Version.Bundle = Ue(Report.version.bundle);
+	Out.Hash.Saved = Ue(Report.hash.saved);
+	Out.Hash.Bundle = Ue(Report.hash.bundle);
+	for (const std::string& Flow : Report.flows) Out.Flows.Add(Ue(Flow));
+	for (const storylets::LoadEviction& E : Report.evicted)
+	{
+		FStoryletLoadEviction& Row = Out.Evicted.AddDefaulted_GetRef();
+		Row.Flow = Ue(E.flow);
+		Row.Hand = Ue(E.hand);
+		Row.Card = Ue(E.card);
+		Row.Reason = Ue(E.reason);
+	}
+	for (const storylets::LoadCooldown& C : Report.droppedCooldowns)
+	{
+		FStoryletLoadCooldown& Row = Out.DroppedCooldowns.AddDefaulted_GetRef();
+		Row.Flow = Ue(C.flow);
+		Row.Card = Ue(C.card);
+	}
+	for (const std::string& Card : Report.droppedSpent) Out.DroppedSpent.Add(Ue(Card));
+	Out.DroppedProperties = Properties(Report.droppedProperties);
+	Out.DefaultedProperties = Properties(Report.defaultedProperties);
+	Out.RetypedProperties = Properties(Report.retypedProperties);
+	return Out;
+}

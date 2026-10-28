@@ -220,6 +220,20 @@ namespace StoryletStudio.StoryletEngine
         /// silent. Parity with the JS runtime's onError and Patterplay's
         /// OnError, the same shape.</summary>
         public Action<PlayError> OnError = null;
+        /// <summary>Told what the registry's refitting loads put back for this
+        /// engine: a saved value that no longer fits its declaration (a stage,
+        /// an enum value or a flag deleted since the save, or a value of
+        /// another type) goes back to its default, and each one comes here
+        /// with what the save held. A game that loads its own registry passes
+        /// refit (<c>Load(blob, refit: true)</c>) and hears its Storylets share
+        /// here as the engine's bags claim it: at construction, as a flow
+        /// opens, and as a save loads. Only this engine's keys (<c>story</c>,
+        /// <c>storylets/...</c>, the host scopes it self-backs): the other
+        /// engines on the registry take theirs. Unset, each goes to
+        /// <see cref="Engine.DefaultOnRefit"/>, so a drifted save is never
+        /// silent. Parity with the JS runtime's onRefit and Patterplay's
+        /// OnRefit, the same shape.</summary>
+        public Action<List<LoadMisfit>> OnRefit = null;
 
         /// <summary>A copy, for a HotSwap replacement: the engine keeps the
         /// options it was built with, and a caller that changes its own
@@ -589,6 +603,9 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>The game's EngineOptions.OnError, or null to report
         /// through DefaultOnError.</summary>
         private readonly Action<PlayError> _onError;
+        /// <summary>The game's EngineOptions.OnRefit, or null to report
+        /// through DefaultOnRefit.</summary>
+        private readonly Action<List<LoadMisfit>> _onRefit;
         internal readonly int? _logCap;
 
         /// <summary>Where a content error goes when the engine was built
@@ -602,6 +619,28 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Report a condition a flow played through: to the game's
         /// OnError, or DefaultOnError.</summary>
         internal void ReportPlayError(PlayError error) => (_onError ?? DefaultOnError)?.Invoke(error);
+
+        /// <summary>Where a value a refitting load put back goes when the
+        /// engine was built without <see cref="EngineOptions.OnRefit"/>: a
+        /// warning on standard error, which the Unity layer points at
+        /// Debug.LogWarning, as it does DefaultOnError.</summary>
+        public static Action<LoadMisfit> DefaultOnRefit = m => Console.Error.WriteLine(RefitMessage(m));
+
+        /// <summary>The default warning for one value a load put back.</summary>
+        public static string RefitMessage(LoadMisfit m) =>
+            $"Storylet Engine: the save's {m.Scope}.{m.Name} was {(m.Value == null ? "null" : m.Value.ToJsonString())}, which no longer fits its declaration; it is back at its default";
+
+        /// <summary>Take this engine's share of the registry's refits (its own
+        /// keys and the host scopes it self-backs; another engine's stay for
+        /// it) and tell the game: OnRefit, or DefaultOnRefit per value.</summary>
+        internal void ReportRefits()
+        {
+            var misfits = _registry.TakeMisfits(scope => scope == "story" || scope.StartsWith("storylets/", StringComparison.Ordinal)
+                || (_hostScopes.GetOrDefault(scope)?.SelfBacked ?? false));
+            if (misfits.Count == 0) return;
+            if (_onRefit != null) _onRefit(misfits);
+            else foreach (var m in misfits) DefaultOnRefit?.Invoke(m);
+        }
 
         // Lookups (bundle is immutable; built once). Shared with every flow.
         internal readonly OrderedMap<string, CardEntry> _cardsById = new OrderedMap<string, CardEntry>();
@@ -1278,6 +1317,7 @@ namespace StoryletStudio.StoryletEngine
             _seed = opts.Seed;
             _onReplacedFlow = opts.OnReplacedFlow;
             _onError = opts.OnError;
+            _onRefit = opts.OnRefit;
             if (opts.Log) _logCap = opts.LogCap;
             _registry = opts.Registry ?? new ScopeRegistry();
             _ownsRegistry = opts.Registry == null;
@@ -1368,6 +1408,8 @@ namespace StoryletStudio.StoryletEngine
             // constructor ends, when the engine can report.
             var setup = new List<(string Node, string Message)>();
             InitShared(opts.HostScopes ?? new Dictionary<string, IHostScope>(), setup);
+            // The shared bags claimed values the game may have loaded first.
+            ReportRefits();
             // Last, so the game's handler and the decision log hear about an
             // engine that is ready to be asked.
             foreach (var problem in setup) ReportSetup(problem.Node, problem.Message);
@@ -1840,8 +1882,19 @@ namespace StoryletStudio.StoryletEngine
         /// shared), "box.village.heat" (when shared) - the owner segment is its
         /// GAMEID (design/engine-server.md 4.4). A ref that resolves PER-FLOW
         /// throws, naming the fix (Patter's teaching rule).</summary>
+        /// <summary>A property path as the game may write it (ruling 3, 2026-10-28:
+        /// Patter's form as well as this engine's): one leading `@` is dropped, and
+        /// a bare `@gold` is the story's, as it is in an expression.</summary>
+        internal static string PropertyPath(string path)
+        {
+            if (string.IsNullOrEmpty(path) || path[0] != '@') return path;
+            var rest = path.Substring(1);
+            return rest.Contains('.') ? rest : "story." + rest;
+        }
+
         public ExprValue GetProperty(string path)
         {
+            path = PropertyPath(path);
             var parts = path.Split('.');
             var host = HostScopeOf(parts);
             if (host != null)
@@ -1927,6 +1980,7 @@ namespace StoryletStudio.StoryletEngine
 
         public void SetProperty(string path, ExprValue value)
         {
+            path = PropertyPath(path);
             var parts = path.Split('.');
             var host = HostScopeOf(parts);
             if (host != null)
@@ -2550,6 +2604,19 @@ namespace StoryletStudio.StoryletEngine
         /// cost, so the cost comes back with the load whether or not anybody
         /// looked first.</summary>
         public LoadReport LoadGame(SaveEnvelope envelope)
+        {
+            try
+            {
+                return LoadGameInto(envelope);
+            }
+            finally
+            {
+                // The game's own refitting load of its registry lands before this one.
+                ReportRefits();
+            }
+        }
+
+        private LoadReport LoadGameInto(SaveEnvelope envelope)
         {
             RefuseUnreadableSave(envelope);
             AssertSameProject(envelope);

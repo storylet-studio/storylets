@@ -285,6 +285,8 @@ namespace StoryletStudio.StoryletEngine
                 foreach (var pair in Engine.KindOf(_stores, kind)) Put(Engine.FlowKey(id, kind, pair.Key), pair.Value);
             }
             MountBags();
+            // A bag that claimed values a refitting load parked says what it put back.
+            engine.ReportRefits();
             foreach (var box in engine._bundle.Boxes)
             {
                 _turnCounts.Set(box.Id, 0);
@@ -2398,6 +2400,7 @@ namespace StoryletStudio.StoryletEngine
         public ExprValue GetProperty(string path)
         {
             AssertOpen();
+            path = Engine.PropertyPath(path);
             return PropertyAt(path.Split('.'), path);
         }
 
@@ -2437,6 +2440,7 @@ namespace StoryletStudio.StoryletEngine
         public void SetProperty(string path, ExprValue value)
         {
             AssertOpen();
+            path = Engine.PropertyPath(path);
             var parts = path.Split('.');
             var host = _engine.HostScopeOf(parts);
             if (host != null)

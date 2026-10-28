@@ -129,11 +129,11 @@ bool FStoryletWorldBindingTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("the host still writes it"), Flow->GetPropertyString(TEXT("world.weather")), FString(TEXT("fog")));
 
 	// --- save carries the container's values; load restores them, policy or not
-	const FString Saved = UStoryletSave::SaveStateToJson(Engine);
+	const FString Saved = UStoryletSave::SerializeState(Engine);
 	TestTrue(TEXT("save mentions knows_road"), Saved.Contains(TEXT("knows_road")));
 	World->SetBool(TEXT("knows_road"), false);
 	World->SetString(TEXT("weather"), TEXT("storm"));
-	TestTrue(TEXT("load"), UStoryletSave::LoadStateFromJson(Engine, Saved));
+	TestTrue(TEXT("load"), UStoryletSave::DeserializeState(Engine, Saved));
 	TestTrue(TEXT("knows_road restored"), World->GetBool(TEXT("knows_road")));
 	TestEqual(TEXT("read-only weather restored by the host's load"), World->GetString(TEXT("weather")), FString(TEXT("fog")));
 	TestEqual(TEXT("time_of_day restored"), World->GetString(TEXT("time_of_day")), FString(TEXT("night")));

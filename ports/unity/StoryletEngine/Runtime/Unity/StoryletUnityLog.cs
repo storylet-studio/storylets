@@ -9,6 +9,7 @@
 // shape.
 
 using UnityEngine;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -20,8 +21,17 @@ namespace StoryletStudio.StoryletEngine
         /// while also doing something of your own.</summary>
         public static void LogWarning(PlayError error) => Debug.LogWarning("Storylet Engine: " + error);
 
+        /// <summary>Report one value a refitting load put back to its default
+        /// as a Console warning: the handler the Unity layer installs as
+        /// <see cref="Engine.DefaultOnRefit"/>.</summary>
+        public static void LogRefit(LoadMisfit m) => Debug.LogWarning(Engine.RefitMessage(m));
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void Install() => Engine.DefaultOnError = LogWarning;
+        private static void Install()
+        {
+            Engine.DefaultOnError = LogWarning;
+            Engine.DefaultOnRefit = LogRefit;
+        }
 
 #if UNITY_EDITOR
         // Engines built outside play mode (an editor tool, a test) report to the Console too.

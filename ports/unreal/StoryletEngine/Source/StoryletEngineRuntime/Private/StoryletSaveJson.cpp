@@ -30,10 +30,9 @@ FString StoryletSaveStateToJson(const storylets::Engine& Engine)
 
 bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
 	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError,
-	FString* OutReportJson,
+	storylets::LoadReport* OutReport,
 	const std::function<void(const storylets::OrderedMap<std::string, storylets::StoryletValue>&)>& BeforeLoad)
 {
-	if (OutReportJson) OutReportJson->Reset();
 	// Parsed with Unreal's own JSON reader (the plugin already carries it) and
 	// handed to the core as a neutral tree; the core owns every rule about
 	// what a valid save is.
@@ -44,9 +43,9 @@ bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
 	}
 	try
 	{
-		OutWorld = storylets::loadState(Engine, Tree, [OutReportJson](const storylets::LoadReport& Report)
+		OutWorld = storylets::loadState(Engine, Tree, [OutReport](const storylets::LoadReport& Report)
 		{
-			if (OutReportJson) *OutReportJson = FString(UTF8_TO_TCHAR(storylets::reportToJson(Report).c_str()));
+			if (OutReport) *OutReport = Report;
 		}, BeforeLoad);
 		OutError.Reset();
 		return true;

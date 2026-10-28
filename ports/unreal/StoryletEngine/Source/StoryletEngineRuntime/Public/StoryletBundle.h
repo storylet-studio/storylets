@@ -77,11 +77,11 @@ public:
 	 *  own Fields hold only what it sets, so "sets nothing" and "sets the
 	 *  default" stay apart). Then any field with no declaration, as it is. Box
 	 *  is the box's gameId (or id); an unknown box declares nothing. */
-	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
+	UFUNCTION(BlueprintCallable, BlueprintPure = false, Category = "Storylet Engine|Fields")
 	TArray<FStoryletFieldEntry> GetEffectiveCardFields(const FString& Box, const TArray<FStoryletFieldEntry>& Fields) const;
 
 	/** The same for an outcome's fields, against the box's outcome fields. */
-	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
+	UFUNCTION(BlueprintCallable, BlueprintPure = false, Category = "Storylet Engine|Fields")
 	TArray<FStoryletFieldEntry> GetEffectiveOutcomeFields(const FString& Box, const TArray<FStoryletFieldEntry>& Fields) const;
 
 	/** The declaration of the card field (or, with bOutcomeField, the outcome
@@ -99,7 +99,7 @@ public:
 	 *  Extensions is the node's raw list, as a dealt card, an outcome, a box
 	 *  view or ExtensionsOf hands it over. An extension this bundle does not
 	 *  carry declares nothing. */
-	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	UFUNCTION(BlueprintCallable, BlueprintPure = false, Category = "Storylet Engine|Extensions")
 	TArray<FStoryletExtensionEntry> GetEffectiveExtensionValues(const FString& Kind, const FString& Extension,
 		const TArray<FStoryletExtensionValues>& Extensions) const;
 
@@ -109,7 +109,7 @@ public:
 	 *  tagGroup and tag as "box/name", or the bare name for the project map's.
 	 *  Empty when the node has none, the address names nothing or the kind is
 	 *  unknown. For the nodes no view carries (a deck, a hand, a tag). */
-	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	UFUNCTION(BlueprintCallable, BlueprintPure = false, Category = "Storylet Engine|Extensions")
 	TArray<FStoryletExtensionValues> ExtensionsOf(const FString& Kind, const FString& Address) const;
 
 	/** The declaration of the field named Field that Extension declares for

@@ -4,6 +4,36 @@
 
 ### Added
 
+- **`OnRefit` on the engine.** A game on its own registry (`CreateWithRegistry`) that loads it with refit has a
+  saved value that no longer fits its declaration (a stage, an enum value or a flag deleted since the save, or a
+  value of another type) put back to its default. `OnRefit` (`FStoryletRefitEvent`: `Scope`, `Name`, `Saved`) fires
+  for each value of this engine's share as its bags claim them: as a flow opens, and as a save loads. With nothing
+  bound, each is logged as a Warning. One the registry held before the engine was made is claimed while
+  `CreateWithRegistry` builds it, before the event can be bound, so it is logged, as Patterplay's is. The core's
+  `EngineOptions::onRefit` (`std::vector<LoadMisfit>`) is the C++ form, a warning on stderr when unset.
+  Patterplay's `OnRefit`, the same shape.
+- **Property paths in Patter's form too.** `GetProperty*` and `SetProperty*`, on the engine and on a flow, and the
+  core's `getProperty` and `setProperty`, take a leading `@`, as Patter's do: `@story.gold` is `story.gold`,
+  `@world.clock` is `world.clock`, and a bare `@gold` is the story's, as it is in an expression. The plain form is
+  unchanged. Corpus 25 pins it in every runtime.
+- **Patterplay's names for save and load.** `UStoryletSave::SerializeState(Engine)` and
+  `DeserializeState(Engine, Json)` are `UPatterSave`'s pair, name and shape, and
+  `DeserializeStateWithReport(Engine, Json, Report)` loads and hands back what the load cost.
+- **`OnTrace` on the engine.** A Blueprint event that fires with each trace event of every flow as
+  it happens, whether or not the log is kept: an `FStoryletLogEntry` naming its `Flow`, with the
+  kind and the fields that kind carries (hand, card, outcome, turn, target, path, the value and the
+  one it replaced, where and message, and the cards a deal or peek considered). Patterplay's
+  `OnTrace`, the same shape. The engine traces only while something is bound or subscribed, so an
+  unwatched run still does no trace work. `SubscribeTrace` stays as the C++ form.
+- **`FStoryletLoadReport`.** The load report as a Blueprint struct, field for field the core's
+  `LoadReport`: `bExact`, `Project`, `Version` and `Hash` (`Saved` and `Bundle`), `Flows`,
+  `Evicted` (`Flow`, `Hand`, `Card`, `Reason`), `DroppedCooldowns`, `DroppedSpent`, and
+  `DroppedProperties`, `DefaultedProperties` and `RetypedProperties` (`Flow`, `Path`). Every call
+  that reported as JSON text has a form that fills one: `UStoryletSave::DeserializeStateWithReport`
+  and `PreviewLoad`, and on the engine `OpenFlowRestoring`, `PreviewFlowRestore`, `LoadDurable`,
+  `OpenFlowWithDurable`, `OpenFlowWithDurableSeeded` and `ApplyLiveBundleWithLoadReport`, with
+  `FStoryletLiveLink::ApplyLiveBundle` taking one in place of the string.
+
 - **Any game scope, not only `@world`.** A project can declare its own scopes beside `@world`
   (`@player`, say), in Patter's shape: a token, a scope-level `writable`, and declarations, or none for
   an opaque scope that takes any name. The bundle carries them as `scopeRegistry`, and an engine on its
@@ -68,6 +98,14 @@
 
 ### Changed
 
+- **Nodes that build a list now take an exec wire.** A pure node runs again for every pin wired to it, so a list
+  it builds was built again per pin. These are now callable nodes (`BlueprintCallable`, `BlueprintPure = false`):
+  on `UStoryletFlow`, `Board`, `BoardForBox`, `ListBoxes`, `ListProperties`, `GetPropertyFlags` and `Log`; on
+  `UStoryletEngine`, `Flows`, `ListProperties`, `GetPropertyFlags` and `GetRunLog`; on `UStoryletBundle`,
+  `GetEffectiveCardFields`, `GetEffectiveOutcomeFields`, `GetEffectiveExtensionValues` and `ExtensionsOf`. An
+  existing Blueprint graph that uses one needs an exec wire added through it. Nodes that return one value, and
+  helpers that only search a list they are given (`FindExtensionValue`), stay pure.
+
 - **Bind your game's scopes through `HostScopes`.** `UStoryletEngine::Create(Bundle, HostScopes)` takes
   one map of token (without the `@`) to `UStoryletWorld`, `{ { TEXT("world"), World } }` for `@world`,
   and binds any scope the bundle declares the same way; a scope you leave out is self-backed as
@@ -120,6 +158,19 @@
   redraw changes nothing and a save holds the hand that was showing. A load puts the saved `@world`
   in first, since the load now checks the hand against it, and puts the old world back if the
   storylets half is refused.
+
+### Deprecated
+
+- The names before Patterplay's, which still work: `UStoryletSave::SaveStateToJson` (use
+  `SerializeState`) and `LoadStateFromJson` (use `DeserializeState`).
+- Every call that hands a load report back as JSON text, which still works: `LoadStateFromJsonWithReport`
+  (use `DeserializeStateWithReport`), `PreviewLoadFromJson` (`PreviewLoad`), `OpenFlowFromJson`
+  (`OpenFlowRestoring`), `PreviewFlowRestoreJson` (`PreviewFlowRestore`), `LoadDurableFromJson`
+  (`LoadDurable`), `OpenFlowWithDurableJson` and `OpenFlowWithDurableJsonSeeded`
+  (`OpenFlowWithDurable` and `OpenFlowWithDurableSeeded`), `ApplyLiveBundleWithReport`
+  (`ApplyLiveBundleWithLoadReport`), and `FStoryletLiveLink::ApplyLiveBundle` with an `FString`
+  report (pass an `FStoryletLoadReport`). Blueprint marks each one deprecated, naming its
+  replacement; the Live Link overload is deprecated in C++.
 
 ### Fixed
 

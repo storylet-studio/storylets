@@ -7,7 +7,7 @@
 // registry's values ride along. These tests hold the engine to that from the
 // GAME's side: what is in the registry, what the game saves, and that loading
 // works in either order and from a version 1 envelope.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ScopeRegistry } from "@wildwinter/scoperegistry";
 import { expandBundle } from "@storylet-studio/conformance";
 import type { SaveEnvelopeV1 } from "@storylet-studio/model";
@@ -295,6 +295,52 @@ describe("one registry per game: the Storylet Engine", () => {
 // keys to its replacement, reports property drift as a load does, and touches
 // nothing else in the registry.
 // ---------------------------------------------------------------------------
+
+// A game that loads its own registry refits it (`{ refit: true }`): a saved value
+// that no longer fits its declaration goes back to its default. The engine takes
+// its own share of those as its bags claim them and tells the game through
+// onRefit, Patterplay's hook (ruling 3, 2026-10-28); another engine's stay for it.
+describe("onRefit: the registry's refits, this engine's share", () => {
+  const moods = (values: string[]) => expandBundle({
+    story: [{ name: "mood", type: "enum", values, default: "calm" }],
+    cards: [{ id: "c_any" }],
+    hands: [{ id: "h_q", rule: {} }],
+  });
+  const saved = (): ReturnType<ScopeRegistry["save"]> => {
+    const reg = new ScopeRegistry();
+    new Engine(moods(["calm", "angry"]), { registry: reg }).setProperty("story.mood", "angry");
+    return reg.save();
+  };
+
+  it("hears a value the game's refitting load put back, as the engine claims it", () => {
+    const reg = new ScopeRegistry();
+    reg.load(saved(), { refit: true });   // the game loads first: the values wait for the engine
+    const heard: { scope: string; name: string; value: unknown }[] = [];
+    const engine = new Engine(moods(["calm"]), { registry: reg, onRefit: (m) => heard.push(...m) });
+    expect(heard).toEqual([{ scope: "story", name: "mood", value: "angry" }]);
+    expect(engine.getProperty("story.mood")).toBe("calm");
+  });
+
+  it("hears it at loadGame when the engine was there first, and takes it from the registry", () => {
+    const reg = new ScopeRegistry();
+    const heard: string[] = [];
+    const engine = new Engine(moods(["calm"]), { registry: reg, onRefit: (m) => heard.push(...m.map((x) => `${x.scope}.${x.name}`)) });
+    const blob = saved();
+    reg.load(blob, { refit: true });
+    engine.loadGame(engine.saveGame());
+    expect(heard).toEqual(["story.mood"]);
+    expect(reg.takeMisfits()).toEqual([]);
+  });
+
+  it("warns on the console when the game gives no handler", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const reg = new ScopeRegistry();
+    reg.load(saved(), { refit: true });
+    new Engine(moods(["calm"]), { registry: reg });
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/the save's story\.mood was "angry", which no longer fits its declaration/));
+    warn.mockRestore();
+  });
+});
 
 describe("hotSwap on the game's registry", () => {
   // The edit: @story gains `rumours`, the per-flow `steps` is gone, and the box

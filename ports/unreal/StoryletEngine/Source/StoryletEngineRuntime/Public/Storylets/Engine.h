@@ -194,6 +194,20 @@ namespace storylets
          *  event, or a Warning in the log). Patterplay's onError, the same
          *  shape; parity with the JS runtime's. */
         std::function<void(const PlayError&)> onError;
+        /** Told what the registry's refitting loads put back for this engine:
+         *  a saved value that no longer fits its declaration (a stage, an enum
+         *  value or a flag deleted since the save, or a value of another type)
+         *  goes back to its default, and each one comes here with what the save
+         *  held. A game that loads its own registry passes refit
+         *  (`load(blob, false, true)`) and hears its Storylets share here as
+         *  the engine's bags claim it: at construction, as a flow opens, and as
+         *  a save loads. Only this engine's keys (`story`, `storylets/...`, the
+         *  host scopes it self-backs): the other engines on the registry take
+         *  theirs. Unset: a warning per value on std::cerr, so a drifted save is
+         *  never silent. The UE wrapper always sets it (the OnRefit event, or a
+         *  Warning in the log). Patterplay's onRefit, the same shape; parity
+         *  with the JS runtime's. */
+        std::function<void(const std::vector<LoadMisfit>&)> onRefit;
     };
 
     /** The schema tag every durable half carries, so the shape can change later
@@ -1515,6 +1529,10 @@ namespace storylets
          *  cost, so the cost comes back with the load whether or not anybody
          *  looked first. */
         LoadReport loadGame(const SaveEnvelope& envelope);
+    private:
+        /** loadGame's work; loadGame reports the refits after it. */
+        LoadReport loadGameInto(const SaveEnvelope& envelope);
+    public:
 
         // --- durable state (ruling H, 2026-10-06) ----------------------------
 
@@ -2073,6 +2091,27 @@ namespace storylets
         std::function<void(const std::string&, int)> onReplacedFlow_;
         /** The game's onError (EngineOptions), or the std::cerr warning. */
         std::function<void(const PlayError&)> onError_;
+        /** The game's onRefit (EngineOptions), or null for the std::cerr warning. */
+        std::function<void(const std::vector<LoadMisfit>&)> onRefit_;
+        /** Take this engine's share of the registry's refits (its own keys and
+         *  the host scopes it self-backs; another engine's stay for it) and
+         *  tell the game: onRefit, or a warning per value. */
+        void reportRefits()
+        {
+            std::vector<LoadMisfit> misfits = registry_->takeMisfits([this](const std::string& scope)
+            {
+                return scope == "story" || scope.rfind("storylets/", 0) == 0
+                    || std::find(selfBacked_.begin(), selfBacked_.end(), scope) != selfBacked_.end();
+            });
+            if (misfits.empty()) return;
+            if (onRefit_) { onRefit_(misfits); return; }
+            for (const LoadMisfit& m : misfits)
+            {
+                const std::string line = "Storylet Engine: the save's " + m.scope + "." + m.name + " was " + m.value.toJsonString()
+                    + ", which no longer fits its declaration; it is back at its default\n";
+                std::fputs(line.c_str(), stderr);
+            }
+        }
         std::optional<int> logCap_;
         /** The host scopes the game bound (EngineOptions::hostScopes): they
          *  outlive reset and loads (the game's stores are the game's). */
@@ -2387,6 +2426,8 @@ namespace storylets
             // Register the bags: each claims whatever the registry holds for its
             // key (a load); openFlow discarded that first for a fresh flow.
             registerBags();
+            // A bag that claimed values a refitting load parked says what it put back.
+            engine_->reportRefits();
             for (const auto& box : engine_->bundle_->boxes)
             {
                 turnCounts_.set(box.id, 0);
@@ -3377,8 +3418,19 @@ namespace storylets
             return bag ? bag->get() : nullptr;
         }
 
-        static std::vector<std::string> splitPath(const std::string& path)
+        /** A property path as the game may write it (ruling 3, 2026-10-28:
+         *  Patter's form as well as this engine's): one leading `@` is dropped,
+         *  and a bare `@gold` is the story's, as it is in an expression. */
+        static std::string propertyPath(const std::string& path)
         {
+            if (path.empty() || path[0] != '@') return path;
+            const std::string rest = path.substr(1);
+            return rest.find('.') == std::string::npos ? "story." + rest : rest;
+        }
+
+        static std::vector<std::string> splitPath(const std::string& given)
+        {
+            const std::string path = propertyPath(given);
             std::vector<std::string> parts;
             size_t start = 0;
             while (true)
@@ -4989,7 +5041,8 @@ namespace storylets
                   : "Storylet Engine: the condition on " + e.node + " in flow '" + e.flow
                   + "' failed, counted as false: " + e.message + "\n";
               std::fputs(line.c_str(), stderr);
-          })
+          }),
+          onRefit_(opts.onRefit)
     {
         // First, before anything is indexed or registered: a bundle this engine
         // cannot read faithfully is refused whole (design/project-map-contract.md
@@ -5116,6 +5169,8 @@ namespace storylets
         durable_.shared = durableProps(sharedDecls_);
         durable_.flow = durableProps(flowDecls_);
         initShared();
+        // The shared bags claimed values the game may have loaded first.
+        reportRefits();
         // Last, so the game's handler and the run log hear about an engine that
         // is ready to be asked.
         for (const auto& problem : setup_) reportSetup(problem.first, problem.second);
@@ -5540,6 +5595,17 @@ namespace storylets
     }
 
     inline LoadReport Engine::loadGame(const SaveEnvelope& envelope)
+    {
+        // The game's own refitting load of its registry lands before this one:
+        // reported as the load ends, whether it returned or threw.
+        LoadReport report;
+        try { report = loadGameInto(envelope); }
+        catch (...) { reportRefits(); throw; }
+        reportRefits();
+        return report;
+    }
+
+    inline LoadReport Engine::loadGameInto(const SaveEnvelope& envelope)
     {
         refuseUnreadableSave(envelope);
         assertSameProject(envelope);

@@ -44,6 +44,7 @@
 
 class IWebSocket;
 class UStoryletEngine;
+struct FStoryletLoadReport;
 namespace storylets { class LiveLinkClient; }
 
 class STORYLETENGINERUNTIME_API FStoryletLiveLink : public TSharedFromThis<FStoryletLiveLink>
@@ -105,9 +106,13 @@ public:
 	 *  JSON does not compile or the bundle refuses the run (another project). */
 	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError);
 
-	/** The same, handing back the swap's LoadReport as JSON in OutReportJson
+	/** The same, handing back the swap's LoadReport in OutReport
 	 *  (play-helpers' applyLiveBundle result `report`): what the edit cost the
-	 *  run. Empty when the bundle is refused. */
+	 *  run. A default report when the bundle is refused. */
+	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FStoryletLoadReport& OutReport);
+
+	/** The same, with the report as JSON text (empty when the bundle is refused). */
+	UE_DEPRECATED(5.7, "Pass an FStoryletLoadReport for the report instead of an FString.")
 	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FString& OutReportJson);
 
 private:

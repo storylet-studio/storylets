@@ -72,7 +72,7 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	FString brokenJson; auto writer = TJsonWriterFactory<>::Create(&brokenJson); FJsonSerializer::Serialize(broken.ToSharedRef(), writer);
 	FHamletGame g6; if (!Fresh(g6)) return false; FString e6;
 	const FString worldBefore = g6.World.Line();
-	AddExpectedError(TEXT("LoadStateFromJson"), EAutomationExpectedErrorFlags::Contains, 1);
+	AddExpectedError(TEXT("DeserializeState"), EAutomationExpectedErrorFlags::Contains, 1);
 	TestFalse(TEXT("an envelope whose storylets half is refused does not load"), g6.Load(brokenJson, e6));
 	TestEqual(TEXT("a refused load puts the old world back"), g6.World.Line(), worldBefore);
 	TestFalse(TEXT("a refused load leaves knows_road as it was"), g6.World.Store->GetBool(TEXT("knows_road")));

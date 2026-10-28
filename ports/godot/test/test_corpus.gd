@@ -22,7 +22,7 @@
 extends SceneTree
 
 ## Ops that run ON a flow, and so open one lazily. Everything else must not.
-const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
+const FLOW_OPS := ["setState", "setPath", "peek", "deal", "assertBoard", "play",
 	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertOutcomeFields",
 	"assertCardFields", "assertCardExtensions", "assertOutcomeExtensions",
 	"assertBoxExtensions", "assertState", "scribble", "discard"]
@@ -809,6 +809,14 @@ func _run_scripted_case(c: Dictionary) -> Array:
 		# for no engine reason.
 		var session: StoryletFlow = flow_of.call(op) if FLOW_OPS.has(kind) else null
 		match kind:
+			# Corpus 25: one host write by its raw path (Patter's `@gold`), on the
+			# flow or, with `engine`, on the engine.
+			"setPath":
+				if op.get("engine", false):
+					(rc["engine"] as StoryletEngine).set_property(str(op["path"]), op["value"])
+				else:
+					session.set_property(str(op["path"]), op["value"])
+
 			"setState":
 				rc["diagnostics"] = []
 				rc["traces"] = []

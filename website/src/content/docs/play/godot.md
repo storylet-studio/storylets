@@ -107,6 +107,13 @@ doesn't take, a typo or the old `"world"` option, which is ignored rather than r
 `"on_error"` also hears every condition the engine couldn't evaluate and counted as false.
 Without one, each goes to `push_warning`.
 
+`"on_refit"` hears what a refitting load put back. A game that loads its own registry with
+`registry.load(saved, {"refit": true})` has a saved value that no longer fits its declaration (an
+enum value, a stage or a flag deleted since the save) go back to its default, and the engine
+passes on its share as an Array of `{"scope", "name", "value"}`, with what the save held, as it
+claims them: as it's built, as a flow opens, and after `load_game`. Without one, each goes to
+`push_warning`.
+
 ## Deal, peek, outcomes, play
 
 ```gdscript

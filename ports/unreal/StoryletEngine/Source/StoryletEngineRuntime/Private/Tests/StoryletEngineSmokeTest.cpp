@@ -86,7 +86,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	// Likewise ApplyLiveBundle refusing a bundle from another project, below.
 	AddExpectedError(TEXT("ApplyLiveBundle - hotSwap: the bundle is for project"), EAutomationExpectedErrorFlags::Contains, 1);
 	// And UStoryletSave refusing a save with somebody else's schema tag.
-	AddExpectedError(TEXT("LoadStateFromJson - not a storylets save"), EAutomationExpectedErrorFlags::Contains, 1);
+	AddExpectedError(TEXT("DeserializeState - not a storylets save"), EAutomationExpectedErrorFlags::Contains, 1);
 
 	// A non-bundle blob refuses to compile, with the error readable.
 	{
@@ -334,7 +334,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	}
 
 	// Save / load round trip through the .storyletsave string boundary.
-	const FString SaveJson = UStoryletSave::SaveStateToJson(Engine);
+	const FString SaveJson = UStoryletSave::SerializeState(Engine);
 	if (!TestFalse(TEXT("save produced text"), SaveJson.IsEmpty())) return false;
 	TestTrue(TEXT("save is the host's file"), SaveJson.Contains(TEXT("storylets/savefile@1")));
 	TestTrue(TEXT("with the engine envelope inside"), SaveJson.Contains(TEXT("storylets/save@3")));
@@ -345,7 +345,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	// A wrapper taken BEFORE the load must survive it, re-bound by name - the
 	// contract a Blueprint variable holding a flow depends on.
 	UStoryletFlow* Restored = RestoredEngine->OpenFlow(TEXT("main"));
-	if (!TestTrue(TEXT("load succeeds"), UStoryletSave::LoadStateFromJson(RestoredEngine, SaveJson)))
+	if (!TestTrue(TEXT("load succeeds"), UStoryletSave::DeserializeState(RestoredEngine, SaveJson)))
 	{
 		return false;
 	}
@@ -365,7 +365,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	// A foreign blob is refused, the engine untouched.
 	{
 		TestFalse(TEXT("foreign save refused"),
-			UStoryletSave::LoadStateFromJson(RestoredEngine, TEXT("{ \"schema\": \"patter/save@0\" }")));
+			UStoryletSave::DeserializeState(RestoredEngine, TEXT("{ \"schema\": \"patter/save@0\" }")));
 		TestEqual(TEXT("engine untouched after refusal"),
 			Restored->GetPropertyNumber(TEXT("story.gold")), 5.0);
 	}
@@ -404,11 +404,11 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 		// place. The handle, the subscription and the run all survive.
 		FString NewJson = FString(SmokeBundleJson).Replace(TEXT("smokehash"), TEXT("smokehash2"));
 		FString ApplyError;
-		FString ApplyReport;
+		FStoryletLoadReport ApplyReport;
 		TestTrue(TEXT("ApplyLiveBundle applies a pushed bundle"),
 			FStoryletLiveLink::ApplyLiveBundle(Engine, NewJson, ApplyError, ApplyReport));
 		TestTrue(TEXT("apply error empty"), ApplyError.IsEmpty());
-		TestTrue(TEXT("the swap's report comes back, naming the new build"), ApplyReport.Contains(TEXT("smokehash2")));
+		TestEqual(TEXT("the swap's report comes back, naming the new build"), ApplyReport.Hash.Bundle, FString(TEXT("smokehash2")));
 		TestEqual(TEXT("the engine now plays the new bundle"),
 			Engine->GetBundle() ? Engine->GetBundle()->GetBuildId() : FString(), FString(TEXT("smokehash2")));
 		TestFalse(TEXT("the flow wrapper survived the swap, re-bound by name"), MainFlow->IsClosed());

@@ -92,8 +92,10 @@ import type {
  *  `hostScopes` option (a case's `hostScopes`), the `setup` report for a token the bundle doesn't declare
  *  (a case's `expectSetupErrors`), an opaque scope, a scope-level `writable: false`; `setState`'s `host`.
  *  24: a set-up report's expected `message` starts after the option's name, which each runtime spells its
- *  own way, so every port matches it as written (ruled 2026-10-28). */
-export const CORPUS_VERSION = 24;
+ *  own way, so every port matches it as written (ruled 2026-10-28).
+ *  25: a property path takes Patter's leading `@` (`@story.gold`, `@world.clock`, a bare `@gold` for the
+ *  story's), on a flow and on the engine (ruling 3, 2026-10-28); the `setPath` op. */
+export const CORPUS_VERSION = 25;
 
 /** The dialect a fixture's expressions compile in: the engine's own, plus the
  *  host scopes the fixture being expanded declares (`@player`), as a project's

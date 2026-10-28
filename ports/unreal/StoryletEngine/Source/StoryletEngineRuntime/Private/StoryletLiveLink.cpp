@@ -2,29 +2,45 @@
 
 #include "StoryletBundle.h"
 #include "StoryletEngine.h"
+#include "StoryletTypes.h"
 
 #include "Storylets/LiveLink.h"   // std-only: included in every configuration so the Pimpl type is complete
 
 #include <optional>
 #include <string>
 
+namespace
+{
+	/** The pushed JSON compiled, or null with OutError. */
+	UStoryletBundle* CompilePushed(UStoryletEngine* Engine, const FString& Data, FString& OutError)
+	{
+		if (!Engine)
+		{
+			OutError = TEXT("no engine");
+			return nullptr;
+		}
+		return UStoryletBundle::LoadFromJsonString(Data, OutError);
+	}
+}
+
 bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError)
 {
-	FString Report;
-	return ApplyLiveBundle(Engine, Data, OutError, Report);
+	UStoryletBundle* NewBundle = CompilePushed(Engine, Data, OutError);
+	return NewBundle && Engine->ApplyLiveBundle(NewBundle, OutError);
+}
+
+bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FStoryletLoadReport& OutReport)
+{
+	OutReport = FStoryletLoadReport();
+	UStoryletBundle* NewBundle = CompilePushed(Engine, Data, OutError);
+	return NewBundle && Engine->ApplyLiveBundleWithLoadReport(NewBundle, OutError, OutReport);
 }
 
 bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FString& OutReportJson)
 {
 	OutReportJson.Reset();
-	if (!Engine)
-	{
-		OutError = TEXT("no engine");
-		return false;
-	}
-	UStoryletBundle* NewBundle = UStoryletBundle::LoadFromJsonString(Data, OutError);
-	if (!NewBundle) return false;
-	return Engine->ApplyLiveBundleWithReport(NewBundle, OutError, OutReportJson);
+	UStoryletBundle* NewBundle = CompilePushed(Engine, Data, OutError);
+	return NewBundle && Engine->ApplyLiveBundleWithReport(NewBundle, OutError, OutReportJson);
 }
 
 #if !UE_BUILD_SHIPPING

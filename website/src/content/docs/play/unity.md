@@ -141,6 +141,13 @@ A token is case-sensitive. Bind one the bundle doesn't declare (`"World"` for `w
 the declared spelling when only the case differs. `OnError` also hears every condition the engine
 couldn't evaluate and counted as false. Without one, each goes to `Debug.LogWarning`.
 
+`OnRefit` hears what a refitting load put back. A game that loads its own registry with
+`Load(saved, refit: true)` has a saved value that no longer fits its declaration (an enum value,
+a stage or a flag deleted since the save) go back to its default, and the engine passes on its
+share as a `List<LoadMisfit>` (`Scope`, `Name`, and the `Value` the save held) as it claims them:
+as it's built, as a flow opens, and after `LoadGame`. Without one, each goes to
+`Debug.LogWarning`.
+
 ## One registry per game
 
 Every property value lives in a **registry**, a `ScopeRegistry`, one per game. An engine you

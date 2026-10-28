@@ -163,17 +163,17 @@ bool FStoryletHostInputsTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("a refused AdvanceTurns returns the refusal"), Flow->AdvanceTurns(TEXT("no-such-box"), 1).IsEmpty());
 		TestEqual(TEXT("one that lands returns empty"), Flow->AdvanceTurns(TEXT("box"), 1), FString());
 
-		AddExpectedError(TEXT("Storylet Engine: OpenFlowFromJson - "), EAutomationExpectedErrorFlags::Contains, 1);
-		FString Report;
-		TestNull(TEXT("a refused open hands back null"), Engine->OpenFlowFromJson(TEXT("other"), TEXT("not json"), Report));
+		AddExpectedError(TEXT("Storylet Engine: OpenFlowRestoring - "), EAutomationExpectedErrorFlags::Contains, 1);
+		FStoryletLoadReport Report;
+		TestNull(TEXT("a refused open hands back null"), Engine->OpenFlowRestoring(TEXT("other"), TEXT("not json"), Report));
 		TestFalse(TEXT("and sets the engine's GetLastError"), Engine->GetLastError().IsEmpty());
 		TestNotNull(TEXT("a good open"), Engine->OpenFlow(TEXT("other")));
 		TestEqual(TEXT("clears it"), Engine->GetLastError(), FString());
 
-		AddExpectedError(TEXT("LoadStateFromJson - not a storylets save"), EAutomationExpectedErrorFlags::Contains, 1);
-		TestFalse(TEXT("a refused load"), UStoryletSave::LoadStateFromJson(Engine, TEXT("{}")));
+		AddExpectedError(TEXT("DeserializeState - not a storylets save"), EAutomationExpectedErrorFlags::Contains, 1);
+		TestFalse(TEXT("a refused load"), UStoryletSave::DeserializeState(Engine, TEXT("{}")));
 		TestFalse(TEXT("sets the engine's GetLastError"), Engine->GetLastError().IsEmpty());
-		TestTrue(TEXT("a good load"), UStoryletSave::LoadStateFromJson(Engine, UStoryletSave::SaveStateToJson(Engine)));
+		TestTrue(TEXT("a good load"), UStoryletSave::DeserializeState(Engine, UStoryletSave::SerializeState(Engine)));
 		TestEqual(TEXT("clears it"), Engine->GetLastError(), FString());
 	}
 
@@ -188,7 +188,7 @@ bool FStoryletHostInputsTest::RunTest(const FString& Parameters)
 		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
 		AddExpectedError(TEXT("not a complete Storylets save: no content"), EAutomationExpectedErrorFlags::Contains, 1);
-		TestFalse(TEXT("a save with no content is refused"), UStoryletSave::LoadStateFromJson(Engine,
+		TestFalse(TEXT("a save with no content is refused"), UStoryletSave::DeserializeState(Engine,
 			TEXT("{ \"schema\": \"storylets/savefile@1\", \"engine\": { \"schema\": \"storylets/save@2\" } }")));
 	}
 	return true;

@@ -75,13 +75,18 @@ transliteration in C#; the three stay in lockstep.
   every other refusing call returns its fallback (null, empty, false) and
   keeps the message for `GetLastError()` on the engine or the flow, cleared by
   the next call that succeeds. Each is also logged to `LogStoryletEngine`.
-- **Save/load**: `UStoryletSave::SaveStateToJson` / `LoadStateFromJson` -
+- **Save/load**: `UStoryletSave::SerializeState` / `DeserializeState` -
   the `.storyletsave` string boundary (schema `storylets/savefile@1`: the
   engine's `storylets/save@2` envelope with every live flow in it, plus the
   `@world` values) in the runtime module, never editor-only. A
   `storylets/save@1` file still loads. A foreign or malformed blob returns
   false and leaves the engine untouched. Flow objects the game is holding
-  re-bind by name across the load.
+  re-bind by name across the load. What a load, a preview, a flow restore, a
+  durable load or a live swap cost comes back as an `FStoryletLoadReport`
+  (`DeserializeStateWithReport`, `PreviewLoad`, `OpenFlowRestoring`,
+  `PreviewFlowRestore`, `LoadDurable`, `OpenFlowWithDurable`,
+  `ApplyLiveBundleWithLoadReport`). The names before 1.0 still work,
+  deprecated.
 - **One registry per game**: every property value lives in a
   `storylets::ScopeRegistry`. Without one, the engine makes its own, self-backs
   each host scope the bundle declares (`@world`, `@player`, ...) that no

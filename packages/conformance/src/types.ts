@@ -289,6 +289,11 @@ export type ScriptOp =
    *  resolves per-flow must THROW (the teaching rule - never silently
    *  answer with some flow's copy). */
   | { op: "assertEngineRead"; path: string; expect?: ScalarValue; expectError?: true }
+  /** Corpus 25: one host write by its raw PATH, as the game writes it
+   *  (`@gold`, `@world.clock`), on the flow or, with `engine`, on the engine.
+   *  `setState` builds its paths from a selector; this is the op that can say
+   *  Patter's form. */
+  | { op: "setPath"; flow?: string; engine?: true; path: string; value: ScalarValue }
   /** Serialise the WHOLE engine (shared partitions + every flow, and NOT
    *  @world), discard it, restore into a fresh one - built from `bundleB`
    *  when `into: "B"` (the drifted-content contract: orphaned state drops

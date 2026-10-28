@@ -8,6 +8,16 @@ the same version number always means the same runtime behaviour.
 
 ### Added
 
+- **`"on_refit"`: the game hears what a refitting load put back.** A game that loads its own registry with
+  `{"refit": true}` has a saved value that no longer fits its declaration (a stage, an enum value or a flag deleted
+  since the save, or a value of another type) put back to its default. A new `"on_refit"` option to
+  `StoryletEngine.create` takes a `Callable(misfits: Array)`, told this engine's share of those, each
+  `{"scope", "name", "value"}` with what the save held, as the engine's bags claim them: as the engine is made, as a
+  flow opens, and after `load_game`. Only this engine's keys (`story`, `storylets/...` and the host scopes it backs
+  itself). Without one, a `push_warning` per value. Patterplay's `on_refit`, the same shape.
+- **Property paths in Patter's form too.** `get_property` and `set_property`, on the engine and on a flow take a leading `@`, as Patter's do: `@story.gold` is
+  `story.gold`, `@world.clock` is `world.clock`, and a bare `@gold` is the story's, as it is in an expression. The
+  plain form is unchanged. Corpus 25 pins it in every runtime.
 - **Any game scope, not only `@world`.** A project can declare its own scopes beside `@world` (`@player`, say), in
   Patter's shape: a token, a scope-level `writable`, and declarations, or none for an opaque scope that takes any
   name. The bundle carries them as `scopeRegistry`, and an engine on its own backs each one from its defaults,

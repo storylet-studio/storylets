@@ -99,6 +99,10 @@ func run() -> Dictionary:
 		# The registry accessor (engine review, October 2026, ruling J).
 		["registry() is the game's registry as passed in, and still that one after a hot_swap", _registry_accessor_game],
 		["a standalone engine's registry() is its own and stable; its hot_swap replacement makes another", _registry_accessor_standalone],
+		# on_refit (the JS "onRefit: the registry's refits, this engine's share").
+		["on_refit hears a value the game's refitting load put back, as the engine claims it", _refit_at_construction],
+		["on_refit hears it at load_game when the engine was there first, and takes it from the registry", _refit_at_load_game],
+		["with no on_refit the engine still takes its refits (a push_warning each, in the output above)", _refit_default_warning],
 	]
 	var passed := 0
 	var all: Array = []
@@ -690,4 +694,63 @@ func _registry_accessor_standalone() -> void:
 		_check("the replacement shares the standalone engine's registry", not is_same(next.registry(), own))
 		_check("the old engine's registry() moved", is_same(engine.registry(), own))
 		_expect("the replacement's registry holds the carried run", next.registry().get_value("story", "gold"), 1)
+	_finished = true
+
+
+# --- on_refit: the registry's refits, this engine's share -------------------------
+#
+# A game that loads its own registry refits it ({"refit": true}): a saved value
+# that no longer fits its declaration goes back to its default. The engine takes
+# its own share of those as its bags claim them and tells the game through
+# on_refit, Patterplay's hook (ruling 3, 2026-10-28).
+
+## The JS test's moods bundle: story `mood`, an enum of `values`, default "calm".
+func _moods(values: Array) -> Dictionary:
+	var b: Dictionary = JSON.parse_string(BUNDLE_JSON)
+	b["world"]["properties"] = []
+	b["story"]["properties"] = [{"name": "mood", "type": "enum", "values": values, "default": "calm"}]
+	return b
+
+
+## A registry save in which story.mood is "angry".
+func _saved_angry() -> Dictionary:
+	var reg := StoryletScopeRegistry.new()
+	var engine: StoryletEngine = StoryletEngine.create(_moods(["calm", "angry"]), {"registry": reg})
+	var err := engine.set_property("story.mood", "angry")
+	_check("could not set story.mood: " + err, err == "")
+	return _json(reg.save())
+
+
+func _refit_at_construction() -> void:
+	var reg := StoryletScopeRegistry.new()
+	reg.load(_saved_angry(), {"refit": true})   # the game loads first: the values wait for the engine
+	var heard: Array = []
+	var engine: StoryletEngine = StoryletEngine.create(_moods(["calm"]), {"registry": reg,
+		"on_refit": func(m: Array) -> void: heard.append_array(m)})
+	_expect("heard", heard, [{"scope": "story", "name": "mood", "value": "angry"}])
+	_expect("story.mood", engine.get_property("story.mood"), "calm")
+	_finished = true
+
+
+func _refit_at_load_game() -> void:
+	var reg := StoryletScopeRegistry.new()
+	var heard: Array = []
+	var engine: StoryletEngine = StoryletEngine.create(_moods(["calm"]), {"registry": reg,
+		"on_refit": func(m: Array) -> void:
+			for x in m:
+				heard.append("%s.%s" % [x["scope"], x["name"]])})
+	var blob := _saved_angry()
+	reg.load(blob, {"refit": true})
+	engine.load_game(engine.save_game())
+	_expect("heard", heard, ["story.mood"])
+	_expect("the registry's misfits after", reg.take_misfits(), [])
+	_finished = true
+
+
+func _refit_default_warning() -> void:
+	var reg := StoryletScopeRegistry.new()
+	reg.load(_saved_angry(), {"refit": true})
+	var engine: StoryletEngine = StoryletEngine.create(_moods(["calm"]), {"registry": reg})
+	_expect("the registry's misfits after", reg.take_misfits(), [])
+	_expect("story.mood", engine.get_property("story.mood"), "calm")
 	_finished = true

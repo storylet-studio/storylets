@@ -819,13 +819,86 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
         private static SaveEnvelope V1(string sharedStory = @"{ ""gold"": 4 }") => StoryletSave.FromJson(JObject.Parse(V1Json(sharedStory)));
 
+        // --- onRefit: the registry's refits, this engine's share --------------------
+        //
+        // A game that loads its own registry refits it (refit: true): a saved value
+        // that no longer fits its declaration goes back to its default. The engine
+        // takes its own share of those as its bags claim them and tells the game
+        // through OnRefit, Patterplay's hook (ruling 3, 2026-10-28). The JS test's
+        // "onRefit: the registry's refits, this engine's share", case for case.
+
+        /// <summary>The JS test's moods bundle: story `mood`, an enum of the
+        /// values given, default "calm".</summary>
+        private static Bundle Moods(params string[] values)
+        {
+            var json = JObject.Parse(BundleJson);
+            json["world"]["properties"] = new JArray();
+            json["story"]["properties"] = new JArray(new JObject
+            {
+                ["name"] = "mood", ["type"] = "enum", ["values"] = new JArray(values), ["default"] = "calm",
+            });
+            return BundleLoader.Parse(json.ToString());
+        }
+
+        /// <summary>A registry save in which story.mood is "angry".</summary>
+        private static OrderedMap<string, OrderedMap<string, ExprValue>> SavedAngry()
+        {
+            var reg = new ScopeRegistry();
+            new Engine(Moods("calm", "angry"), new EngineOptions { Registry = reg }).SetProperty("story.mood", ExprValue.Str("angry"));
+            return reg.Save();
+        }
+
+        private static readonly List<(string Name, Action Run)> RefitCases = new List<(string, Action)>
+        {
+            ("onRefit: hears a value the game's refitting load put back, as the engine claims it", () =>
+            {
+                var reg = new ScopeRegistry();
+                reg.Load(SavedAngry(), refit: true);   // the game loads first: the values wait for the engine
+                var heard = new List<LoadMisfit>();
+                var engine = new Engine(Moods("calm"), new EngineOptions { Registry = reg, OnRefit = heard.AddRange });
+                Check(heard.Count == 1 && heard[0].Scope == "story" && heard[0].Name == "mood"
+                    && heard[0].Value != null && heard[0].Value.IsString && heard[0].Value.AsString == "angry",
+                    "heard: " + string.Join(", ", heard.Select(m => $"{m.Scope}.{m.Name}={m.Value?.ToJsonString()}")));
+                var mood = engine.GetProperty("story.mood");
+                Check(mood != null && mood.IsString && mood.AsString == "calm", "story.mood: " + mood?.ToJsonString());
+            }),
+
+            ("onRefit: hears it at LoadGame when the engine was there first, and takes it from the registry", () =>
+            {
+                var reg = new ScopeRegistry();
+                var heard = new List<string>();
+                var engine = new Engine(Moods("calm"), new EngineOptions { Registry = reg, OnRefit = m => heard.AddRange(m.Select(x => x.Scope + "." + x.Name)) });
+                var blob = SavedAngry();
+                reg.Load(blob, refit: true);
+                engine.LoadGame(engine.SaveGame());
+                Check(heard.SequenceEqual(new[] { "story.mood" }), "heard: " + string.Join(", ", heard));
+                Check(reg.TakeMisfits().Count == 0, "the registry still holds misfits");
+            }),
+
+            ("onRefit: warns through DefaultOnRefit when the game gives no handler", () =>
+            {
+                var warned = new List<string>();
+                var was = Engine.DefaultOnRefit;
+                Engine.DefaultOnRefit = m => warned.Add(Engine.RefitMessage(m));
+                try
+                {
+                    var reg = new ScopeRegistry();
+                    reg.Load(SavedAngry(), refit: true);
+                    new Engine(Moods("calm"), new EngineOptions { Registry = reg });
+                }
+                finally { Engine.DefaultOnRefit = was; }
+                Check(warned.Count == 1 && warned[0].Contains("the save's story.mood was \"angry\", which no longer fits its declaration"),
+                    "warned: " + string.Join(" | ", warned));
+            }),
+        };
+
         /// <summary>Run every case; returns the passes and each failure as
         /// "case: what".</summary>
         public static (int Passed, int Total, List<string> Failures) Run()
         {
             var failures = new List<string>();
             int passed = 0;
-            var all = Cases.Concat(HotSwapCases).Concat(ExternalScopeCases).ToList();
+            var all = Cases.Concat(HotSwapCases).Concat(ExternalScopeCases).Concat(RefitCases).ToList();
             foreach (var (name, run) in all)
             {
                 try

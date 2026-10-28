@@ -12,7 +12,7 @@
 // whose flow was replaced or closed stays closed, and the load's re-bind must
 // not point it at the restored flow of the same name. Then the surface the
 // October 2026 engine review added or corrected: OnReplacedFlow, the restore
-// report out of OpenFlowFromJson, OpenFlowSeeded, Peek's count, and a closed
+// report out of OpenFlowRestoring, OpenFlowSeeded, Peek's count, and a closed
 // flow that refuses AND logs with the core's own words.
 
 #include "Misc/AutomationTest.h"
@@ -91,14 +91,14 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("play"), Flow->Play(Hand[0].GameId, TEXT("go"), TEXT("q"), Error));
 
 		const std::string RegistryText = storylets::saveRegistry(*Registry);
-		const FString StoryletsText = UStoryletSave::SaveStateToJson(Engine);
+		const FString StoryletsText = UStoryletSave::SerializeState(Engine);
 
 		// Loading, into a freshly made registry and engine.
 		auto Registry2 = std::make_shared<storylets::ScopeRegistry>();
 		UStoryletEngine* Engine2 = UStoryletEngine::CreateWithRegistry(Bundle, Registry2);
 		if (!TestNotNull(TEXT("a fresh engine on a fresh registry"), Engine2)) return false;
 		storylets::loadRegistry(*Registry2, RegistryText);
-		TestTrue(TEXT("the save loads into the fresh engine"), UStoryletSave::LoadStateFromJson(Engine2, StoryletsText));
+		TestTrue(TEXT("the save loads into the fresh engine"), UStoryletSave::DeserializeState(Engine2, StoryletsText));
 		UStoryletFlow* Restored = Engine2->GetFlow(TEXT("main"));
 		if (TestNotNull(TEXT("GetFlow hands back the flow the load restored"), Restored))
 		{
@@ -116,15 +116,15 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 		if (!TestNotNull(TEXT("standalone engine"), Engine)) return false;
 		Engine->OpenFlow(TEXT("main"));
 		Engine->OpenFlow(TEXT("side"));
-		const FString Saved = UStoryletSave::SaveStateToJson(Engine);
+		const FString Saved = UStoryletSave::SerializeState(Engine);
 
 		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("a fresh standalone engine"), Fresh)) return false;
-		FString LoadReport;
+		FStoryletLoadReport LoadReport;
 		TestTrue(TEXT("the save loads into an engine that never opened a flow"),
-			UStoryletSave::LoadStateFromJsonWithReport(Fresh, Saved, LoadReport));
-		TestTrue(TEXT("and hands back its report, naming both flows"),
-			LoadReport.Contains(TEXT("\"main\"")) && LoadReport.Contains(TEXT("\"side\"")));
+			UStoryletSave::DeserializeStateWithReport(Fresh, Saved, LoadReport));
+		TestEqual(TEXT("and hands back its report, naming both flows"),
+			FString::Join(LoadReport.Flows, TEXT(",")), FString(TEXT("main,side")));
 		TestNotNull(TEXT("GetFlow hands back main"), Fresh->GetFlow(TEXT("main")));
 		TestNotNull(TEXT("GetFlow hands back side"), Fresh->GetFlow(TEXT("side")));
 		TestEqual(TEXT("Flows lists both"), Fresh->Flows().Num(), 2);
@@ -147,7 +147,7 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 		UStoryletEngine* Donor = UStoryletEngine::Create(Bundle, {});
 		Donor->OpenFlow(TEXT("main"));
 		Donor->OpenFlow(TEXT("gone"));
-		TestTrue(TEXT("the donor's save loads"), UStoryletSave::LoadStateFromJson(Engine, UStoryletSave::SaveStateToJson(Donor)));
+		TestTrue(TEXT("the donor's save loads"), UStoryletSave::DeserializeState(Engine, UStoryletSave::SerializeState(Donor)));
 		TestTrue(TEXT("a replaced wrapper is still closed after a load"), First->IsClosed());
 		TestTrue(TEXT("a closed wrapper is still closed after a load"), Gone->IsClosed());
 		TestFalse(TEXT("the held live wrapper answers for the restored flow"), Second->IsClosed());
@@ -171,7 +171,7 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 			FString::Join(Listener->Calls, TEXT(",")), FString(TEXT("main:1")));
 	}
 
-	// --- OpenFlowFromJson hands back the restore's report ------------------------------
+	// --- OpenFlowRestoring hands back the restore's report -----------------------------
 	{
 		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, {});
 		if (!TestNotNull(TEXT("engine"), Engine)) return false;
@@ -180,11 +180,16 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 		Visit->Deal(TEXT("q"));
 		const FString Parked = Engine->SaveFlowToJson(TEXT("visit"));
 		Engine->CloseFlow(TEXT("visit"));
-		FString Report;
-		UStoryletFlow* Back = Engine->OpenFlowFromJson(TEXT("visit"), Parked, Report);
+		FStoryletLoadReport Preview;
+		TestTrue(TEXT("the parked visit previews"), Engine->PreviewFlowRestore(TEXT("visit"), Parked, Preview));
+		FStoryletLoadReport Report;
+		UStoryletFlow* Back = Engine->OpenFlowRestoring(TEXT("visit"), Parked, Report);
 		TestNotNull(TEXT("the parked visit opens"), Back);
-		TestEqual(TEXT("its report is the preview's"), Report, Engine->PreviewFlowRestoreJson(TEXT("visit"), Parked));
-		TestTrue(TEXT("and it is a report"), Report.Contains(TEXT("\"exact\"")));
+		TestEqual(TEXT("its report is the preview's: exact"), Report.bExact, Preview.bExact);
+		TestEqual(TEXT("its report is the preview's: flows"),
+			FString::Join(Report.Flows, TEXT(",")), FString::Join(Preview.Flows, TEXT(",")));
+		TestEqual(TEXT("and it names the visit"), FString::Join(Report.Flows, TEXT(",")), FString(TEXT("visit")));
+		TestEqual(TEXT("and its project"), Report.Project, FString(TEXT("proj_flows")));
 		TestEqual(TEXT("the hand came back"), Back ? Back->Board()[0].Cards.Num() : 0, 1);
 	}
 

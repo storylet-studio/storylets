@@ -132,7 +132,7 @@ bool FStoryletRegistryTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("and the game's @world"), Registry->get("world", "alarm")->asNumber(), 1.0);
 
 	// A save leaves the values to the game, which saves the registry once.
-	const FString Saved = UStoryletSave::SaveStateToJson(Engine);
+	const FString Saved = UStoryletSave::SerializeState(Engine);
 	TestTrue(TEXT("the envelope is version 3"), Saved.Contains(TEXT("storylets/save@3")));
 	TestFalse(TEXT("and carries no registry"), Saved.Contains(TEXT("\"registry\"")));
 
@@ -190,7 +190,7 @@ bool FStoryletRegistryTest::RunTest(const FString& Parameters)
 	if (!TestNotNull(TEXT("standalone engine"), Plain)) return false;
 	TestTrue(TEXT("its own registry"), Plain->GetRegistry() && Plain->GetRegistry() != Registry);
 	Plain->OpenFlow(TEXT("main"));
-	TestTrue(TEXT("a standalone save carries its registry"), UStoryletSave::SaveStateToJson(Plain).Contains(TEXT("\"registry\"")));
+	TestTrue(TEXT("a standalone save carries its registry"), UStoryletSave::SerializeState(Plain).Contains(TEXT("\"registry\"")));
 
 	// A card naming another engine's scope. The asset path reads the bundle's
 	// externalScopes; on the game's registry the card reads and writes it there.
@@ -230,7 +230,7 @@ bool FStoryletRegistryTest::RunTest(const FString& Parameters)
 		UStoryletFlow* Main = Played->OpenFlow(TEXT("main"));
 		if (!TestNotNull(TEXT("its flow"), Main)) return false;
 		Main->Deal(TEXT("h1"));
-		const FString Save = UStoryletSave::SaveStateToJson(Played);
+		const FString Save = UStoryletSave::SerializeState(Played);
 
 		const std::shared_ptr<storylets::ScopeRegistry> Elsewhere = GameRegistry();
 		RegisterPatter(*Elsewhere, 3, 1);
@@ -239,7 +239,7 @@ bool FStoryletRegistryTest::RunTest(const FString& Parameters)
 		UStoryletFlow* Keep = Other->OpenFlow(TEXT("keep"));
 		if (!TestNotNull(TEXT("its flow"), Keep)) return false;
 		Elsewhere->remove("patter");
-		TestFalse(TEXT("the load is refused"), UStoryletSave::LoadStateFromJson(Other, Save));
+		TestFalse(TEXT("the load is refused"), UStoryletSave::DeserializeState(Other, Save));
 		TestFalse(TEXT("the load changed nothing"), Keep->IsClosed());
 		TestEqual(TEXT("the flows are still only keep"), Other->Flows().Num(), 1);
 		TestNull(TEXT("and none was restored"), Other->GetFlow(TEXT("main")));

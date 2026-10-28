@@ -203,7 +203,7 @@ FString FHamletGame::Save() const
 	TSharedPtr<FJsonObject> env = MakeShared<FJsonObject>();
 	// Our .storyletsave text, which carries the bound @world once, beside (not inside) the engine's
 	// envelope, so its load can put the world back before the engine checks the hand.
-	env->SetStringField(TEXT("storylets"), UStoryletSave::SaveStateToJson(Storylets.Get()));
+	env->SetStringField(TEXT("storylets"), UStoryletSave::SerializeState(Storylets.Get()));
 	env->SetStringField(TEXT("patter"), UPatterSave::SaveStateToJson(Patter.Get()));   // Patter's patter/save@0 text
 	env->SetStringField(TEXT("at"), At);
 	if (Playing)
@@ -233,7 +233,7 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 	{
 		// The wrapper puts the saved world into the bound container first, since the load checks the
 		// hand it puts back against it, and a refused load leaves the world as it was.
-		if (!UStoryletSave::LoadStateFromJson(Storylets.Get(), env->GetStringField(TEXT("storylets"))))
+		if (!UStoryletSave::DeserializeState(Storylets.Get(), env->GetStringField(TEXT("storylets"))))
 		{
 			OutError = TEXT("the storylets half did not load");
 			return false;

@@ -59,7 +59,7 @@ extends RefCounted
 ## Every key create's options take. Another is reported ("setup") and ignored:
 ## the options are an untyped Dictionary, so a mistyped or retired key would
 ## otherwise be ignored in silence. JS's ENGINE_OPTIONS, Patterplay's spelling.
-const CREATE_OPTION_KEYS := ["seed", "log", "host_scopes", "registry", "on_replaced_flow", "on_error"]
+const CREATE_OPTION_KEYS := ["seed", "log", "host_scopes", "registry", "on_replaced_flow", "on_error", "on_refit"]
 ## The owner label on everything this engine registers: named in a clash error
 ## and carried on the registry's examiner rows.
 const OWNER := "Storylet Engine"
@@ -178,6 +178,9 @@ var _on_replaced_flow = null
 ## The game's "on_error" Callable(error: Dictionary), told of every condition a
 ## flow could not evaluate and counted as false; null for the default warning.
 var _on_error = null
+## The game's "on_refit" Callable(misfits: Array), told what the registry's
+## refitting loads put back for this engine; null for the default push_warning.
+var _on_refit = null
 ## Every OTHER scope in the registry as an eval context sees it (instance keys
 ## left out), rebuilt only when the registry's revision moves.
 var _view_revision := -1
@@ -388,7 +391,10 @@ func legacy_address_message(kind: String, segment: String, name: String) -> Stri
 ## tracing: {"flow", "kind": "condition", "node", "source" (when the bundle
 ## carries it), "message"}, Patterplay's on_error shape; and of each set-up
 ## problem as the engine is built, {"flow": "", "kind": "setup", "node",
-## "message"}; default, a push_warning)}. An option this engine doesn't take
+## "message"}; default, a push_warning), "on_refit": Callable(misfits: Array)
+## (told what the registry's refitting loads put back for this engine, each
+## {"scope", "name", "value"} with what the save held; see report_refits;
+## default, a push_warning per value)}. An option this engine doesn't take
 ## (the retired "world" among them) is reported as set-up and ignored; a known
 ## option of the wrong shape is an error: returns null with push_error.
 ##
@@ -605,6 +611,8 @@ static func _options_error(opts: Dictionary) -> String:
 		return "registry option must be a scope registry (StoryletScopeRegistry, or any copy of the shared one)"
 	if opts.get("on_error") != null and not (opts["on_error"] is Callable):
 		return "on_error option must be a Callable(error: Dictionary)"
+	if opts.get("on_refit") != null and not (opts["on_refit"] is Callable):
+		return "on_refit option must be a Callable(misfits: Array)"
 	return ""
 
 
@@ -673,6 +681,8 @@ func _init(bundle, opts: Dictionary = {}) -> void:
 	_on_replaced_flow = opts.get("on_replaced_flow")
 	# The game's on_error (see create); null leaves the default push_warning.
 	_on_error = opts.get("on_error")
+	# The game's on_refit (see create); null leaves the default push_warning.
+	_on_refit = opts.get("on_refit")
 
 	# The value scope's segments come off the whole bundle at once (a tag gameId
 	# is only unique within its group), so they are built before the walk rather
@@ -749,6 +759,9 @@ func _init(bundle, opts: Dictionary = {}) -> void:
 
 	var bound = opts.get("host_scopes")
 	_init_shared(bound if bound is Dictionary else {})
+	# The shared bags claimed values the game may have loaded first.
+	if _init_error == "":
+		report_refits()
 	# Last, so the game's handler and the decision log hear about an engine
 	# that is ready to be asked. A refused engine reports nothing: create()
 	# hands back null, naming the refusal.
@@ -768,6 +781,33 @@ func _report_setup(node: String, message: String) -> void:
 		push_warning("Storylet Engine: " + message)
 	if _log_cap >= 0 or engine_tracing():
 		emit_engine("", {"type": "diagnostic", "where": "setup", "message": message})
+
+
+## @internal - say what the registry's refitting loads have put back for this
+## engine since it last said (the "on_refit" option): a saved value that no
+## longer fits its declaration (a stage, an enum value or a flag deleted since
+## the save, or a value of another type) went back to its default. A game that
+## loads its own registry passes {"refit": true} and hears its Storylets share
+## here as the engine's bags claim it: at construction, as a flow opens, and as
+## a save loads. Only this engine's keys ("story", "storylets/...", the host
+## scopes it self-backs): the other engines on the registry take theirs.
+## Unset, a push_warning per value, so a drifted save is never silent. JS's
+## onRefit, Patterplay's on_refit.
+func report_refits() -> void:
+	# A game's registry from an older copy of the kernel has no refit to report.
+	if _registry == null or not _registry.has_method("take_misfits"):
+		return
+	var misfits: Array = _registry.take_misfits(func(scope: String) -> bool:
+		return scope == "story" or scope.begins_with("storylets/") \
+			or (_host_scopes.has(scope) and bool(_host_scopes[scope]["self_backed"])))
+	if misfits.is_empty():
+		return
+	if _on_refit is Callable and (_on_refit as Callable).is_valid():
+		(_on_refit as Callable).call(misfits)
+		return
+	for m in misfits:
+		push_warning("Storylet Engine: the save's %s.%s was %s, which no longer fits its declaration; it is back at its default"
+			% [m["scope"], m["name"], JSON.stringify(m["value"])])
 
 
 ## Build the shared stores, register them and the host scopes, and set up each
@@ -1469,8 +1509,18 @@ func shared_claims(except_id = null) -> Dictionary:
 ## refused, naming the fix (Patter's teaching rule). Another engine's game-wide
 ## scope in the same registry reads by its path too ("patter.gold"): every
 ## engine reads every scope. Returns the value, or null with push_error.
+## A property path as the game may write it (ruling 3, 2026-10-28: Patter's
+## form as well as this engine's): one leading `@` is dropped, and a bare
+## `@gold` is the story's, as it is in an expression.
+static func property_path(path: String) -> String:
+	if not path.begins_with("@"): return path
+	var rest := path.substr(1)
+	return rest if rest.contains(".") else "story." + rest
+
+
 func get_property(path: String) -> Variant:
 	_last_error = ""
+	path = property_path(path)
 	var r := _resolve_shared(path)
 	if r.has("error"):
 		_refuse("StoryletEngine.get_property", r["error"])
@@ -1496,7 +1546,8 @@ func set_property(path: String, value) -> String:
 	return _last_error
 
 
-func _set_property(path: String, value) -> String:
+func _set_property(given: String, value) -> String:
+	var path := property_path(given)
 	var r := _resolve_shared(path)
 	if r.has("error"):
 		push_error("StoryletEngine.set_property: " + r["error"])
@@ -2109,6 +2160,13 @@ func preview_flow_restore(id: String, saved: Dictionary) -> Dictionary:
 ## with push_error, and nothing is touched. So is any load of content that names
 ## another engine's scope nothing on this registry registered.
 func load_game(envelope) -> Dictionary:
+	var report := _load_game_into(envelope)
+	# The game's own refitting load of its registry lands before this one.
+	report_refits()
+	return report
+
+
+func _load_game_into(envelope) -> Dictionary:
 	_last_error = ""
 	var refusal := _unreadable_save_error(envelope)
 	if refusal == "":

@@ -11,6 +11,8 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdio>
+#include <unistd.h>
 #include <functional>
 #include <map>
 #include <memory>
@@ -254,6 +256,52 @@ namespace oneregistry
     }
 
     /** Every test: a name and a body that records failures. */
+    /** The JS onRefit test's moods bundle: story `mood`, an enum of `values`,
+     *  default "calm", and no @world. */
+    inline BundlePtr Moods(const std::vector<std::string>& values)
+    {
+        std::string json = BundleJson();
+        const std::string worldFrom = R"("world":{"properties":[{"name":"alarm","type":"number","default":0}]})";
+        json.replace(json.find(worldFrom), worldFrom.size(), R"("world":{"properties":[]})");
+        const std::string storyFrom = R"([{"name":"gold","type":"number","default":0},{"name":"steps","type":"number","default":0,"shared":false}])";
+        std::string list;
+        for (const std::string& v : values) list += (list.empty() ? "" : ",") + ("\"" + v + "\"");
+        json.replace(json.find(storyFrom), storyFrom.size(), R"([{"name":"mood","type":"enum","values":[)" + list + R"(],"default":"calm"}])");
+        return MakeBundle(json);
+    }
+
+    /** A registry save in which story.mood is "angry". */
+    inline Blob SavedAngry()
+    {
+        auto reg = std::make_shared<ScopeRegistry>();
+        EngineOptions opts;
+        opts.registry = reg;
+        // Kept alive to the save: an engine that goes hands its keys back.
+        Engine engine(Moods({"calm", "angry"}), opts);
+        engine.setProperty("story.mood", StoryletValue::Str("angry"));
+        return reg->save();
+    }
+
+    /** What fn writes to standard error, captured. */
+    inline std::string Stderr(const std::function<void()>& fn)
+    {
+        std::fflush(stderr);
+        FILE* tmp = std::tmpfile();
+        const int saved = dup(fileno(stderr));
+        dup2(fileno(tmp), fileno(stderr));
+        try { fn(); } catch (...) { std::fflush(stderr); dup2(saved, fileno(stderr)); close(saved); std::fclose(tmp); throw; }
+        std::fflush(stderr);
+        dup2(saved, fileno(stderr));
+        close(saved);
+        std::rewind(tmp);
+        std::string out;
+        char buf[512];
+        size_t n;
+        while ((n = std::fread(buf, 1, sizeof buf, tmp)) > 0) out.append(buf, n);
+        std::fclose(tmp);
+        return out;
+    }
+
     inline std::vector<std::pair<std::string, std::function<void(Check&)>>> Tests()
     {
         std::vector<std::pair<std::string, std::function<void(Check&)>>> tests;
@@ -830,6 +878,55 @@ namespace oneregistry
             RegisterPatter(*registry, {{"gold", 3}, {"visits", 1}});
             FlowPtr flow = engine.openFlow("main");
             c.eq("dealt", std::to_string(flow->deal("h1").size()), "1");
+        });
+
+        // ----- onRefit: the registry's refits, this engine's share -------------
+        //
+        // A game that loads its own registry refits it (refit = true): a saved
+        // value that no longer fits its declaration goes back to its default.
+        // The engine takes its own share of those as its bags claim them and
+        // tells the game through onRefit, Patterplay's hook (ruling 3,
+        // 2026-10-28). The JS test's describe, case for case.
+        tests.emplace_back("onRefit: hears a value the game's refitting load put back, as the engine claims it", [](Check& c)
+        {
+            auto reg = std::make_shared<ScopeRegistry>();
+            reg->load(SavedAngry(), false, true);   // the game loads first: the values wait for the engine
+            std::vector<std::string> heard;
+            EngineOptions opts;
+            opts.registry = reg;
+            opts.onRefit = [&heard](const std::vector<LoadMisfit>& m)
+            {
+                for (const LoadMisfit& x : m) heard.push_back(x.scope + "." + x.name + "=" + x.value.toJsonString());
+            };
+            Engine engine(Moods({"calm"}), opts);
+            c.eq("heard", Joined(heard), "[story.mood=\"angry\"]");
+            c.eq("story.mood", Show(engine.getProperty("story.mood")), "\"calm\"");
+        });
+
+        tests.emplace_back("onRefit: hears it at loadGame when the engine was there first, and takes it from the registry", [](Check& c)
+        {
+            auto reg = std::make_shared<ScopeRegistry>();
+            std::vector<std::string> heard;
+            EngineOptions opts;
+            opts.registry = reg;
+            opts.onRefit = [&heard](const std::vector<LoadMisfit>& m) { for (const LoadMisfit& x : m) heard.push_back(x.scope + "." + x.name); };
+            Engine engine(Moods({"calm"}), opts);
+            const Blob blob = SavedAngry();
+            reg->load(blob, false, true);
+            engine.loadGame(engine.saveGame());
+            c.eq("heard", Joined(heard), "[story.mood]");
+            c.eq("the registry's misfits after", std::to_string(reg->takeMisfits().size()), "0");
+        });
+
+        tests.emplace_back("onRefit: warns on stderr when the game gives no handler", [](Check& c)
+        {
+            auto reg = std::make_shared<ScopeRegistry>();
+            reg->load(SavedAngry(), false, true);
+            EngineOptions opts;
+            opts.registry = reg;
+            const std::string said = Stderr([&] { Engine engine(Moods({"calm"}), opts); });
+            c.yes("the warning: " + said,
+                said.find("Storylet Engine: the save's story.mood was \"angry\", which no longer fits its declaration") != std::string::npos);
         });
 
         return tests;

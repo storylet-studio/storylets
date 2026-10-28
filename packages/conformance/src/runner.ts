@@ -368,6 +368,10 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         }
         break;
       }
+      case "setPath":
+        if (op.engine) engine.setProperty(op.path, op.value);
+        else flowOf(op.flow).setProperty(op.path, op.value);
+        break;
       case "assertEngineRead": {
         let value: ScalarValue | undefined;
         let error: string | undefined;

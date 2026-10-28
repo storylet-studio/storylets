@@ -846,3 +846,130 @@ struct FStoryletPlayError
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Message;
 };
+
+// --- the load report (design/engine-server.md 4.9) ------------------------------
+//
+// What a load, a flow restore, a durable load or a live swap did that was not a
+// plain restore, field for field the core's storylets::LoadReport and the JS
+// LoadReport. Identities are gameIds; a card or hand the edit deleted is named by
+// the key the save carried. Lists are sorted, as the core sorts them, except
+// Flows, which keeps the envelope's order.
+
+/** One card a restore refused to put back on the board. */
+USTRUCT(BlueprintType)
+struct FStoryletLoadEviction
+{
+	GENERATED_BODY()
+
+	/** The flow whose hand held it. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Flow;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Hand;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Card;
+
+	/** "vanished", "hand-vanished" or "claimed-elsewhere", or, for a held
+	 *  card a load checked against the values it put back, a deal's reason:
+	 *  "hand-condition", "deck-gate", "taken", "cooldown", "tags" or
+	 *  "condition". */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Reason;
+};
+
+/** One cooldown the restore forgot, because its card is gone. */
+USTRUCT(BlueprintType)
+struct FStoryletLoadCooldown
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Flow;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Card;
+};
+
+/** One property the restore could not put back as it was. */
+USTRUCT(BlueprintType)
+struct FStoryletLoadProperty
+{
+	GENERATED_BODY()
+
+	/** The flow whose half it belongs to; empty for the shared half. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Flow;
+
+	/** The property's address, as ListProperties prints it and GetProperty*
+	 *  takes it ("story.gold", "hand.<gameId>.mood"). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Path;
+};
+
+/** What the save said against what this build says; equal means no drift. */
+USTRUCT(BlueprintType)
+struct FStoryletLoadIdentity
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Saved;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Bundle;
+};
+
+/** What a load or a restore did, or would do, that is not a plain restore:
+ *  the core's LoadReport field for field, and the same report its JSON
+ *  (reportToJson) carries. */
+USTRUCT(BlueprintType)
+struct FStoryletLoadReport
+{
+	GENERATED_BODY()
+
+	/** No drift and nothing dropped, defaulted or retyped. Flows is not a
+	 *  divergence and does not count. The JSON's `exact`. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	bool bExact = true;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FString Project;
+
+	/** Drift when the two differ; reported, never refused. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FStoryletLoadIdentity Version;
+
+	/** Drift when the two differ; reported, never refused. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	FStoryletLoadIdentity Hash;
+
+	/** The flows this restores, in the order it restores them. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	TArray<FString> Flows;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	TArray<FStoryletLoadEviction> Evicted;
+
+	/** Cooldowns held for cards the bundle no longer has. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	TArray<FStoryletLoadCooldown> DroppedCooldowns;
+
+	/** Shared `redraw: never` spends for cards the bundle no longer has. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	TArray<FString> DroppedSpent;
+
+	/** In the save, not declared any more. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	TArray<FStoryletLoadProperty> DroppedProperties;
+
+	/** Declared, not in the save: it takes the declaration's default. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	TArray<FStoryletLoadProperty> DefaultedProperties;
+
+	/** In the save and still declared, but the saved value no longer fits the
+	 *  declaration: it takes the declaration's default. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine|Save")
+	TArray<FStoryletLoadProperty> RetypedProperties;
+};

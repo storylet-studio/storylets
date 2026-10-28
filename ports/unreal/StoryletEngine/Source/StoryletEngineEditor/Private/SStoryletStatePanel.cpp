@@ -826,7 +826,7 @@ void SStoryletStatePanel::SaveStateToFile(UStoryletEngine* Engine)
 	{
 		return;
 	}
-	const FString Json = UStoryletSave::SaveStateToJson(Engine);
+	const FString Json = UStoryletSave::SerializeState(Engine);
 	if (Json.IsEmpty())
 	{
 		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("SaveFail", "Could not save the state."));
@@ -854,7 +854,7 @@ void SStoryletStatePanel::LoadStateFromFile(UStoryletEngine* Engine)
 		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("LoadReadFail", "Could not read the state file."));
 		return;
 	}
-	if (!UStoryletSave::LoadStateFromJson(Engine, Text))
+	if (!UStoryletSave::DeserializeState(Engine, Text))
 	{
 		FMessageDialog::Open(EAppMsgType::Ok,
 			LOCTEXT("LoadParseFail", "Not a valid storylets state file (see the Output Log)."));

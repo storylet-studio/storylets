@@ -3,8 +3,8 @@
 // play-helpers save.ts: these helpers are the string boundary - a foreign or
 // malformed blob fails with a clean error rather than corrupting a run. The
 // envelope itself lives in the pure core (parity rule: never editor-only);
-// this file only strings it. Module-private; UStoryletSave's SaveStateToJson /
-// LoadStateFromJson are the public face.
+// this file only strings it. Module-private; UStoryletSave's SerializeState /
+// DeserializeState are the public face.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -13,7 +13,7 @@
 #include <functional>
 #include <string>
 
-namespace storylets { class Engine; }
+namespace storylets { class Engine; struct LoadReport; }
 
 /** The engine's current state (envelope + its @world values) as
  *  pretty-printed .storyletsave JSON. */
@@ -28,12 +28,12 @@ bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, F
 /** The same load, but the file's @world values are RETURNED for the caller to
  *  apply rather than written through the engine: a bound container is restored
  *  directly (the host restoring, which its read-only policy does not bind),
- *  a self-backed engine through setProperty. OutReportJson, when given, takes
- *  the load's LoadReport as JSON (empty on a refusal). BeforeLoad, when given,
+ *  a self-backed engine through setProperty. OutReport, when given, takes
+ *  the load's LoadReport (left alone on a refusal). BeforeLoad, when given,
  *  is handed those values before the engine loads, so the caller can put them
  *  in first (the load checks each held card against them); a refused load is
  *  the caller's to put back. */
 bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
 	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError,
-	FString* OutReportJson = nullptr,
+	storylets::LoadReport* OutReport = nullptr,
 	const std::function<void(const storylets::OrderedMap<std::string, storylets::StoryletValue>&)>& BeforeLoad = {});

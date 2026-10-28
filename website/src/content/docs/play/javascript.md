@@ -105,6 +105,12 @@ played through: a condition it couldn't evaluate, and how it was set up (`kind: 
 as a token the bundle doesn't declare or an option it doesn't take, reported as the
 constructor ends. Without one, each goes to `console.warn`.
 
+`onRefit` hears what a refitting load put back. A game that loads its own registry with
+`registry.load(saved, { refit: true })` has a saved value that no longer fits its declaration (an
+enum value, a stage or a flag deleted since the save) go back to its default, and the engine
+passes on its share as `{ scope, name, value }`, with what the save held, as it claims them: as
+it's built, as a flow opens, and after `loadGame`. Without one, each goes to `console.warn`.
+
 ## Deal, peek, outcomes, play
 
 ```js

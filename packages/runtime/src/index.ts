@@ -2,7 +2,7 @@ export { DURABLE_SCHEMA, Engine, Flow, StoryletError } from "./engine.js";
 // The examiner row listProperties() returns: the shared kernel's
 // (@wildwinter/scoperegistry, the property implementation both product families use),
 // re-exported so a host typing a row needs no dependency on the kernel.
-export type { PropertyRow } from "@wildwinter/scoperegistry";
+export type { LoadMisfit, PropertyRow } from "@wildwinter/scoperegistry";
 export type {
   BagMount, BoxView, DealtCard, DurableSave, EngineLogEntry, EngineOptions, EngineTraceHandler, HostScope, LogEntry, OpenFlowOptions,
   OutcomeView, PlayError, PlayOptions, RankedList, TraceEvent, TraceHandler, TraceVerdict,

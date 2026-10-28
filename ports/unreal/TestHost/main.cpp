@@ -686,7 +686,7 @@ static void checkDurable(const std::string& at, const JsonValue* expected, const
  *  reason. */
 static bool needsFlow(const std::string& kind)
 {
-    return kind == "setState" || kind == "peek" || kind == "deal" || kind == "assertBoard"
+    return kind == "setState" || kind == "setPath" || kind == "peek" || kind == "deal" || kind == "assertBoard"
         || kind == "play" || kind == "advanceTurns" || kind == "assertOutcomes"
         || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertCardFields" || kind == "assertState"
         || kind == "assertCardExtensions" || kind == "assertOutcomeExtensions" || kind == "assertBoxExtensions"
@@ -938,7 +938,16 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         std::string kind = op.strOr("op");
         std::string at = "op " + std::to_string(index) + " (" + kind + ")";
         Flow* session = needsFlow(kind) ? &flowOf(op) : nullptr;
-        if (kind == "setState")
+        // Corpus 25: one host write by its raw path (Patter's `@gold`), on the
+        // flow or, with `engine`, on the engine.
+        if (kind == "setPath")
+        {
+            const JsonValue* onEngine = op.find("engine");
+            const StoryletValue value = bundleloader::ToValue(op.at("value"));
+            if (onEngine && onEngine->isBool() && onEngine->b) engine->setProperty(op.strOr("path"), value);
+            else session->setProperty(op.strOr("path"), value);
+        }
+        else if (kind == "setState")
         {
             verdicts.clear();
             diagnostics.clear();

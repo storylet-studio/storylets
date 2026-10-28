@@ -95,8 +95,8 @@ return an error string. `StoryletEngine.create()` returns `null` for a bundle it
 native ports. Every engine has a label helper, so a view prints the same text either way.
 
 **Unreal Blueprint** gets typed property accessors instead of one generic value pin, and
-polls the flow's log instead of subscribing to a trace delegate. Both surfaces are available
-in full from C++.
+hears the trace through the engine's `OnTrace` event rather than a per-flow subscription. Both
+surfaces are available in full from C++.
 
 ## What this means for you
 

@@ -114,7 +114,7 @@ import type {
 } from "@storylet-studio/model";
 import { SAVE_SCHEMA, SAVE_SCHEMA_V1, SAVE_SCHEMA_V2 } from "@storylet-studio/model";
 import { PropertyBag as StateBag, ScopeRegistry, defaultFor } from "@wildwinter/scoperegistry";
-import type { PropertyRow, ScopeDeclaration } from "@wildwinter/scoperegistry";
+import type { LoadMisfit, PropertyRow, ScopeDeclaration } from "@wildwinter/scoperegistry";
 import { makePrng, shuffleInPlace } from "./prng.js";
 import type { Prng } from "./prng.js";
 
@@ -184,6 +184,18 @@ export interface EngineOptions {
    *  each set-up problem (reported as the constructor ends). Default: a console
    *  warning. Patterplay's `onError`, the same shape. */
   onError?: (error: PlayError) => void;
+  /** Told what the registry's refitting loads put back for this engine: a saved
+   *  value that no longer fits its declaration (a stage, an enum value or a flag
+   *  deleted since the save, or a value of another type) goes back to its
+   *  default, and each one comes here with what the save held. A game that
+   *  loads its own registry passes `{ refit: true }` and hears its Storylets
+   *  share here as the engine's bags claim it (at construction, as a flow opens,
+   *  and as a save loads); the engine's own `loadGame` reports drift in its
+   *  LoadReport as before. Only this engine's keys (`story`, `storylets/...`,
+   *  the host scopes it self-backs): the other engines on the registry take
+   *  theirs. Default: a console warning per value, so a drifted save is never
+   *  silent. Patterplay's `onRefit`, the same shape (ruling 3, 2026-10-28). */
+  onRefit?: (misfits: LoadMisfit[]) => void;
 }
 
 /**
@@ -197,7 +209,7 @@ export type HostScope = ScopeResolver;
 
 /** Every key `EngineOptions` takes: another is reported (`setup`), since a
  *  plain-JS caller has no type check. */
-const ENGINE_OPTIONS = new Set(["seed", "log", "hostScopes", "registry", "onReplacedFlow", "onError"]);
+const ENGINE_OPTIONS = new Set(["seed", "log", "hostScopes", "registry", "onReplacedFlow", "onError", "onRefit"]);
 
 /**
  * A content error the engine played through. Content can fail at run time in
@@ -530,6 +542,16 @@ const OWNER = "Storylet Engine";
 
 /** Identity: storylets property names are case-significant as authored. */
 const identity = (n: string): string => n;
+
+/** A property path as the game may write it (ruling 3, 2026-10-28: Patter's
+ *  form as well as this engine's). `story.gold` and `@story.gold` are the same
+ *  path, as are `world.time` and `@world.time`; a bare `@gold` is the story's,
+ *  as it is in an expression. Anything else is passed through as it was. */
+function propertyPath(path: string): string {
+  if (!path.startsWith("@")) return path;
+  const rest = path.slice(1);
+  return rest.includes(".") ? rest : `story.${rest}`;
+}
 
 /** The registry keys this engine's bags live under. An id is escaped (`%` and
  *  `/`) so no two keys can meet. Every runtime writes the same keys: they are
@@ -929,6 +951,9 @@ interface Internals {
   hostResolvers: Record<string, ScopeResolver>;
   /** The game's `onError` (EngineOptions), or the console warning. */
   onError: (error: PlayError) => void;
+  /** Take this engine's share of the registry's refits and tell the game
+   *  (EngineOptions.onRefit, or the console warning). */
+  reportRefits: () => void;
   /** `turn` is the box clock the event happened on, where the caller knows it
    *  - the same stamp the flow's own log carries. Unity and Unreal passed it
    *  from the start; JS and Godot dropped it, so their examiners printed "[-]"
@@ -1488,6 +1513,13 @@ export class Engine {
       onError: opts.onError ?? ((e) => console.warn(e.kind === "setup" ? `Storylet Engine: ${e.message}`
         : `Storylet Engine: the condition on ${e.node} in flow '${e.flow}' failed, counted as false: ${e.message}`)),
       ownsRegistry: opts.registry === undefined,
+      reportRefits: () => {
+        const misfits = this.internals.registry.takeMisfits((scope) => scope === "story" || scope.startsWith("storylets/")
+          || this.internals.hostScopes.get(scope)?.selfBacked === true);
+        if (misfits.length === 0) return;
+        if (opts.onRefit !== undefined) opts.onRefit(misfits);
+        else for (const m of misfits) console.warn(`Storylet Engine: the save's ${m.scope}.${m.name} was ${JSON.stringify(m.value)}, which no longer fits its declaration; it is back at its default`);
+      },
       registryView: () => view(),
       hostScopes: new Map(),
       hostResolvers: {},
@@ -1584,6 +1616,8 @@ export class Engine {
     internals.durable.flow = durableProps(internals, internals.flowDecls);
 
     this.initShared(opts.hostScopes ?? {}, setup);
+    // The shared bags claimed values the game may have loaded first.
+    internals.reportRefits();
     // Last, so the game's handler and the decision log hear about an engine
     // that is ready to be asked.
     for (const s of setup) this.reportSetup(s.node, s.message);
@@ -1926,7 +1960,7 @@ export class Engine {
    * default) was the bug Patter's engine.getProperty guard exists to stop.
    */
   getProperty(path: string): ScalarValue {
-    const found = this.resolveShared(path);
+    const found = this.resolveShared(propertyPath(path));
     const value = found.kind === "host" ? found.host.resolver.get(found.name)
       : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
       : found.bag.get(found.name);
@@ -1935,7 +1969,7 @@ export class Engine {
   }
 
   setProperty(path: string, value: ScalarValue): void {
-    const found = this.resolveShared(path);
+    const found = this.resolveShared(propertyPath(path));
     checkHostWrite(this.internals, path, value);
     if (found.kind === "host") {
       if (!found.host.set) {
@@ -2278,6 +2312,15 @@ export class Engine {
    *  drift tolerance that makes a load forgiving is what hides its cost, so
    *  the cost comes back with the load whether or not anybody looked first. */
   loadGame(envelope: SaveEnvelope | SaveEnvelopeV1): LoadReport {
+    try {
+      return this.loadGameInto(envelope);
+    } finally {
+      // The game's own refitting load of its registry lands before this one.
+      this.internals.reportRefits();
+    }
+  }
+
+  private loadGameInto(envelope: SaveEnvelope | SaveEnvelopeV1): LoadReport {
     refuseUnreadableSave(envelope);
     this.assertSameProject(envelope);
     this.assertExternalScopes();
@@ -2530,6 +2573,8 @@ export class Flow {
     put(flowKey(id, "story"), this.stores.story);
     for (const kind of OWNED_SCOPES) for (const [owner, bag] of this.stores[kind]) put(flowKey(id, kind, owner), bag);
     this.mountBags();
+    // A bag that claimed values a refitting load parked says what it put back.
+    internals.reportRefits();
     for (const box of internals.bundle.boxes) {
       this.turnCounts.set(box.id, 0);
       for (const hand of box.hands) this.boardContents.set(hand.id, []);
@@ -3869,7 +3914,7 @@ export class Flow {
    *  release refuses it. */
   getProperty(path: string): ScalarValue {
     this.assertOpen();
-    const found = this.resolvePath(path);
+    const found = this.resolvePath(propertyPath(path));
     const value = found.kind === "host" ? found.host.resolver.get(found.name)
       : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
       : ownValue(found.own, found.name) ?? ownValue(found.shared, found.name);
@@ -3879,7 +3924,7 @@ export class Flow {
 
   setProperty(path: string, value: ScalarValue): void {
     this.assertOpen();
-    const found = this.resolvePath(path);
+    const found = this.resolvePath(propertyPath(path));
     checkHostWrite(this.internals, path, value);
     if (found.kind === "host") {
       if (!found.host.set) throw new StoryletError(`@${found.host.spec.token} is read-only here: the host bound no write`);

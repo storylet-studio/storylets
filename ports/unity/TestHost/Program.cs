@@ -737,6 +737,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             switch (kind)
             {
                 case "setState":
+                case "setPath":
                 case "peek":
                 case "deal":
                 case "assertBoard":
@@ -1533,6 +1534,13 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var session = NeedsFlow(kind) ? FlowOf(op) : null;
                 switch (kind)
                 {
+                    // Corpus 25: one host write by its raw path (Patter's `@gold`), on the
+                    // flow or, with `engine`, on the engine.
+                    case "setPath":
+                        if (op.Value<bool?>("engine") == true) engine.SetProperty(op.Value<string>("path"), StoryletJson.ToValue(op["value"]));
+                        else session.SetProperty(op.Value<string>("path"), StoryletJson.ToValue(op["value"]));
+                        break;
+
                     case "setState":
                     {
                         Collect();
