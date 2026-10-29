@@ -52,7 +52,7 @@
     "electron-builder": "^26.16.1",
     "electron-vite": "^5.0.0",
     "png-to-ico": "^3.0.2",
-    "vite": "^7.3.6"
+    "vite": "^7.3.7"
   },
   "build": {
     "appId": "studio.storylet.storyletter",
