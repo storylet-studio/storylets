@@ -29,7 +29,7 @@
   "dependencies": {
     "@storylet-studio/compiler": "0.0.0",
     "@storylet-studio/model": "0.13.0",
-    "@storylet-studio/runtime": "0.14.0",
+    "@storylet-studio/runtime": "0.15.0",
     "@storylet-studio/with-patter": ">=0.4.0",
     "@wildwinter/expr": "^0.6.0",
     "@wildwinter/scoperegistry": ">=0.9.0 <1.0.0",

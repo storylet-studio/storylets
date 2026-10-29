@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-29
+
 ### Added
 
 - **`"on_refit"`: the game hears what a refitting load put back.** A game that loads its own registry with

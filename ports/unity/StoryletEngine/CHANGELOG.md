@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-29
+
 ### Added
 
 - **`EngineOptions.OnRefit`: the game hears what a refitting load put back.** A game that loads its own registry

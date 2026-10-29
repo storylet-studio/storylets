@@ -9,6 +9,15 @@ the release notes, and refuses a tag with no dated section for it.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-29
+
+### Changed
+
+- **The page runs the Storylet Engine 0.15.0**, in place of 0.14.0, and reads the bundle's game scopes as
+  `scopeRegistry`. Its changes come with it, among them a deal that ranks the whole hand afresh; none changes
+  how the Village plays.
+- **The build line reads `v1.2.3 (hash), 13 places`**, with commas in place of a middle dot.
+
 ## [0.5.0] - 2026-10-22
 
 ### Changed

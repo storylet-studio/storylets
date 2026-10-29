@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-29
+
 ### Added
 
 - **`OnRefit` on the engine.** A game on its own registry (`CreateWithRegistry`) that loads it with refit has a

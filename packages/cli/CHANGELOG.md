@@ -20,7 +20,14 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-29
+
 ### Added
+
+- **A card's dealing rules.** `validate` checks a card's `weight` (a number above 0), `inOneHand` (a whole
+  number, 1 or more) and `acrossHands` (`"one"` or `"any"`), and `export` carries them, with a box's
+  `cardDefaults` for the cards that leave them unset. A box's `turn` without `seconds` exports a clock the game
+  moves.
 
 - **Host scopes, any game scope beside `@world`.** A project declares the game's own scopes in `scopeRegistry`
   (`@world`, `@player`, ...), and `validate` and `export` check references into each as `@world`'s are checked:
@@ -30,6 +37,10 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ### Changed
 
+- **`format` replaces a card's `copies` with `acrossHands`** (and `inOneHand` where it held more than one), and
+  `validate` warns of a card that still sets `copies` beside `acrossHands`, where `copies` does nothing.
+- **Coverage runs the Storylet Engine 0.15.0**, so it deals as the runtimes now do: a hand is ranked afresh at
+  each deal, and only a clock the game moves advances on a play.
 - **`format` moves the project's `world` block into `scopeRegistry`**, as the scope `world` (an empty block just
   goes). A project not yet formatted still validates and exports as before.
 - **Bundles are `storylets/bundle@2`**: the game's scopes are `scopeRegistry`, with no `world` block, so a runtime
