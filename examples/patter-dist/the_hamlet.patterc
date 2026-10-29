@@ -14,9 +14,9 @@
     }
   ],
   "content": {
-    "hash": "0x9d5to",
+    "hash": "11lta71",
     "project": "proj_mfj6p1i9",
-    "structureHash": "1xmmg87"
+    "structureHash": "0tr5xaw"
   },
   "locales": {
     "default": "en",
@@ -1117,6 +1117,9 @@
       }
     ],
     "version": 1
+  },
+  "start": {
+    "scene": "arrive-at-the-gate"
   },
   "strings": {
     "en": {

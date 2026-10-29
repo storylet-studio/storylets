@@ -7,8 +7,14 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-29
+
 ### Changed
 
+- **Every host runs the Storylet Engine 0.15.0 and Patter 0.35.0.** The Unreal Hamlet builds again: it binds the
+  world through Patterplay's `Create(Bundle, HostScopes)` and saves with `SerializeState` and `DeserializeState`.
+- **The Patter project names its start scene**, the gate, where the Hamlet already opens; the bundle is
+  re-exported with Patter's CLI 0.14.0.
 - **Both engines bind the shared world through `hostScopes`** (`{ world: world.resolver }`), the one option each
   runtime now takes for a game's own scopes, in place of the retired `world` option. The bundles are re-exported
   as `storylets/bundle@2`.

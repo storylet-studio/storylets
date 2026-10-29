@@ -57,7 +57,7 @@ bool FHamletGame::Setup(const FString& StoryletJson, const FString& PatterJson, 
 		PatterBundle.Reset(UPatterBundle::LoadFromString(PatterJson));
 		if (!PatterBundle || !PatterBundle->Raw()) { OutError = TEXT("Patter's bundle did not load"); return false; }
 		// ONE world, both engines: Patter's wrapper takes its container at Create too (0.11.0).
-		Patter.Reset(UPatterEngine::Create(PatterBundle.Get(), World.Mirror.Get()));
+		Patter.Reset(UPatterEngine::Create(PatterBundle.Get(), { { TEXT("world"), World.Mirror.Get() } }));
 		if (!Patter) { OutError = TEXT("Patter's engine did not start"); return false; }
 
 		Story.Reset(Storylets->OpenFlow(FlowId));
@@ -130,7 +130,7 @@ void FHamletGame::ChoicesFrom(const TArray<FPatterOption>& Options)
 		FString Outcome;
 		for (const FPatterGameDataEntry& e : opt.GameData) if (e.Name == TEXT("outcome")) Outcome = e.Value;
 		const bool bShut = !Outcome.IsEmpty() && !Open.Contains(Outcome);
-		Playing->Choices.Add({opt.Id, opt.Text.IsEmpty() ? opt.Id : opt.Text, Outcome, opt.bEligible && !bShut,
+		Playing->Choices.Add({opt.Id, opt.Prompt.Text.IsEmpty() ? opt.Id : opt.Prompt.Text, Outcome, opt.bEligible && !bShut,
 			!opt.bEligible ? TEXT("not available here") : bShut ? TEXT("requirements not met") : TEXT("")});
 	}
 }
@@ -204,7 +204,7 @@ FString FHamletGame::Save() const
 	// Our .storyletsave text, which carries the bound @world once, beside (not inside) the engine's
 	// envelope, so its load can put the world back before the engine checks the hand.
 	env->SetStringField(TEXT("storylets"), UStoryletSave::SerializeState(Storylets.Get()));
-	env->SetStringField(TEXT("patter"), UPatterSave::SaveStateToJson(Patter.Get()));   // Patter's patter/save@0 text
+	env->SetStringField(TEXT("patter"), UPatterSave::SerializeState(Patter.Get()));   // Patter's own save text
 	env->SetStringField(TEXT("at"), At);
 	if (Playing)
 	{
@@ -238,7 +238,7 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 			OutError = TEXT("the storylets half did not load");
 			return false;
 		}
-		if (!UPatterSave::LoadStateFromJson(Patter.Get(), env->GetStringField(TEXT("patter")))) { OutError = TEXT("Patter's half did not load"); return false; }
+		if (!UPatterSave::DeserializeState(Patter.Get(), env->GetStringField(TEXT("patter")))) { OutError = TEXT("Patter's half did not load"); return false; }
 		// A load rebuilds the flows, and OpenFlow on an existing id REPLACES it, hand and all: GetFlow.
 		Story.Reset(Storylets->GetFlow(FlowId));
 		if (!Story) { OutError = TEXT("the save has no main flow"); return false; }
@@ -267,13 +267,13 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 			// A scene that had ended and not been continued needs nothing from Patter: the
 			// transcript and the outcome are the envelope's, and Continue is waiting.
 			// The pending choice, read from the core flow: the wrapper has no choice listing, and Advance() is the next step.
-			const patter::Flow* core = bWasDone ? nullptr : (Patter->Raw() ? Patter->Raw()->getFlow(S(BoxFlowId)) : nullptr);
+			patter::Flow* core = bWasDone ? nullptr : (Patter->Raw() ? Patter->Raw()->getFlow(S(BoxFlowId)) : nullptr);
 			if (core)
 			{
 				TArray<FPatterOption> Pending;
 				for (const auto& opt : core->getChoices())
 				{
-					FPatterOption o; o.Id = F(opt.id); o.Text = F(opt.prompt ? opt.prompt->text : opt.id); o.bEligible = opt.eligible;
+					FPatterOption o; o.Id = F(opt.id); o.bHasPrompt = opt.prompt != nullptr; o.Prompt.Text = F(opt.prompt ? opt.prompt->text : opt.id); o.bEligible = opt.eligible;
 					// gameData is a shared_ptr to the map, and a value knows how to show itself.
 					if (opt.gameData)
 						for (const auto& g : *opt.gameData)

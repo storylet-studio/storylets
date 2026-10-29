@@ -88,7 +88,7 @@ public:
 
 	/** Both bundles as JSON text, each through its plugin's wrapper: UStoryletBundle then
 	 *  UStoryletEngine::CreateWithOptions(Bundle, { Seed }, { { "world", World.Store } }); UPatterBundle then
-	 *  UPatterEngine::Create(Bundle, World.Mirror). Two Create calls, one world: the whole story. */
+	 *  UPatterEngine::Create(Bundle, { { "world", World.Mirror } }). Two Create calls, one world: the whole story. */
 	bool Setup(const FString& StoryletJson, const FString& PatterJson, FString& OutError);
 
 	void Go(const FString& Place);
