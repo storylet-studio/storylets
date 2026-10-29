@@ -32,7 +32,7 @@
     "@patterkit/runtime": "^0.34.0",
     "@storylet-studio/compiler": "0.0.0",
     "@storylet-studio/dialect": "0.3.2",
-    "@storylet-studio/model": "0.13.0",
+    "@storylet-studio/model": "0.14.0",
     "@storylet-studio/ops": "0.0.0",
     "@storylet-studio/runtime": "0.15.0",
     "@storylet-studio/with-patter": ">=0.4.0",
