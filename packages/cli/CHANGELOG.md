@@ -20,6 +20,13 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-10-29
+
+### Fixed
+
+- **`new box` reuses a folder that holds only empty folders.** Storyletter now moves a box's folder when the box
+  is renamed, and undoing that leaves the old folder empty; `new box` no longer counts it as taken.
+
 ## [0.20.1] - 2026-10-29
 
 ### Changed

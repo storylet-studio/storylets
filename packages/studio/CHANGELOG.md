@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-29
+
 ### Fixed
 
 - **Renaming a box renames its folder.** When a box's Game ID changes with its name, its folder in the project now
