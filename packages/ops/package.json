@@ -38,6 +38,6 @@
     "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@patterkit/play-helpers": "^0.9.6"
+    "@patterkit/play-helpers": "^0.10.1"
   }
 }

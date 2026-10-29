@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-29
+
 ### Added
 
 - **Resolve clashes in the app.** When a returned Storyletpack or a pull from a server leaves clashes, a bar across
@@ -102,9 +104,13 @@ here is part of shipping, not a courtesy.
   to its arrows) is in a status line at the foot of the window, beside Live Link.
 - **A quieter navigator and title.** Rows are listed at an even weight, the open one marked by a soft fill,
   and the top bar shows just the project's name.
+- **Patter scenes play on Patter 0.36.0.** The Board and an exported playable page play a card's Patter scene with
+  Patterplay 0.36.0.
 
 ### Fixed
 
+- **Fields fit a narrow inspector.** Every control stays inside its row, a stage ladder and a long stage name wrap,
+  and a map's key field no longer holds its width when the inspector is narrow.
 - **The map no longer runs under its Layers panel.** On a project map, the canvas reached past its column and
   covered the side panel's edge. It now stops where the panel starts.
 - **The clash banner shows when you open a project.** Opened from the welcome screen, a project with clashes

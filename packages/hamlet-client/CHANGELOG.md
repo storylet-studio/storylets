@@ -7,6 +7,13 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-29
+
+### Changed
+
+- **Every host runs Patter 0.36.0**, in place of 0.35.0. Nothing changes how the Hamlet plays.
+
+
 ## [0.10.0] - 2026-10-29
 
 ### Changed
