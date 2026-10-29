@@ -10,6 +10,16 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Renaming a box renames its folder.** When a box's Game ID changes with its name, its folder in the project now
+  follows, in the same Undo step, as a deck's file always has. A box whose Game ID is kept (after Publish Bundle)
+  keeps its folder. The folder stays put if the new name is already taken, or if the box still holds its own
+  pictures from before the project map.
+- **Exports land beside the project on Linux.** Export as Storyletpack, Publish Spreadsheet, Publish Playable HTML
+  and the Board's session export now open the save dialog next to the project folder on every system, add the
+  file's extension when a name is typed without one, and say the full path of what was saved.
+
 ## [0.27.0] - 2026-10-29
 
 ### Added

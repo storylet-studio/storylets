@@ -8,8 +8,9 @@
 //
 // One rule now, and it is the second one: the folder follows the box's
 // ADDRESS. At creation the two agree, because a new box shard carries a title
-// and no gameId, so `effectiveGameId` derives one from the title - but a box
-// that is later renamed keeps its address, and the folder should keep it too.
+// and no gameId, so `effectiveGameId` derives one from the title. An address
+// that changes later (a retitle before anything pins it) moves the folder with
+// it, in the editor's own undo step (studio mutate/box-move.ts, storylets#42).
 import { join } from "node:path";
 import { canonicalStringify } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, effectiveGameId, gameIdify } from "@storylet-studio/model";

@@ -274,7 +274,7 @@ describe("the Story acts kit, played", () => {
 });
 
 // ---------------------------------------------------------------------------
-// A retitled box keeps its folder (CLI review 2026-10, item 4)
+// A box whose folder did not follow its title (CLI review 2026-10, item 4)
 // ---------------------------------------------------------------------------
 
 describe("a new box never lands on a box that is already there", () => {
@@ -312,6 +312,12 @@ describe("a new box never lands on a box that is already there", () => {
     const dir = fresh("emptied");
     mkdirSync(join(dir, "new-box", "decks"), { recursive: true });
     rmSync(join(dir, "new-box", "decks"), { recursive: true });
+    expect(runNewBox({ loaded: loadProject(dir) }).folder).toBe("new-box");
+  });
+
+  it("reuses a folder holding only empty folders, as undoing a box's move leaves it", () => {
+    const dir = fresh("undone");
+    mkdirSync(join(dir, "new-box", "decks"), { recursive: true });
     expect(runNewBox({ loaded: loadProject(dir) }).folder).toBe("new-box");
   });
 

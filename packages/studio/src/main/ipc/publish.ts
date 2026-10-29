@@ -20,10 +20,21 @@ import { pinForPublish } from "../pin.js";
 import { spreadsheetExport } from "../spreadsheet.js";   // Publish Spreadsheet
 import { playableExport } from "../playable.js";   // Publish Playable HTML
 import { serialised } from "../mutate/write-path.js";
+import { besideProject, savePathFor } from "../save-path.js";
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 
 type VcWrite = ReturnType<typeof writeTextFile>;
+
+/**
+ * Ask where. The path made whole (save-path.ts: the filter's extension, which a
+ * Linux picker does not add), or a refusal, or null when the picker was cancelled.
+ */
+async function pickSavePath(parent: BaseWindow, options: SaveDialogOptions): Promise<{ path: string } | { error: string } | null> {
+  const picked = await dialog.showSaveDialog(parent, options);
+  if (picked.canceled || !picked.filePath) return null;
+  return savePathFor(picked.filePath, options.filters);
+}
 
 /**
  * Ask where, then write there through the VC layer. The one shape of every
@@ -34,11 +45,11 @@ type VcWrite = ReturnType<typeof writeTextFile>;
 async function saveThroughVc(
   parent: BaseWindow, options: SaveDialogOptions, write: (path: string) => VcWrite,
 ): Promise<{ path: string } | { error: string } | null> {
-  const picked = await dialog.showSaveDialog(parent, options);
-  if (picked.canceled || !picked.filePath) return null;
+  const picked = await pickSavePath(parent, options);
+  if (picked === null || "error" in picked) return picked;
   try {
-    const res = write(picked.filePath);
-    return res.success ? { path: picked.filePath } : { error: res.message || res.status };
+    const res = write(picked.path);
+    return res.success ? { path: picked.path } : { error: res.message || res.status };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
@@ -124,13 +135,13 @@ export function registerPublish(ipc: Ipc, deps: Pick<MainContext, "session" | "e
     const session = deps.session();
     if (!session) return { error: "no project open" };
     const name = session.loaded.source?.project.project.name ?? "project";
-    const picked = await dialog.showSaveDialog(deps.editor()!, {
+    const picked = await pickSavePath(deps.editor()!, {
       title: "Export as Storyletpack",
-      defaultPath: `${name}${PACK_EXTENSION}`,
+      defaultPath: besideProject(session.loaded.dir, `${name}${PACK_EXTENSION}`),
       filters: [{ name: "Storyletpack", extensions: ["storyletpack"] }],
     });
-    if (picked.canceled || !picked.filePath) return null;
-    const dir = deps.session()!.loaded.dir, path = picked.filePath;
+    if (picked === null || "error" in picked) return picked;
+    const dir = deps.session()!.loaded.dir, path = picked.path;
     return deps.runJob("pack", async () => {
       try {
         const bytes = await runPack(dir);
@@ -147,12 +158,14 @@ export function registerPublish(ipc: Ipc, deps: Pick<MainContext, "session" | "e
     const session = deps.session();
     return session ? compileBundle(session) : { error: "no project open" };
   });
-  ipc.handle("table:exportSave", (_e, file, suggestedName) =>
-    saveThroughVc(deps.windows().get("board") ?? deps.editor()!, {
+  ipc.handle("table:exportSave", (_e, file, suggestedName) => {
+    const fileName = `${suggestedName || "session"}.storyletsave`, session = deps.session();
+    return saveThroughVc(deps.windows().get("board") ?? deps.editor()!, {
       title: "Export the session state",
-      defaultPath: `${suggestedName || "session"}.storyletsave`,
+      defaultPath: session ? besideProject(session.loaded.dir, fileName) : fileName,
       filters: [{ name: "Storylets save", extensions: ["storyletsave"] }],
-    }, (path) => writeTextFile(path, JSON.stringify(file, null, 2))));
+    }, (path) => writeTextFile(path, JSON.stringify(file, null, 2)));
+  });
   ipc.handle("table:importSave", async () => {
     const picked = await dialog.showOpenDialog(deps.windows().get("board") ?? deps.editor()!, {
       title: "Import a session state",

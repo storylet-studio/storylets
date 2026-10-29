@@ -77,7 +77,7 @@ export function createExchange(ctx: ExchangeContext) {
     const result = await withJob("spreadsheet", "Publishing the spreadsheet…", () => studio.exportXlsx());
     if (result === null) return;
     if (!ok(result)) return;
-    flash(`Spreadsheet published\n${baseName(result.path)}`, "ok");
+    flash(`Spreadsheet published\n${result.path}`, "ok");
   }
 
   /** Publish Playable HTML: the project as one self-contained page that plays
@@ -88,7 +88,7 @@ export function createExchange(ctx: ExchangeContext) {
     const result = await withJob("playable", "Publishing the playable page…", () => studio.exportHtml());
     if (result === null) return;
     if (!ok(result)) return;
-    flash(`Playable HTML published\n${baseName(result.path)}`, "ok");
+    flash(`Playable HTML published\n${result.path}`, "ok");
   }
 
   // --- the game's shared scopes folder (patterkit design/shared-scopes.md) -------
@@ -116,7 +116,10 @@ export function createExchange(ctx: ExchangeContext) {
     const result = await withJob("pack", "Packing the project…", () => studio.exportPack());
     if (result === null) return;
     if (!ok(result)) return;
-    flash(`Storyletpack exported\n${baseName(result.path)}`, "ok");
+    // The whole path, not the name: a Linux picker may open somewhere other than
+    // beside the project, and a toast naming only the file sent a reporter
+    // looking in the wrong folder (storylets#5).
+    flash(`Storyletpack exported\n${result.path}`, "ok");
   }
 
   /**

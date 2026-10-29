@@ -730,6 +730,77 @@ describe("box mutations", () => {
     expect(b.purpose).toBe("Random beats out on the streets.");
   });
 
+  // storylets#42: the folder follows the box's address, as a deck's file does.
+  describe("the box folder follows its address", () => {
+    const folders = (session: ProjectSession): string[] =>
+      openProjectOrThrow(session.loaded.dir).loaded.source!.boxes.map((b) => b.path).sort();
+    function openProjectOrThrow(dir: string): ProjectSession {
+      const opened = openProject(dir);
+      if ("error" in opened) throw new Error(opened.error);
+      return opened.session;
+    }
+    /** The example with its box's address following the title again (unpinned). */
+    async function unpinned(): Promise<ProjectSession> {
+      const session = scratchProject();
+      const r = await saveBox(session, encBox, { gameId: "" });
+      if ("error" in r) throw new Error(r.error);
+      return session;
+    }
+
+    it("moves every shard when a retitle changes the address, and Undo puts it back", async () => {
+      const session = await unpinned();
+      const dir = session.loaded.dir;
+      const deckBytes = readFileSync(join(dir, "encounters", "decks", "docks.storyletdeck"), "utf8");
+      const r = await saveBox(session, encBox, { title: "Street encounters" });
+      if ("error" in r) throw new Error(r.error);
+      expect(folders(session)).toEqual(["street-encounters"]);
+      expect(existsSync(join(dir, "encounters"))).toBe(false);
+      expect(readFileSync(join(dir, "street-encounters", "decks", "docks.storyletdeck"), "utf8")).toBe(deckBytes);
+      expect(r.project.boxes.find((b) => b.id === encBox)!.title).toBe("Street encounters");
+      expect(runValidate(openProjectOrThrow(dir).loaded, { checkBundle: false }).issues.filter((i) => i.severity === "error")).toEqual([]);
+
+      const undone = await undo(session);
+      if (!undone || "error" in undone) throw new Error("the undo didn't land");
+      expect(folders(session)).toEqual(["encounters"]);
+      expect(readFileSync(join(dir, "encounters", "decks", "docks.storyletdeck"), "utf8")).toBe(deckBytes);
+    });
+
+    it("moves it to a gameId pinned by hand", async () => {
+      const session = scratchProject();
+      const r = await saveBox(session, encBox, { gameId: "streets" });
+      if ("error" in r) throw new Error(r.error);
+      expect(folders(session)).toEqual(["streets"]);
+    });
+
+    it("leaves it where it is while a pinned gameId holds the address", async () => {
+      const session = scratchProject();   // the example pins "encounters"
+      const r = await saveBox(session, encBox, { title: "Street encounters" });
+      if ("error" in r) throw new Error(r.error);
+      expect(folders(session)).toEqual(["encounters"]);
+    });
+
+    it("saves the rename but keeps the folder when the new one already holds files", async () => {
+      const session = await unpinned();
+      mkdirSync(join(session.loaded.dir, "street-encounters"));
+      writeFileSync(join(session.loaded.dir, "street-encounters", "keep.txt"), "mine");
+      const r = await saveBox(session, encBox, { title: "Street encounters" });
+      if ("error" in r) throw new Error(r.error);
+      expect(folders(session)).toEqual(["encounters"]);
+      expect(r.project.boxes.find((b) => b.id === encBox)!.title).toBe("Street encounters");
+      expect(readFileSync(join(session.loaded.dir, "street-encounters", "keep.txt"), "utf8")).toBe("mine");
+    });
+
+    it("keeps a folder holding pictures, which a text write cannot carry", async () => {
+      const session = await unpinned();
+      mkdirSync(join(session.loaded.dir, "encounters", "assets"));
+      writeFileSync(join(session.loaded.dir, "encounters", "assets", "docks.jpg"), Buffer.from([0xff, 0xd8, 0xff]));
+      const r = await saveBox(session, encBox, { title: "Street encounters" });
+      if ("error" in r) throw new Error(r.error);
+      expect(folders(session)).toEqual(["encounters"]);
+      expect(existsSync(join(session.loaded.dir, "encounters", "assets", "docks.jpg"))).toBe(true);
+    });
+  });
+
   it("edits the box card fields and round-trips them", async () => {
     const session = scratchProject();
     const result = await saveBox(session, encBox, {

@@ -17,6 +17,7 @@ import { coerceDefault, declFromDto, declsFromDtos, fieldDeclFromDto } from "../
 import type { BoxEdit, BoxKit, DeckEdit, OpenResult, TagGroupEdit } from "../../shared/api.js";
 import { commit, commitMaking, freshKey, refuse } from "./write-path.js";
 import { coerceRedraw } from "./cards.js";
+import { followBoxFolder, pruneEmptyFolders } from "./box-move.js";
 import type { Written } from "./write-path.js";
 import {
   allDeckGameIds, applyIdentity, blank, boxFile, boxWrite, dedupedGameId, deckFileState, deckPath, deckWrite, gone,
@@ -86,7 +87,12 @@ export async function saveBox(session: ProjectSession, boxId: string, edit: BoxE
     if (ids.size > 0) source.project.patterBoxes = [...ids].sort(); else delete source.project.patterBoxes;
     writes.push(projectWrite(session));
   }
-  return commit(session, "Edit box", `box:${boxId}`, writes);
+  // The folder follows the box's address, like a deck's file (box-move.ts):
+  // an edit that changes the address moves the whole folder in this step.
+  const followed = followBoxFolder(session.loaded.dir, box, writes);
+  const written = await commit(session, "Edit box", `box:${boxId}`, followed.writes);
+  if (followed.from !== undefined && !("error" in written)) pruneEmptyFolders(followed.from);
+  return written;
 }
 
 export async function moveBox(session: ProjectSession, boxId: string, targetId: string, before: boolean): Promise<Written> {

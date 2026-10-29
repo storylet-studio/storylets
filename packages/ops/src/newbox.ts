@@ -507,15 +507,19 @@ export function runNewBox(opts: NewBoxOptions): NewBoxResult {
   const kit = opts.kit ?? "blank";
 
   // Taken: every box's ADDRESS, and every FOLDER, which are not the same thing
-  // once a box has been retitled (its folder follows the address it was made
-  // with). Until 2026-10-06 only addresses counted, so a box made as "New box"
-  // and retitled since left `new-box` looking free, and the next new box was
+  // when a box's folder could not follow a retitle (the editor leaves it where
+  // it is rather than move pictures or land on another folder, box-move.ts).
+  // Until 2026-10-06 only addresses counted, so a box made as "New box" and
+  // retitled since left `new-box` looking free, and the next new box was
   // written over it. Anything else at the project root (`assets`, a box's
-  // leftovers) counts too, unless it is an empty folder, which is what deleting
-  // a box leaves behind and holds nothing to collide with.
-  const holdsSomething = (name: string): boolean => {
-    try { return readdirSync(join(opts.loaded.dir, name)).length > 0; } catch { return true; }   // a file
+  // leftovers) counts too, unless it holds no files, only empty folders at
+  // most, which is what deleting a box or undoing a box's move leaves behind.
+  const holdsFiles = (path: string): boolean => {
+    let entries;
+    try { entries = readdirSync(path, { withFileTypes: true }); } catch { return true; }   // a file
+    return entries.some((e) => !e.isDirectory() || holdsFiles(join(path, e.name)));
   };
+  const holdsSomething = (name: string): boolean => holdsFiles(join(opts.loaded.dir, name));
   let rootEntries: string[] = [];
   try { rootEntries = readdirSync(opts.loaded.dir).filter(holdsSomething); } catch { /* nothing there yet */ }
   const taken = new Set([
