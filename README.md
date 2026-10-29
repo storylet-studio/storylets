@@ -1,7 +1,7 @@
 # Storylets
 
 [![CI](https://github.com/storylet-studio/storylets/actions/workflows/ci.yml/badge.svg)](https://github.com/storylet-studio/storylets/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-storylets.dev-7b4b6e)](https://storylets.dev)
+[![Docs](https://img.shields.io/badge/docs-storylets.dev-36284a)](https://storylets.dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Storylet Studio** is an open toolkit for building storylet-driven games: stories
