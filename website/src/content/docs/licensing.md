@@ -99,7 +99,7 @@ Scale them freely. Please don't recolour or redraw them.
     <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-dark.svg">SVG</a>, <a href="/badges/storylet-studio-badge-dark.png">PNG</a></figcaption>
   </figure>
   <figure style="margin:0;">
-    <img src="/badges/storylet-studio-badge-mono.svg" width="360" height="112" alt="Story shaped with Storylet Studio badge, one colour" style="display:block;border-radius:8px;" />
+    <img src="/badges/storylet-studio-badge-mono.svg" width="360" height="112" alt="Story shaped with Storylet Studio badge, one colour" style="display:block;background:#ffffff;border-radius:8px;" />
     <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-badge-mono.svg">SVG</a>, <a href="/badges/storylet-studio-badge-mono.png">PNG</a></figcaption>
   </figure>
 </div>
@@ -116,13 +116,13 @@ Scale them freely. Please don't recolour or redraw them.
     <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-dark.svg">SVG</a>, <a href="/badges/storylet-studio-line-dark.png">PNG</a></figcaption>
   </figure>
   <figure style="margin:0;">
-    <img src="/badges/storylet-studio-line-mono.svg" width="330" height="38" alt="Story shaped with Storylet Studio line badge, one colour" style="display:block;" />
+    <img src="/badges/storylet-studio-line-mono.svg" width="330" height="38" alt="Story shaped with Storylet Studio line badge, one colour" style="display:block;background:#ffffff;border-radius:6px;" />
     <figcaption style="font-size:0.8rem;margin-top:0.3rem;"><a href="/badges/storylet-studio-line-mono.svg">SVG</a>, <a href="/badges/storylet-studio-line-mono.png">PNG</a></figcaption>
   </figure>
 </div>
 
-The mono badge inherits the colour of whatever it sits in, so it works in one-colour print and
-on any ground. Every badge is outlines, not live text, so none of them needs a font installed.
+The one-colour badge is a single dark ink on a clear ground, for one-colour print and light
+grounds; it's shown here on a white tile so it reads in the dark theme too. Every badge is outlines, not live text, so none of them needs a font installed.
 
 Or take the whole set: both shapes, all three colour ways, SVG and 2× PNG, plus these credit
 lines as a text file. **[Download the badge kit (zip)](/badges/storylet-studio-badges.zip)**
