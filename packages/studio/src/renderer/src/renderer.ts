@@ -316,6 +316,8 @@ const lifecycle = createLifecycle({
   session, nav, saves, comments, problems, vc, catalogues,
   actions: () => actions,
   applyResult: (r) => applyResult(r),
+  // Read through: the clash controller is made below, and an open only happens once everything is.
+  takeClashes: (r) => clashes.take(r),
   applied: (r) => applied(r),
   render: () => renderWorkspace(),
   renderNavPane: () => renderNavPane(),
@@ -594,8 +596,10 @@ function mountShell(): void {
   // The walk's bar above the problems bar: a mode you entered outranks an
   // ambient one, and the pair keeps a stable order however they come and go.
   // And at the very foot, the status row (status-row.ts), with Live Link at its end.
-  // The clash banner first, at the very top: a merge left something to settle before the project validates.
-  workspace.append(clashes.banner, shell.root, exchange.jobStrip, comments.reviewbar, problems.bar, statusRow);
+  // The clash banner sits right under the title bar, as Patterpad's does: a merge left something to settle
+  // before the project validates.
+  workspace.append(shell.root, exchange.jobStrip, comments.reviewbar, problems.bar, statusRow);
+  shell.topbar.after(clashes.banner);
   app.replaceChildren(welcomeHost, workspace);
 }
 

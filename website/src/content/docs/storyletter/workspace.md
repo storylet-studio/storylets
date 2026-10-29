@@ -44,7 +44,7 @@ properties aren't here; they're a contract with the game and stay in
 [Project settings](#project-settings).)
 
 <figure class="doc-shot">
-  <img src="/doc-images/Story.png" alt="The Story document in Storyletter: the Story row selected in the navigator, and the Hamlet's seven story properties as rows. The first row, act, is expanded to show its Stages, in order (arrival, act-1, act-2), and its Purpose field; the rest show their name, type, starting value and a uses count. A note beneath points to Project Settings for the game's own world state." />
+  <img src="/doc-images/Story.png" alt="The Story document in Storyletter: the Story row selected in the navigator, and the Hamlet's seven story properties as rows. The first row, act, is expanded to show its Stages, in order (arrival, act-1, act-2), and its Purpose field; the rest show their name, type, starting value and a uses count. A note beneath points to Project settings, Game scopes, for the game's own state." />
   <figcaption>The Story document: the story's shared state as a page of its own. Expand a row for its <strong>Purpose</strong> and, for a list or quality, its values or stages.</figcaption>
 </figure>
 

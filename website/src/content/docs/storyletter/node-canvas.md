@@ -13,7 +13,7 @@ It's an ordinary view, not a mode. The same deck, the same cards, the same click
 click selects a card, two clicks open it.
 
 <figure class="doc-shot">
-  <img src="/doc-images/NodeCanvas.png" alt="The node canvas for the Gareth's Debt deck: three cards laid out left to right, Gareth Looks Troubled, The Moneylender's Men and Gareth's Gratitude, with a two-headed amber arrow between the first two and a green arrow from The Moneylender's Men to Gareth's Gratitude. The strip below has Frame, Comment, Key and Arrange all by links." />
+  <img src="/doc-images/NodeCanvas.png" alt="The node canvas for the Gareth's Debt deck: three cards laid out left to right, Gareth Looks Troubled, The Moneylender's Men and Gareth's Gratitude, with a two-headed amber arrow between the first two and a green arrow from The Moneylender's Men to Gareth's Gratitude. The canvas's control bar has Frame, Comment and Arrange all by links beside the zoom, and the status row below counts the outcomes that lead between these cards, with a Key button." />
   <figcaption>Gareth's Debt as nodes: the green arrow is an outcome that opens the next card, and the amber one is state each card changes for the other. Nobody drew them.</figcaption>
 </figure>
 

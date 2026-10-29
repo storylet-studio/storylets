@@ -42,6 +42,8 @@ export interface LifecycleContext {
   catalogues: Catalogues;
   actions: () => ViewActions;
   applyResult: (r: OpenResult) => void;
+  /** Hand an opened project's result to the clash banner (File > Resolve Clashes…, step 6 Q21). */
+  takeClashes: (r: OpenResult) => void;
   applied: (r: OpenResult | { error: string }) => boolean;
   /** Draw the workspace, the navigator, the centre (renderer.ts). */
   render: () => void;
@@ -204,6 +206,9 @@ export function createLifecycle(ctx: LifecycleContext) {
     setCardChoices(result.project);
     setPlayRung(result.project.play);
     problems.reset(result.problems);
+    // The clashes a merge left: an open from the welcome screen comes through here, not applyResult, so the
+    // banner is told here too (it stayed hidden on a project's first open, the October 2026 live check).
+    ctx.takeClashes(result);
     ctx.liveLink(true);   // Live Link: the control is available once a project is open
     session.state = await studio.getState();
     nav.expanded = new Set(session.state.navExpanded ?? []);

@@ -259,6 +259,9 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    a row that still needs doing wears its verb at the far end. */
 .mapwrap { flex: 1; min-height: 0; display: flex; gap: 8px; }
 .mapmain-ed { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* The map canvas bleeds to the pane's left edge like a deck's, but stops at the side panel on its right:
+   the deck's -26px right margin ran it under the Layers panel (the October 2026 screenshots). */
+.mapmain-ed .nodestage { margin-right: 0; }
 .mapside {
   flex: none; width: 224px; overflow-y: auto;
   border: 1px solid var(--line-soft); border-radius: var(--radius-md);

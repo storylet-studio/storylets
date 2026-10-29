@@ -622,7 +622,7 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   },
   "merge-sidecar": (p) => ({
     text: `A merge left clashes to resolve, listed in ${fileName(p)}.`,
-    next: "Resolve them, then delete that file.",
+    next: "Settle them with File ▸ Resolve Clashes…, which removes the file when the last one goes.",
   }),
 
   // --- expressions -------------------------------------------------------------

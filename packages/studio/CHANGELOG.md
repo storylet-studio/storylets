@@ -105,6 +105,11 @@ here is part of shipping, not a courtesy.
 
 ### Fixed
 
+- **The map no longer runs under its Layers panel.** On a project map, the canvas reached past its column and
+  covered the side panel's edge. It now stops where the panel starts.
+- **The clash banner shows when you open a project.** Opened from the welcome screen, a project with clashes
+  from a merge didn't show its banner until the resolver had been opened. It now shows at once, under the title
+  bar as in Patterpad, and the Problems bar points to File ▸ Resolve Clashes… rather than saying to delete the file.
 - **Your name is filled in at first launch.** The name box that signs your comments offers the `user.name` git has
   for you. It used to ask before any project was open, so it came back empty.
 - **The keyboard doesn't get lost after a dialog.** Closing a dialog whose button was redrawn while it was open (a
