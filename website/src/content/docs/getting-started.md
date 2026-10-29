@@ -164,7 +164,7 @@ Every row is a way back into the project. Click it and the editor opens that car
 
 Anything gated on your game's own state can't be reached by a test run unless you say how
 that state changes, so coverage tells you that rather than calling the card dead. When it
-can, it offers an **Add coverage drivers** button that writes a range of values for the test
+can, it offers an **Add game values for coverage** button that writes a range of values for the test
 runs to try.
 
 ## 7. Publish the bundle

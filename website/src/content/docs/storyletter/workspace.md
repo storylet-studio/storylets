@@ -246,7 +246,7 @@ See [Live Link](/play/live-link/).
   control](/setup/version-control/#choosing-a-system)).
 - **Game scopes** holds your game's own state: `@world` first, then any other scope the
   game provides, such as `@player`, and the
-  [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
+  [game values for coverage](/production/coverage-testing/#writing-drivers-by-hand) that stand in
   for them during a test run. **+ Add scope** adds one; give it a name, and declare its
   properties, or turn on **Any name, unchecked** when the game decides what it holds.
   **Read-only to the story** on a scope makes every property in it one the story can read but

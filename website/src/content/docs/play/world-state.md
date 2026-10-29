@@ -204,7 +204,7 @@ shared state. There's no message-passing between them, and no flow can read anot
 
 **Cards can be shared too.** The same word on a deck (or a single card) makes the cards
 themselves scarce across flows rather than the state they read, so there's one goblin in the
-whole world, to whoever finds it first. That's [How a deal is decided](/play/dealing/#copies-and-claims).
+whole world, to whoever finds it first. That's [How a deal is decided](/play/dealing/#in-one-hand-across-hands-and-claims).
 
 ## Durable: state that outlives a run
 

@@ -55,6 +55,6 @@ feature once.
   `@world.time_of_day`. To see the problem the driver fixes, delete the
   `coverage` block from `the-hamlet.storyletproj` and run it again: five cards
   read as never-dealt, two of them named as gated on `@world.time_of_day`,
-  which nothing writes. The "Add coverage drivers" quick-fix writes that block
+  which nothing writes. The "Add game values for coverage" quick-fix writes that block
   back, and coverage returns to full - the tree only glows at night, and its
   bloom follows.

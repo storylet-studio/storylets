@@ -160,8 +160,9 @@ Coverage can't invent your game's behaviour, so content gated on them can't be r
 you tell coverage how that state moves. Rather than
 reporting such a card as dead, coverage says why it couldn't get there.
 
-The fix is a **driver**, and when there's a driver-shaped gap the window offers one button:
-**Add coverage drivers**. It works out a starting set of drivers from your conditions, writes
+The fix is a **game value for coverage** (a *driver* in the project file), and when there's a
+gap of that kind the window offers one button: **Add game values for coverage**. It works out
+a starting set from your conditions, writes
 them into the project, and re-runs. Content that was unreachable becomes reachable, and
 anything still never dealt after that is a real gap.
 

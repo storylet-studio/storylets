@@ -205,5 +205,5 @@ export async function addCoverageDrivers(session: ProjectSession): Promise<{ res
   if (Object.keys(mergedDrivers).length > 0) merged.drivers = mergedDrivers;
   source.project.coverage = merged;
 
-  return commitMaking(session, "Add coverage drivers", freshKey(), [projectWrite(session)], { added });
+  return commitMaking(session, "Add game values for coverage", freshKey(), [projectWrite(session)], { added });
 }
