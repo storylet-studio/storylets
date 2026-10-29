@@ -1,5 +1,18 @@
 # @storylet-studio/model
 
+## 0.14.0
+
+### Minor Changes
+
+- ffcc83a: Host scopes like Patter's: `HostScopeDecl`, `HostScopeSpec` and `HostScopeRegistry`, and `scopeRegistry` on the project shard and the bundle, in place of `world`. `BUNDLE_SCHEMA` is `storylets/bundle@2`; `BUNDLE_SCHEMA_V1` names the @1 bundle, which with @0 is still read, its `world` block (`LegacyWorldBlock`, now optional on `Bundle` and `ProjectShard`) read as the host scope `world`. Helpers: `bundleHostScopes`, `hostScopeSpec`, `hostScopeDecls`, `setHostScopeDecls` and `migrateLegacyWorld`.
+- add4116: Saves name cards, hands and boxes by Game ID: `SAVE_SCHEMA` is `storylets/save@3`, and `SAVE_SCHEMA_V2` names the version 2 envelope, keyed by internal id, which still loads. A load report's `evicted` can also carry a deal's reasons (`condition`, `deck-gate`, `hand-condition`, `cooldown`, `tags`, `taken`), for a held card a load drops because it no longer qualifies.
+  
+  A card's dealing rules: `weight` (how often among cards of equal rank), `inOneHand` (how many copies one hand may hold) and `acrossHands` (`"one"` hand at a time, or `"any"`) replace `copies`, which is deprecated and migrated by `format`. A box's `cardDefaults` declares the Card template's defaults for Redraw and these three, live as field defaults are, so a card's `redraw` is optional in source. A box's `turn` takes an optional `seconds`: without it the game moves the clock.
+
+### Patch Changes
+
+- dad1c60: `gameIdify` and `isValidGameId` are now `@wildwinter/toolkit`'s, the one rule the family shares with Patter, and re-exported here unchanged, so nothing that imports them from this package has to move. The package depends on `@wildwinter/toolkit` ^0.4.0.
+
 ## 0.13.0
 
 ### Minor Changes
