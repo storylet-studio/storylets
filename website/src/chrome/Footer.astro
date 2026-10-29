@@ -3,9 +3,17 @@
 import Default from "@astrojs/starlight/components/Footer.astro";
 import Newsletter from "./Newsletter.astro";
 import site from "./site.mjs";
+import { esc, sectionOf } from "./extensions.mjs";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 let credit = site.credit;
+const section = sectionOf(Astro.url.pathname, base);
+if (section) {
+  credit = (section.launched ? site.extensionCredit : site.extensionTestingCredit)
+    .replaceAll("{name}", esc(section.name))
+    .replaceAll("{licence}", esc(section.licence.name))
+    .replaceAll("{page}", `${section.slug}/${section.licence.page}/`);
+}
 credit = credit.replaceAll("{base}", base);
 ---
 

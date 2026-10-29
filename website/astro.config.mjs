@@ -26,7 +26,11 @@ export default defineConfig({
       customCss: ["./src/chrome/fonts.css", "./src/styles/storylets.css", "./src/chrome/palette.css", "./src/chrome/chrome.css"],
       // Every docs page ends with the licence / author / home credit line. The landing page
       // carries the same credit separately, because it does not use Starlight chrome.
-      components: { Footer: "./src/chrome/Footer.astro" },
+      // The product switcher and trail home for extension sections, from site-chrome, as on
+      // patterkit.dev. With no extension here yet, the sidebar is Starlight's own and no title has
+      // a trail.
+      components: { Footer: "./src/chrome/Footer.astro", Sidebar: "./src/chrome/Sidebar.astro", PageTitle: "./src/chrome/PageTitle.astro" },
+      routeMiddleware: "./src/chrome/route.mjs",
       // Code follows the theme: a light block on a light page and a dark one on a dark page, on the
       // chrome tier with a hairline and no shadow (the October 2026 UI review; until then a dark slab
       // in both themes, which on a white page was the heaviest thing on it).

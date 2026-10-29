@@ -1,10 +1,16 @@
 ---
 // Generated from patterkit/site-chrome; do not edit here, edit the source and run sync
 import site from "./site.mjs";
+import { sectionOf } from "./extensions.mjs";
 
 const { kind = site.downloads.default } = Astro.props;
 let { repo } = Astro.props;
 let spec;
+const section = sectionOf(Astro.url.pathname, import.meta.env.BASE_URL.replace(/\/?$/, "/"));
+if (section?.downloads?.sections?.[kind]) {
+  spec = JSON.stringify(section.downloads.sections[kind]);
+  repo ??= section.downloads.repo;
+}
 ---
 
 <div class="chrome-dl not-content" data-chrome-dl={kind} data-chrome-dl-repo={repo} data-chrome-dl-spec={spec}>

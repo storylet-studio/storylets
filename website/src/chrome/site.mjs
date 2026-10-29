@@ -2,8 +2,11 @@
 export default {
   "brand": "Storylet Studio",
   "product": "Storylet Studio",
+  "docsHome": "getting-started/",
   "wrapClass": "sy-wrap",
   "credit": "Open source under the <a href=\"{base}licensing/\">MIT licence</a>, made by <a href=\"https://ian.wildwinter.net\" rel=\"author\">Ian Thomas</a>.",
+  "extensionCredit": "{name} is a separate download under <a href=\"{base}{page}\">{licence}</a>, not Storylet Studio's MIT licence. Made by <a href=\"https://ian.wildwinter.net\" rel=\"author\">Ian Thomas</a>.",
+  "extensionTestingCredit": "{name} is in testing and will be released soon. Made by <a href=\"https://ian.wildwinter.net\" rel=\"author\">Ian Thomas</a>.",
   "landing": {
     "mark": "<svg viewBox=\"0 0 100 100\" width=\"28\" height=\"28\" xmlns=\"http://www.w3.org/2000/svg\" aria-hidden=\"true\"><g fill=\"none\"><path d=\"M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88\" stroke=\"#36284a\" stroke-width=\"12\" stroke-linecap=\"round\"></path><circle cx=\"88\" cy=\"12\" r=\"9.5\" fill=\"#c8902f\"></circle><circle cx=\"12\" cy=\"88\" r=\"9.5\" fill=\"#c8902f\"></circle><circle cx=\"50\" cy=\"50\" r=\"9.5\" fill=\"#c8902f\"></circle></g></svg>",
     "wordmark": "Storylet <span>Studio</span>",
