@@ -148,7 +148,7 @@ func _heist(flow: StoryletFlow) -> void:
 func _play_first_part(g: Dictionary) -> void:
 	var patter: PatterEngine = g["patter"]
 	var guard := patter.open_flow("guard", "gate")
-	_expect("act 1: the gate stays quiet", guard.advance(), {"type": "end"})
+	_expect("act 1: the gate stays quiet", guard.advance(), {"type": "end", "reason": "ended"})
 	_heist((g["storylets"] as StoryletEngine).open_flow("thief"))
 	var again := patter.open_flow("guard", "gate")
 	var step: Dictionary = again.advance()
@@ -276,7 +276,7 @@ func _reads_each_others_writes() -> void:
 	var g := _combined_game()
 	_play_first_part(g)
 	var guard := (g["patter"] as PatterEngine).get_flow("guard")
-	_expect("onExit: alarm +10, visits +1", guard.advance(), {"type": "end"})
+	_expect("onExit: alarm +10, visits +1", guard.advance(), {"type": "end", "reason": "ended"})
 	_expect("1 from the heist, 10 from the guard", g["registry"].get_value("world", "alarm"), 11)
 	_expect("Patter reads the Storylet Engine's scope", (g["patter"] as PatterEngine).get_property("@story.act"), 2)
 	_expect("and the Storylet Engine reads Patter's", (g["storylets"] as StoryletEngine).get_property("patter.visits"), 1)
@@ -326,7 +326,7 @@ func _resumes(registry_first: bool) -> void:
 	if guard == null:
 		_check("the guard's flow resumed", false, "")
 		return
-	_expect("the guard ends", guard.advance(), {"type": "end"})
+	_expect("the guard ends", guard.advance(), {"type": "end", "reason": "ended"})
 	_expect("world.alarm after the guard", g2["registry"].get_value("world", "alarm"), 11)
 	# The Storylet Engine's spent heist stayed spent; the manhunt is open.
 	var thief = storylets.get_flow("thief")
@@ -356,7 +356,7 @@ func _drift_and_hot_swap() -> void:
 	_expect("known: restored", storylets.get_property("story.act"), 2)
 
 	# visits 0 -> 1, alarm 1 -> 11
-	_expect("the guard ends", (g2["patter"] as PatterEngine).get_flow("guard").advance(), {"type": "end"})
+	_expect("the guard ends", (g2["patter"] as PatterEngine).get_flow("guard").advance(), {"type": "end", "reason": "ended"})
 
 	# A live Patter edit mid-game: its bags are handed over on the same registry.
 	var swapped := (g2["patter"] as PatterEngine).hot_swap(_patter_bundle("Halt!"))
@@ -368,7 +368,7 @@ func _drift_and_hot_swap() -> void:
 		return
 	var step: Dictionary = watch.advance()
 	_check("the watch speaks the new line", step.get("type") == "line" and step.get("text") == "Halt!", str(step))
-	_expect("then ends", watch.advance(), {"type": "end"})
+	_expect("then ends", watch.advance(), {"type": "end", "reason": "ended"})
 	_expect("@visits after the watch", swapped.get_property("@visits"), 2)
 	_expect("world.alarm after the watch", g2["registry"].get_value("world", "alarm"), 21)
 	_expect("the other engine never noticed", storylets.get_property("story.act"), 2)

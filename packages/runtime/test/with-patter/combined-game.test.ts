@@ -98,7 +98,7 @@ const heist = (flow: StoryletFlow): void => {
 /** Play the first part: a heist moves the story to act two, then the Patter guard shouts. */
 function playFirstPart(g: Game): void {
   const guard = g.patter.openFlow("guard", { scene: "gate" });
-  expect(guard.advance()).toEqual({ type: "end" });        // act 1: the gate stays quiet
+  expect(guard.advance()).toEqual({ type: "end", reason: "ended" });        // act 1: the gate stays quiet
   heist(g.storylets.openFlow("thief"));
   const again = g.patter.openFlow("guard", { scene: "gate" });
   expect(again.advance()).toMatchObject({ type: "line", character: "GUARD" });
@@ -116,7 +116,7 @@ describe("Patter and the Storylet Engine: one registry, one save", () => {
     const g = combinedGame();
     playFirstPart(g);
     const guard = g.patter.getFlow("guard")!;
-    expect(guard.advance()).toEqual({ type: "end" });        // onExit: alarm +10, visits +1
+    expect(guard.advance()).toEqual({ type: "end", reason: "ended" });        // onExit: alarm +10, visits +1
     expect(g.registry.get("world", "alarm")).toBe(11);       // 1 from the heist, 10 from the guard
     expect(g.patter.getProperty("@story.act")).toBe(2);      // Patter reads the Storylet Engine's scope
     expect(g.storylets.getProperty("patter.visits")).toBe(1); // and the Storylet Engine reads Patter's
@@ -156,7 +156,7 @@ describe("Patter and the Storylet Engine: one registry, one save", () => {
       expect(g2.registry.get("world", "alarm")).toBe(1);
       // Patter resumes the guard mid-line: the exit writes land on the restored world.
       const guard = g2.patter.getFlow("guard")!;
-      expect(guard.advance()).toEqual({ type: "end" });
+      expect(guard.advance()).toEqual({ type: "end", reason: "ended" });
       expect(g2.registry.get("world", "alarm")).toBe(11);
       // The Storylet Engine's spent heist stayed spent; the manhunt is open.
       const dealt = g2.storylets.getFlow("thief")!.deal("q").map((c) => c.gameId);
@@ -180,14 +180,14 @@ describe("Patter and the Storylet Engine: one registry, one save", () => {
     expect(g2.storylets.getProperty("story.rumours")).toBe(0);   // new: its default
     expect(g2.storylets.getProperty("story.act")).toBe(2);       // known: restored
 
-    expect(g2.patter.getFlow("guard")!.advance()).toEqual({ type: "end" }); // visits 0 -> 1, alarm 1 -> 11
+    expect(g2.patter.getFlow("guard")!.advance()).toEqual({ type: "end", reason: "ended" }); // visits 0 -> 1, alarm 1 -> 11
 
     // A live Patter edit mid-game: its bags are handed over on the same registry.
     const swapped = g2.patter.hotSwap(patterBundle("Halt!"));
     expect(swapped.getProperty("@visits")).toBe(1);               // Patter's own value, carried over
     expect(swapped.getProperty("@story.act")).toBe(2);
     expect(swapped.getFlow("watch")!.advance()).toMatchObject({ type: "line", text: "Halt!" });
-    expect(swapped.getFlow("watch")!.advance()).toEqual({ type: "end" });
+    expect(swapped.getFlow("watch")!.advance()).toEqual({ type: "end", reason: "ended" });
     expect(swapped.getProperty("@visits")).toBe(2);
     expect(g2.registry.get("world", "alarm")).toBe(21);
     expect(g2.storylets.getProperty("story.act")).toBe(2);       // the other engine never noticed
