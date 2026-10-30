@@ -26,7 +26,7 @@ import { placeGroupsOf } from "./where.js";
 import { mapGlyph } from "./map-glyphs.js";
 import { boxColour, boxPin } from "./box-tint.js";
 import { boxChip, chip, listMeta, moreMenu, tableHead } from "./widgets.js";
-import { rove, treeRows, wireTreeKeys } from "./tree-keys.js";
+import { rove, treeRows, wireTreeKeys } from "@wildwinter/app-shell";
 import { keepCardFocus, wireRowKeys } from "./row-keys.js";
 import { alsoUnder, boxEntries, groupEntries, groupOptions, resolveGroup } from "./card-groups.js";
 import type { CardGroup, GroupEntry, GroupKey, GroupOption, GroupPage } from "./card-groups.js";
@@ -347,7 +347,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   // am I in" answered at full strength. True ancestors above that are
   // `on-path` (rules 8-9).
   //
-  // The keyboard's tree (tree-keys.ts): one tab stop, the arrows between rows.
+  // The keyboard's tree (app-shell's tree keys): one tab stop, the arrows between rows.
   // The tree is redrawn whole on every navigation and every disclosure, so the
   // row that had the focus is found again by its key afterwards (the hands-on
   // review, 2026-10, foundation 8: focus fell to the top of the window).

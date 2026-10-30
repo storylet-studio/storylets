@@ -10,7 +10,7 @@
 
 import { canTakeFocus, firstFocusable } from "@wildwinter/app-shell";
 
-/** The navigator's one tab stop: the tree's roving row (tree-keys.ts), else
+/** The navigator's one tab stop: the tree's roving row (app-shell's tree keys), else
  *  the row that's current. Undefined leaves the shell's default. */
 export function navFocusTarget(nav: ParentNode): HTMLElement | undefined {
   const row = nav.querySelector<HTMLElement>('[role=treeitem][tabindex="0"]')
