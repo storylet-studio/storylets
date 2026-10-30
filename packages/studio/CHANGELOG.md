@@ -10,6 +10,14 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-10-30
+
+### Changed
+
+- **Patter scenes play on Patter 0.37.0.** The Board and an exported playable page play a card's Patter scene with
+  Patterplay 0.37.0. Nothing changes how a scene plays.
+- **The About box in the brand's colours**, with "ter" in amber as the wordmark has it.
+
 ### Fixed
 
 - **A hand's cards sit in a row on the Board.** Picking a place on the map, or a hand in the list, now shows its
