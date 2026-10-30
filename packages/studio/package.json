@@ -36,7 +36,7 @@
     "@storylet-studio/ops": "0.0.0",
     "@storylet-studio/runtime": "0.15.0",
     "@storylet-studio/with-patter": ">=0.4.0",
-    "@wildwinter/app-shell": "^0.73.0",
+    "@wildwinter/app-shell": "^0.74.0",
     "@wildwinter/expr-editor": "^0.18.0",
     "@wildwinter/scoperegistry": ">=0.9.0 <1.0.0",
     "@wildwinter/simple-vc-lib": "^0.5.2",
