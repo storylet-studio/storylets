@@ -10,6 +10,13 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.27.3] - 2026-10-30
+
+### Changed
+
+- **Patter scenes play on Patter 0.38.0.** The Board and an exported playable page play a card's Patter scene with
+  Patterplay 0.38.0. Nothing changes how a scene plays.
+
 ## [0.27.2] - 2026-10-30
 
 ### Changed
