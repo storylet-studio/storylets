@@ -198,11 +198,6 @@ const description =
           <div class="sy-tool">
             <h2 class="sy-h2">Storylet Engine</h2>
             <p>The runtime, for the people shipping the game. What Storyletter dealt at the desk is what your build deals, because the editor runs the same engine your game does. There’s one for your engine, and it loads the one bundle Storyletter publishes. <a href={`${base}play/overview/`}>Read about the runtimes.</a></p>
-            <ul class="sy-engines">
-              {engines.map((e) => (
-                <li><img src={`${base}${e.icon}`} alt="" width="30" height="30" /><span>{e.name}</span></li>
-              ))}
-            </ul>
           </div>
           <div class="sy-tool">
             <h2 class="sy-h2">The CLI</h2>
@@ -210,6 +205,12 @@ const description =
               merges, and measures coverage from a terminal. It runs the same code as the editor, so you can gate a
               build on it and fail the build on a card nothing can reach. <a href={`${base}cli/`}>Read about the CLI.</a></p>
           </div>
+          <!-- The engines, on a row of their own under the three tools (as on the Patter landing page). -->
+          <ul class="sy-engines">
+            {engines.map((e) => (
+              <li><img src={`${base}${e.icon}`} alt="" width="30" height="30" /><span>{e.name}</span></li>
+            ))}
+          </ul>
         </div>
       </section>
 

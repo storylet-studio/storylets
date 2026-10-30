@@ -122,7 +122,10 @@ video.sy-board-shot { max-width: 800px; }
 /* ---- The tools -------------------------------------------------------------- */
 .sy-tools-inner { padding-top: 96px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
 .sy-tool p { margin: 12px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--l-body); }
-.sy-engines { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px 28px; }
+/* The engines on a row of their own under the three tools: centred, and spread evenly across it on a wide screen
+   (as on the Patter landing page). */
+.sy-engines { grid-column: 1 / -1; list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap;
+  justify-content: space-evenly; gap: 16px 40px; }
 .sy-engines li { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 400; color: var(--l-ink); }
 .sy-engines img { display: block; width: 30px; height: 30px; border-radius: 6px; }
 
