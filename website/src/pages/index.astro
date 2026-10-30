@@ -10,7 +10,7 @@ const engines = [
 // src/styles/storylets.css; the landing's own classes live in src/styles/landing.css.
 //
 // Shape, top to bottom: the shared header, a two-column opening (one sentence, one paragraph,
-// one button, the split-deck picture), the list of situations, the Board screenshot, the three
+// one button, the split-deck picture), the list of situations, the Board clip, the three
 // tools as paragraphs, the downloads as a list, the shared footer. The header, the footer and
 // the downloads list come from src/chrome, which is generated from patterkit/site-chrome and is
 // never edited here. The Patter site is a script; this page is a hand of cards. They share
@@ -23,6 +23,9 @@ import "../styles/landing.css";
 import LandingHeader from "../chrome/LandingHeader.astro";
 import LandingFooter from "../chrome/LandingFooter.astro";
 import Downloads from "../chrome/Downloads.astro";
+// Made with patterkit's recorder (tools/recorder/takes/storyletter-board.mjs): remake, don't edit.
+import boardClip from "../assets/clips/storyletter-board.mp4";
+import boardPoster from "../assets/clips/storyletter-board.jpg";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // normalise to a trailing slash
 const title = "Storylet Studio";
@@ -179,7 +182,7 @@ const description =
               records every deal and play and what each one changed, and a peek in the State tab lists the cards
               a deal passes over and why, so "why didn't that happen?" has an answer you can read.</p>
           </div>
-          <img class="sy-board-shot" src={`${base}doc-images/Board.png`} width="2940" height="1682" alt="The Board in Storyletter on the Port Meridian example: the city map's three districts with hands from four boxes standing in them as coloured pins, each wearing its card count, the box clocks above, and the journal of the session down the right" />
+          <video class="sy-board-shot" src={boardClip} poster={boardPoster.src} width="1280" height="800" autoplay muted loop playsinline aria-label="The Board in Storyletter playing The Village on its illustrated map. A card at the Elder's House is opened, read and played, and cards are dealt into every region of the map at once as the journal fills down the side. Then the view goes down into the caves and plays one of the cards waiting there."></video>
         </div>
       </section>
 

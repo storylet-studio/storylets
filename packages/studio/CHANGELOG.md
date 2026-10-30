@@ -10,6 +10,12 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A hand's cards sit in a row on the Board.** Picking a place on the map, or a hand in the list, now shows its
+  cards side by side, up to three to a row. They used to stack in a column with a blank space beside them as wide as
+  the cards.
+
 ## [0.27.1] - 2026-10-29
 
 ### Fixed

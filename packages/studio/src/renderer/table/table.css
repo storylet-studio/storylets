@@ -60,8 +60,11 @@ body { background: var(--bg); font-size: var(--text-md); }
    (design/board-legibility.md piece 1). */
 .mapstage-wrap { flex: 1; min-height: 220px; position: relative; display: flex; }
 .mapstage-wrap .boardmap { flex: 1; }
+/* Centred by auto margins between both edges, not left: 50% and a transform:
+   that halved the width it could grow to, so a hand of three wrapped into a
+   column and kept its unwrapped width as blank space beside the cards. */
 .stagefloat {
-  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0 auto; width: fit-content;
   z-index: 4; max-width: min(640px, calc(100% - 24px));
   /* Never taller than the view it floats over: the panel scrolls inside
      itself rather than running off the edge. */

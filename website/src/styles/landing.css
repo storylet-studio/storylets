@@ -116,6 +116,8 @@
 .sy-board-copy p { margin: 14px 0 0; font-size: 16px; line-height: 1.6; color: var(--l-body); }
 /* The real screenshot, square and unframed but for a hairline, so its white page keeps an edge. */
 .sy-board-shot { display: block; width: 100%; height: auto; min-width: 0; border: 1px solid var(--l-hair); }
+/* The clip is recorded 1280 wide: kept to 800 so it never shows softer than it was taken. */
+video.sy-board-shot { max-width: 800px; }
 
 /* ---- The tools -------------------------------------------------------------- */
 .sy-tools-inner { padding-top: 96px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
