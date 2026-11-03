@@ -22,7 +22,7 @@ using Wildwinter.Expr.Testing;
 
 namespace StoryletStudio.StoryletEngine.TestHost
 {
-    internal static class Program
+    internal static partial class Program
     {
         private static int _fails;
 
@@ -55,12 +55,18 @@ namespace StoryletStudio.StoryletEngine.TestHost
             // Absent before corpus version 10, which is an empty family rather
             // than a failure: an older corpus simply has no load cases.
             var load = root["load"] as JArray ?? new JArray();
+            // Corpus version 26: the version check. Absent is a failure, not an
+            // empty family, so a stale corpus can't pass it by having none.
+            var versions = root["versions"] as JArray;
+            if (versions == null) Fail("versions", "section", "corpus has no versions section (corpus 26)");
+            versions ??= new JArray();
 
             int e = RunExpressions(expressions);
             int sp = RunSpecificity(specificity);
             int p = RunPeek(peek);
             int s = RunScripted(scripted);
             int ld = RunLoad(load);
+            int vr = RunVersions(versions);
             // Read-only @world with a HOST resolver bound: the corpus case pins the
             // self-backed (kernel) path; this reaches the engine's own check, which
             // only a bound resolver does. Same probe in the JS, C++ and Godot harnesses.
@@ -82,7 +88,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             Console.WriteLine($"describeBundle checks: {d}/1  maps: {m}/1  live-link fixture: {l}/1  trace handlers: {th}/1  re-entrant deals: {re}/1");
             Console.WriteLine(
                 $"expressions: {e}/{expressions.Count}  specificity: {sp}/{specificity.Count}  " +
-                $"peek: {p}/{peek.Count}  scripted: {s}/{scripted.Count}  load: {ld}/{load.Count}");
+                $"peek: {p}/{peek.Count}  scripted: {s}/{scripted.Count}  load: {ld}/{load.Count}  versions: {vr}/{versions.Count}");
             // The expr parity corpus sits beside ours, vendored from ../expr. Absent is
             // a FAILURE, not a skip: a parity gate that quietly does nothing when its
             // fixture is missing is the shape of check this codebase has been bitten by.

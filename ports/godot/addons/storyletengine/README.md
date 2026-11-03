@@ -162,6 +162,10 @@ diagnostic; never a silent pass, never a crash.
   itself, so a multi-participant run needs nothing extra from the host; the
   Board follows one of them at a time. The demo is wired this way.
   See [Live Link](https://storylets.dev/play/live-link/).
+- **Which Storylet Engine this is**: `StoryletEngineVersion.CURRENT` is this runtime's version, as in its
+  `plugin.cfg` (`"0.15.0"`). Something that ships apart from the engine checks it at start-up with
+  `StoryletEngineVersion.in_range(StoryletEngineVersion.CURRENT, "0.15.0", "0.16.0")`: at least the first
+  version and below the second, by semantic-version order. Every runtime has the same pair.
 - **State kernel**: `StoryletPropertyBag` and `StoryletScopeRegistry` are the
   shared properties implementer (the owned / foreign scope split for a host
   scope such as `@world`). Both are thin shims over sources shared with Patterplay

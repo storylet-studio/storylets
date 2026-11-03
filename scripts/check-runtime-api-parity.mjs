@@ -58,6 +58,7 @@ const SURFACES = {
       "packages/runtime/src/engine.ts",
       "packages/play-helpers/src/world.ts",
       "packages/runtime/src/describe.ts",
+      "packages/runtime/src/version.ts",
       "packages/play-helpers/src/logger.ts",
       "packages/play-helpers/src/save.ts",
       "packages/play-helpers/src/inspector.ts",
@@ -76,6 +77,7 @@ const SURFACES = {
       "ports/unity/StoryletEngine/Runtime/Engine.cs",
       "ports/unity/StoryletEngine/Runtime/Flow.cs",
       "ports/unity/StoryletEngine/Runtime/DescribeBundle.cs",
+      "ports/unity/StoryletEngine/Runtime/StoryletEngineVersion.cs",
       "ports/unity/StoryletEngine/Runtime/StateLogger.cs",
       "ports/unity/StoryletEngine/Runtime/Expr/PropertyBag.cs",   // vendored from expr/ports/unity
       "ports/unity/StoryletEngine/Runtime/Expr/StateLogger.cs",   // likewise: the logger core
@@ -96,6 +98,7 @@ const SURFACES = {
       "ports/godot/addons/storyletengine/runtime/engine.gd",
       "ports/godot/addons/storyletengine/runtime/flow.gd",
       "ports/godot/addons/storyletengine/runtime/describe_bundle.gd",
+      "ports/godot/addons/storyletengine/runtime/storylet_engine_version.gd",
       "ports/godot/addons/storyletengine/runtime/state_logger.gd",
       // The shim keeps the class_name; the bag ITSELF is the vendored shared source
       // beside it, so a surface check reading only the shim reports every member
@@ -132,6 +135,7 @@ const SURFACES = {
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Engine.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Save.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/DescribeBundle.h",
+      "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Version.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/StateLogger.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Expr/PropertyBag.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Expr/StateLogger.h",
@@ -152,6 +156,7 @@ const SURFACES = {
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletEngine.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletSave.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletBundle.h",
+      "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletVersion.h",
       // The USTRUCTs the wrapper hands back (FStoryletDealtCard and the rest),
       // which the returned-shape check below reads.
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletTypes.h",
@@ -640,6 +645,18 @@ const API = [
     unity: { re: "LoadError" }, godot: { re: "Bundle failed to load" }, unreal: { re: "failed to compile" },
     bp: null,
     why: "JS has no asset pipeline: describeBundle takes an already-parsed bundle, so there is no import failure to surface (the host's JSON.parse throws at its own boundary). Blueprint: editor-side, as bundleInspector.view" },
+  // --- the version -------------------------------------------------------
+  // The check something built for the Storylet Engine makes against the one it
+  // finds, corpus-gated by the `versions` section, spelt as Patterplay's: a free
+  // function where the language has them, a static on StoryletEngineVersion
+  // where it doesn't, and Blueprint's on its own function library
+  // (UStoryletVersion), beside GetStoryletEngineVersion. The version constant
+  // itself is held to the manifests by check-runtime-lockstep.mjs.
+  { on: "Version", member: "versionInRange", js: "versionInRange", unity: "InRange", godot: "in_range", unreal: "versionInRange", bp: "StoryletEngineVersionInRange" },
+  { on: "Version", member: "current",
+    js: { re: "export const STORYLET_ENGINE_VERSION = " }, unity: { re: "public const string Current = " },
+    godot: { re: "const CURRENT := " }, unreal: { re: "inline constexpr const char\\* StoryletEngineVersion = " }, bp: "GetStoryletEngineVersion",
+    why: "a constant in four languages, so these are declaration probes; Blueprint reads it through GetStoryletEngineVersion" },
 ];
 
 // --- the fields of what the API hands back (added 2026-10-06) ----------------

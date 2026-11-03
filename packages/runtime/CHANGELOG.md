@@ -8,6 +8,16 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **Which Storylet Engine this is.** `STORYLET_ENGINE_VERSION` is the runtime's version, as in its `package.json`,
+  and `versionInRange(version, min, maxExclusive)` says whether a version is at least `min` and below `maxExclusive`,
+  by semantic-version order (a prerelease before its release, build metadata ignored, and anything that isn't a
+  version out of range). A game, a tool or an extension that ships apart from the engine checks the one it's
+  running on at start-up: `versionInRange(STORYLET_ENGINE_VERSION, "0.15.0", "0.16.0")`. Unity, Unreal and Godot
+  have the same pair, and Patterplay has its own, built the same way. `npm run bump:play` writes the version, and a
+  check fails if it drifts from the manifests. The conformance corpus is version 26, with the section `versions`.
+
 ## [0.15.0] - 2026-10-29
 
 ### Added

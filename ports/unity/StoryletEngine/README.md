@@ -66,6 +66,13 @@ whole run.
 `OpenFlow` and `LoadGame` refuse content that names one no engine on the registry registered. See
 [Unity](https://storylets.dev/play/unity/#one-registry-per-game) on the site.
 
+## Which Storylet Engine this is
+
+`StoryletEngineVersion.Current` is this runtime's version, as in its `package.json`. A game or an extension that ships
+apart from the engine checks it at start-up with
+`StoryletEngineVersion.InRange(StoryletEngineVersion.Current, "0.15.0", "0.16.0")` (at least the first version, below
+the second).
+
 ## The state window
 
 **Window > Storylet Engine > Runtime State** shows every engine registered

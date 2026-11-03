@@ -27,6 +27,8 @@
     <Compile Include="SaveHelpers.cs" />
     <!-- The registry corpus runner, vendored from expr/ports/unity/testing. -->
     <Compile Include="RegistryCorpus.cs" />
+    <!-- The corpus's version cases (StoryletEngineVersion.InRange). -->
+    <Compile Include="VersionChecks.cs" />
     <Compile Include="../StoryletEngine/Runtime/**/*.cs" />
     <!-- The UnityEngine-touching runtime layer (bundle asset, debug registry)
          cannot compile outside Unity; everything else under Runtime/ stays

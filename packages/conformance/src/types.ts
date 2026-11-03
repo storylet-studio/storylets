@@ -424,6 +424,19 @@ export interface Corpus {
   peek: PeekCase[];
   scripted: ScriptedCase[];
   load: LoadCase[];
+  versions: VersionCase[];
+}
+
+/** A version case (corpus 26): whether `version` is at least `min` and below
+ *  `maxExclusive` (`versionInRange`), by semantic-version precedence, with
+ *  build metadata ignored and a prerelease before its release. Anything that
+ *  isn't a version is out of range. Patterplay's cases, word for word. */
+export interface VersionCase {
+  name: string;
+  version: string;
+  min: string;
+  maxExclusive: string;
+  expected: boolean;
 }
 
 // --- Authoring fixtures (source form, compiled into the corpus) -------------
@@ -699,4 +712,5 @@ export interface Fixtures {
   peek: PeekFixture[];
   scripted: ScriptedFixture[];
   load: LoadFixture[];
+  versions: VersionCase[];
 }

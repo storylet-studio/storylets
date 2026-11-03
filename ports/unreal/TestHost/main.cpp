@@ -49,6 +49,7 @@
 #include "Storylets/Engine.h"
 #include "Storylets/Specificity.h"
 #include "Storylets/StoryletValue.h"
+#include "Storylets/Version.h"
 
 using namespace storylets;
 
@@ -2762,6 +2763,25 @@ static int runPortFixes(size_t& total)
     return runChecks("port-fixes", checks);
 }
 
+// The corpus's version cases (corpus 26): each through the core's versionInRange, held to the reference's answer.
+static int runVersions(const JsonValue& arr)
+{
+    int pass = 0;
+    for (const auto& c : arr.arr)
+    {
+        std::string name = c.at("name").str;
+        try
+        {
+            const bool got = versionInRange(c.at("version").str, c.at("min").str, c.at("maxExclusive").str);
+            const bool want = c.at("expected").b;
+            if (got == want) ++pass;
+            else fail("versions", name, std::string("expected ") + (want ? "true" : "false") + ", got " + (got ? "true" : "false"));
+        }
+        catch (const std::exception& ex) { fail("versions", name, ex.what()); }
+    }
+    return pass;
+}
+
 int main(int argc, char** argv)
 {
     std::string path = argc > 1 ? argv[1] : "packages/conformance/corpus.json";
@@ -2808,6 +2828,11 @@ int main(int argc, char** argv)
         const int portFixes = runPortFixes(portFixTotal);
         const auto durable = durableChecks();
         const int durablePassed = runChecks("durable", durable);
+        // Corpus version 26 adds the `versions` section. Absent is a failure: every runtime carries the check.
+        const JsonValue* versionsArr = root.find("versions");
+        if (!versionsArr) { std::cerr << "corpus has no versions section\n"; return 2; }
+        const int vr = runVersions(*versionsArr);
+        if (vr != static_cast<int>(versionsArr->arr.size())) fail("versions", "section total", std::to_string(vr) + " of " + std::to_string(versionsArr->arr.size()) + " passed");
 
         std::cout << "corpus version " << version << "\n";
         std::cout << "describeBundle checks: " << d << "/1  project map: " << m << "/1  save round trip: " << sv << "/1\n";
@@ -2821,6 +2846,7 @@ int main(int argc, char** argv)
         std::cout << "kernel errors reach the game as the engine's own: " << kernelErrors.passed << "/" << kernelErrors.total << "\n";
         std::cout << "port fixes (engine review 2026-10): " << portFixes << "/" << portFixTotal << "\n";
         std::cout << "durable halves (ruling H): " << durablePassed << "/" << durable.size() << "\n";
+        std::cout << "versions, whether a Storylet Engine version is in a range: " << vr << "/" << versionsArr->arr.size() << "\n";
 
         // The expr parity corpus sits beside ours, vendored from ../expr.
         // Absent is a FAILURE, not a skip: a parity gate that quietly does

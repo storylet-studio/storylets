@@ -350,6 +350,13 @@ the Newtonsoft layer (`BundleLoader`, `StoryletSave` and `StoryletLiveBundle`).
 kernel is `StoryletEngine.Expr`, or Patterplay's `Patterplay.Expr` when that is installed. The C# keeps the structure of the JavaScript reference runtime, so the two
 stay in step.
 
+## Which Storylet Engine is this?
+
+**`StoryletEngineVersion.Current`** is the runtime's version, as in its package manifest (`"0.15.0"`). A game, a tool
+or an extension that ships apart from the engine checks it at start-up with
+**`StoryletEngineVersion.InRange(StoryletEngineVersion.Current, "0.15.0", "0.16.0")`**: at least the first version and
+below the second, by semantic-version order. Every runtime has the same pair.
+
 ## Next
 
 - [Dev tools](/play/dev-tools/) covers what every runtime shares.

@@ -14,6 +14,7 @@
     "test": "vitest run",
     "bump:play": "node scripts/bump-play-version.mjs",
     "parity": "node scripts/check-runtime-api-parity.mjs",
+    "lockstep": "node scripts/check-runtime-lockstep.mjs",
     "sample": "node scripts/check-sample-coverage.mjs",
     "examples": "node scripts/check-examples.mjs",
     "check:unity-demo": "./scripts/check-unity-demo.sh",

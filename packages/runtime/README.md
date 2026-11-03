@@ -16,6 +16,10 @@ behaviour here is pinned by a case with hand-written expectations, and the
 native ports must reproduce this runtime's results bit-for-bit where the
 PRNG is involved (mulberry32, `src/prng.ts`).
 
+`STORYLET_ENGINE_VERSION` is this runtime's version, as in its `package.json`. Something that ships apart from the
+engine checks it at start-up with `versionInRange(STORYLET_ENGINE_VERSION, "0.15.0", "0.16.0")` (at least the first
+version, below the second).
+
 ## One registry per game
 
 Every property value lives in a `ScopeRegistry` (`@wildwinter/scoperegistry`), one per

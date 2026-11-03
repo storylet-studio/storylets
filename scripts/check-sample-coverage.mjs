@@ -63,6 +63,8 @@ const OMITTED = [
   { member: "flows", why: "flows: a list of one is not a demonstration. Same ruling" },
   { member: "discard", why: "the Village has no way to turn a card down: a player acts on what is offered or walks on, and walking on is a place change, which the next deal covers. Dealing describes discard" },
   { member: "Flow", why: "a game never CONSTRUCTS a flow: `openFlow` hands you one, and `getFlow` hands it back after a load. The class is exported for its type and for the ports" },
+  { member: "STORYLET_ENGINE_VERSION", why: "the Village ships with the engine it runs on, so it has nothing to check: the version is for something that ships apart from the engine and finds one at start-up. The runtime's docs page shows it" },
+  { member: "versionInRange", why: "the check against STORYLET_ENGINE_VERSION, for something that ships apart from the engine; the Village doesn't. Same reason" },
   { member: "StoryletError", why: "the error class every engine refusal throws, exported so a host can tell the engine's errors from its own with instanceof. The client never meets one: it plays only the outcomes outcomes() offers, from the hands the board holds, so it has no refusal to catch" },
   { member: "close", why: "flows: the flow lives as long as the tab does" },
   { member: "isClosed", why: "flows: a handle that is never closed is never inert" },

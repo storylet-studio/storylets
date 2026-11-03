@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The Storylet Engine version, and a check against it.** `storylets::StoryletEngineVersion` (Blueprint:
+  `UStoryletVersion::GetStoryletEngineVersion`) is this runtime's version, as in its `.uplugin`, and
+  `storylets::versionInRange(Version, Min, MaxExclusive)` (Blueprint: `UStoryletVersion::StoryletEngineVersionInRange`)
+  says whether a version is at least `Min` and below `MaxExclusive`, by semantic-version precedence. It's false when
+  any of the three isn't a version. A game, a tool or an extension that ships apart from the engine checks
+  `storylets::versionInRange(storylets::StoryletEngineVersion, "0.15.0", "0.16.0")` at start-up, since a `.uplugin`
+  can't declare the range of Storylet Engine versions it needs. Both are in `Storylets/Version.h`. The conformance
+  corpus is version 26 (the section `versions`).
+
 ## [0.15.0] - 2026-10-29
 
 ### Added

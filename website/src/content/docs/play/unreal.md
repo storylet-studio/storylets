@@ -338,6 +338,16 @@ performing each card's dialogue, two engines in one game. It ships as a project 
 [download page](/download/#the-hamlet-patter-version-two-engines-in-one-game); `Source/HamletDemo/Private/HamletGame.cpp` is the whole
 integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
+## Which Storylet Engine is this?
+
+`storylets::StoryletEngineVersion` (Blueprint: `Get Storylet Engine Version`) is this runtime's
+version, as in its `.uplugin`. A game, a tool or an extension that ships apart from the Storylet
+Engine checks at start-up that the one it finds is one it was built for:
+`storylets::versionInRange(storylets::StoryletEngineVersion, "0.15.0", "0.16.0")` (Blueprint:
+`Storylet Engine Version In Range`, `UStoryletVersion::StoryletEngineVersionInRange`) is true
+from 0.15.0 up to, but not including, 0.16.0. It's false when any of the three isn't a version.
+Both are in `Storylets/Version.h`.
+
 ## How it's built
 
 The plugin is two layers. `Source/StoryletEngineRuntime/Public/Storylets/` is the engine core,

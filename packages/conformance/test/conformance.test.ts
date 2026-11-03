@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCorpus } from "../src/build.js";
 import { fixtures } from "../src/cases.js";
-import { runExpressionCase, runLoadCase, runPeekCase, runScriptedCase, runSpecificityCase } from "../src/runner.js";
+import { runExpressionCase, runLoadCase, runPeekCase, runScriptedCase, runSpecificityCase, runVersionCase } from "../src/runner.js";
 import type { Bundle, Card, Expression } from "@storylet-studio/model";
 
 const corpus = buildCorpus(fixtures);
@@ -132,6 +132,14 @@ describe("reference runtime vs corpus", () => {
     for (const c of corpus.load) {
       it(c.name, () => {
         expect(runLoadCase(c)).toEqual([]);
+      });
+    }
+  });
+
+  describe("versions", () => {
+    for (const c of corpus.versions) {
+      it(c.name, () => {
+        expect(runVersionCase(c)).toBe(c.expected);
       });
     }
   });

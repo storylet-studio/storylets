@@ -94,8 +94,11 @@ import type {
  *  24: a set-up report's expected `message` starts after the option's name, which each runtime spells its
  *  own way, so every port matches it as written (ruled 2026-10-28).
  *  25: a property path takes Patter's leading `@` (`@story.gold`, `@world.clock`, a bare `@gold` for the
- *  story's), on a flow and on the engine (ruling 3, 2026-10-28); the `setPath` op. */
-export const CORPUS_VERSION = 25;
+ *  story's), on a flow and on the engine (ruling 3, 2026-10-28); the `setPath` op.
+ *  26: the section `versions`: whether a version is in a range (`versionInRange`), the check something built
+ *  for the Storylet Engine makes against the one it finds; Patterplay's 23 cases, so both families answer
+ *  alike. No earlier expectation changed. */
+export const CORPUS_VERSION = 26;
 
 /** The dialect a fixture's expressions compile in: the engine's own, plus the
  *  host scopes the fixture being expanded declares (`@player`), as a project's
@@ -480,6 +483,7 @@ export function buildCorpus(fixtures: Fixtures): Corpus {
         expectRefused: f.expectRefused,
       };
     }),
+    versions: fixtures.versions,
   };
 }
 

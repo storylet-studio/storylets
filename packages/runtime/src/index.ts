@@ -10,6 +10,8 @@ export type {
 // What the game hands the engine and gets back from a load, so a host can type
 // them with no dependency on the model package (the hands-on review, 2026-10).
 export type { Bundle, HostScopeDecl, HostScopeRegistry, HostScopeSpec, LoadReport, SaveEnvelope } from "@storylet-studio/model";
+// What this runtime is, and the check something built for it makes at start-up.
+export { STORYLET_ENGINE_VERSION, versionInRange } from "./version.js";
 export { describeBundle } from "./describe.js";
 export type {
   BoxSummary, BundleDescription, BundleIdentity, HandSummary, MapSummary, MovableHole,

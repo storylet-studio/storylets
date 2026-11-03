@@ -308,6 +308,13 @@ The same package ships `createLiveLink` and `applyLiveBundle`, which connect the
 to Storyletter, so saves reach the run without a restart while the Board shows the game's
 deals. [Live Link](/play/live-link/) has the wiring and the protocol.
 
+## Which Storylet Engine is this?
+
+**`STORYLET_ENGINE_VERSION`** is the runtime's version, as in its package (`"0.15.0"`). A game, a tool or an
+extension that ships apart from the engine checks it at start-up with
+**`versionInRange(STORYLET_ENGINE_VERSION, "0.15.0", "0.16.0")`**: at least the first version and below the second,
+by semantic-version order. Every runtime has the same pair, and Patterplay has its own.
+
 ## The Board demo
 
 The repository carries the JavaScript Board demo, in `packages/play-helpers/demo`: the whole

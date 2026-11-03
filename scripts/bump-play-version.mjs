@@ -13,6 +13,8 @@
 //        ports/unity/StoryletEngine/package.json             "version"
 //        ports/unreal/StoryletEngine/StoryletEngine.uplugin  "VersionName" (+ "Version"++)
 //        ports/godot/addons/storyletengine/plugin.cfg        version=
+//      and into each runtime's version constant, the one game code reads
+//      (scripts/lib/storylet-engine-version-constants.mjs)
 //   2. stamps today's date into each runtime CHANGELOG.md: the "## [Unreleased]"
 //      section becomes "## [<version>] - <date>" and a fresh empty
 //      "## [Unreleased]" goes in above it
@@ -28,6 +30,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { VERSION_CONSTANTS, writeVersionConstant } from "./lib/storylet-engine-version-constants.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const version = process.argv[2];
@@ -135,6 +138,16 @@ bumpJsonVersion("ports/unity/StoryletEngine/package.json");
     if (!s.includes(`version="${version}"`)) throw new Error(`${p}: no version= line to change`);
     console.log("  skip ", p, `(already ${version})`);
   } else write(p, out);
+}
+
+// Each runtime's version constant, the one game code reads (STORYLET_ENGINE_VERSION,
+// StoryletEngineVersion.Current, storylets::StoryletEngineVersion, StoryletEngineVersion.CURRENT).
+// The lockstep check fails when one differs from the manifests.
+for (const c of VERSION_CONSTANTS) {
+  const s = read(c.rel);
+  const out = writeVersionConstant(s, c, version);
+  if (out === s) console.log("  skip ", c.rel, `(already ${version})`);
+  else write(c.rel, out);
 }
 
 // --- 2. the changelogs -----------------------------------------------------

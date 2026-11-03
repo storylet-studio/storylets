@@ -11,12 +11,12 @@ import { deserialiseAst, evaluate } from "@wildwinter/expr";
 import type { EvalContext, ScalarValue } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
-import { Engine, Flow, effectiveFields, extensionDecls, extensionsOf, fieldDecls, makePrng } from "@storylet-studio/runtime";
+import { Engine, Flow, effectiveFields, extensionDecls, extensionsOf, fieldDecls, makePrng, versionInRange } from "@storylet-studio/runtime";
 import type { DurableSave, HostScope, PlayError } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle, FlowSave, LoadProperty, LoadReport, SaveEnvelope } from "@storylet-studio/model";
 import type {
-  DurableExpect, ExpressionCase, LoadCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector,
+  DurableExpect, ExpressionCase, LoadCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector, VersionCase,
 } from "./types.js";
 
 /** Truthiness for a bare condition; mirrors the runtime's `conditionPasses`,
@@ -834,4 +834,9 @@ function scribbleDeep(value: unknown): void {
     for (const item of Object.values(map)) scribbleDeep(item);
     map["scribbled"] = "scribbled";
   }
+}
+
+/** Whether a version case's version is in its range, by the reference's versionInRange. */
+export function runVersionCase(c: VersionCase): boolean {
+  return versionInRange(c.version, c.min, c.maxExclusive);
 }

@@ -2,7 +2,8 @@
 // gate, replayed by the clang TestHost over the same headers; this test
 // exercises the UObject wrapper seams instead): JSON string -> bundle ->
 // engine -> flow -> deal -> outcomes -> play -> typed property access ->
-// a second flow -> save/load round trip -> foreign-blob rejection. Runs via
+// a second flow -> save/load round trip -> foreign-blob rejection, and the
+// Storylet Engine version and its range check. Runs via
 // -ExecCmds="Automation RunTests StoryletEngine".
 
 #include "Misc/AutomationTest.h"
@@ -16,10 +17,12 @@
 #include "StoryletLog.h"
 #include "StoryletSave.h"
 #include "StoryletTypes.h"
+#include "StoryletVersion.h"
 
 #include "Storylets/LiveLink.h"
 #include "Storylets/Engine.h"
 #include "Storylets/StateLogger.h"
+#include "Storylets/Version.h"
 
 namespace
 {
@@ -435,6 +438,11 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("unsubscribed handlers stay quiet"), Seen.Num(), 0);
 		Client.close();
 	}
+
+	TestEqual(TEXT("GetStoryletEngineVersion: the core's version"), UStoryletVersion::GetStoryletEngineVersion(), FString(UTF8_TO_TCHAR(storylets::StoryletEngineVersion)));
+	TestTrue(TEXT("StoryletEngineVersionInRange: a patch inside the range"), UStoryletVersion::StoryletEngineVersionInRange(TEXT("0.15.7"), TEXT("0.15.0"), TEXT("0.16.0")));
+	TestFalse(TEXT("StoryletEngineVersionInRange: the top of the range is outside it"), UStoryletVersion::StoryletEngineVersionInRange(TEXT("0.16.0"), TEXT("0.15.0"), TEXT("0.16.0")));
+	TestFalse(TEXT("StoryletEngineVersionInRange: a text that isn't a version"), UStoryletVersion::StoryletEngineVersionInRange(TEXT("latest"), TEXT("0.15.0"), TEXT("0.16.0")));
 
 	if (!HasAnyErrors())
 	{

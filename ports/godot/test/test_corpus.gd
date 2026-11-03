@@ -13,9 +13,10 @@
 # scorer), peek (bundle + one ask, asked TWICE - a peek registers nothing),
 # scripted (deals, plays, turns, save/load incl. into the edited bundle B),
 # load (a bundle the engine must refuse at construction: create returns null,
-# and _init_error, the reason it push_errors, names each expected string). Then
-# the two corpora vendored from ../expr beside it: expr-corpus.json (the
-# evaluator's) and registry-corpus.json (the ScopeRegistry's, run by the shared
+# and _init_error, the reason it push_errors, names each expected string),
+# versions (StoryletEngineVersion.in_range, corpus 26). Then the two corpora
+# vendored from ../expr beside it: expr-corpus.json (the evaluator's) and
+# registry-corpus.json (the ScopeRegistry's, run by the shared
 # runner in registry_corpus.gd). Last, the one-registry checks
 # (one_registry_checks.gd): the engine and the game's registry, from the game's side.
 # Prints per-family counts then ALL PASS (exit 0) or N FAILED (exit 1).
@@ -115,6 +116,14 @@ func _run_all() -> void:
 	print("corpus version %d" % int(root["version"]))
 	print("expressions: %d/%d  specificity: %d/%d  peek: %d/%d  scripted: %d/%d  load: %d/%d" % [
 		e, expressions.size(), sp, specificity.size(), p, peek.size(), s, scripted.size(), l, load.size()])
+	# Corpus 26: the version check. Absent is a failure, not a skip.
+	if not root.has("versions"):
+		_fail("versions", "(corpus)", "no versions section (corpus 26)")
+	var versions: Array = root.get("versions", [])
+	_runner_finished = false
+	var vr := _run_versions(versions)
+	_check_runner("versions")
+	print("versions: %d/%d  (StoryletEngineVersion.in_range, by semantic-version precedence)" % [vr, versions.size()])
 	# The expr parity corpus sits beside ours, vendored from ../expr. Absent is a
 	# FAILURE, not a skip: a parity gate that quietly does nothing when its fixture
 	# is missing is the shape of check this codebase has been bitten by.
@@ -198,6 +207,23 @@ func _check_runner(family: String) -> void:
 func _fail(family: String, name: String, detail: String) -> void:
 	_fails += 1
 	printerr("  FAIL [%s] %s: %s" % [family, name, detail])
+
+
+# Each version, min and maxExclusive through StoryletEngineVersion.in_range, held to the reference's answer.
+func _run_versions(arr: Array) -> int:
+	var pass_count := 0
+	for c in arr:
+		var name: String = c["name"]
+		var got := StoryletEngineVersion.in_range(c["version"], c["min"], c["maxExclusive"])
+		var want: bool = c["expected"]
+		if got == want:
+			pass_count += 1
+		else:
+			_fail("versions", name, "expected %s, got %s" % [want, got])
+	if arr.is_empty():
+		_fail("versions", "(corpus)", "no cases ran")
+	_runner_finished = true
+	return pass_count
 
 
 # -- shared plumbing -------------------------------------------------------------

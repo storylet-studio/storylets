@@ -6,6 +6,17 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- **Which Storylet Engine this is.** `StoryletEngineVersion.CURRENT` is the runtime's version, as in its
+  `plugin.cfg`, and `StoryletEngineVersion.in_range(version, min, max_exclusive)` says whether a version is at least
+  `min` and below `max_exclusive`, by semantic-version order (a prerelease before its release, build metadata
+  ignored, and anything that isn't a version out of range). A game, a tool or an extension that ships apart from the
+  engine checks the Storylet Engine it's running on at start-up:
+  `StoryletEngineVersion.in_range(StoryletEngineVersion.CURRENT, "0.15.0", "0.16.0")`. JS, Unity and Unreal have the
+  same pair, as Patterplay's runtimes do. `npm run bump:play` writes the version. The conformance corpus is version
+  26, with the section `versions`.
+
 ## [0.15.0] - 2026-10-29
 
 ### Added

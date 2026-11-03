@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The Storylet Engine version, in code.** `StoryletEngineVersion.Current` is this runtime's version, as in its
+  package manifest, and `StoryletEngineVersion.InRange(version, min, maxExclusive)` is true when `version` is at least
+  `min` and below `maxExclusive` by semantic-version precedence (a prerelease comes before its release, and build
+  metadata is ignored), false when any of the three isn't a version. A game, a tool or an extension that ships apart
+  from the engine checks the one it finds at start-up with
+  `StoryletEngineVersion.InRange(StoryletEngineVersion.Current, "0.15.0", "0.16.0")`, the same check on every engine,
+  since Unreal's and Godot's plugin files can't declare a version range. Patterplay's `PatterplayVersion`, the same
+  pair. The conformance corpus is version 26, with the section `versions`.
+
 ## [0.15.0] - 2026-10-29
 
 ### Added
