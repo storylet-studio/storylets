@@ -268,7 +268,7 @@ export function createCommands(ctx: CommandsContext) {
         wordmark: STORYLETTER_WORDMARK,
         version: command.version,
         blurb: "A studio for storylets, the content that offers itself when the moment is right.",
-        // Storylet Studio, not PatterKit. These two lines were scaffolded from
+        // Storylet Studio, not Patterkit. These two lines were scaffolded from
         // Patterpad's About and never changed, so the shipped app told anyone who
         // opened it that it belonged to the sibling project and sent them to the
         // sibling's site. The Help menu's own links were right all along, which is

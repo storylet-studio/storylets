@@ -112,7 +112,7 @@ export function refreshMenu(
   // Two apps hand-typing "About Storyletter" and "About Patterpad" agree until
   // one of them is edited, and the whole reason the spine exists is that
   // somebody using both should not have to notice.
-  // Patterpad's pair, one suite over: its app docs + the PatterKit home. Ours
+  // Patterpad's pair, one suite over: its app docs + the Patterkit home. Ours
   // are the Storyletter track + the Storylet Studio home. The suite is Storylet
   // Studio, not Patter: Patter is a sibling project, and a Storyletter user
   // reaching for "Documentation Home" wants this family's front door.

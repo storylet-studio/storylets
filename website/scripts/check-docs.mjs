@@ -104,7 +104,7 @@ for (const file of walk(join(root, "src/content/docs"), [".md", ".mdx"])) {
 
 // --- 1b. the voice rules ----------------------------------------------------
 // Set by the 2026-08-21 language pass (design/website-language-audit.md): the
-// site reads in PatterKit's register, for narrative designers, developers and
+// site reads in Patterkit's register, for narrative designers, developers and
 // leads. Three things creep back in silently and are cheap to refuse here:
 //
 //  - the DROP LIST: coined design-brief words that appeared in user docs and

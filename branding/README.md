@@ -1,6 +1,6 @@
 # Storylet Studio brand assets
 
-Sibling system to PatterKit. Same construction discipline: one primitive, transformed,
+Sibling system to Patterkit. Same construction discipline: one primitive, transformed,
 never redrawn. Newsreader for wordmarks and headings, IBM Plex Mono for tags, extensions
 and CLI. This folder is the source for every shipped icon, mark and wordmark: the apps,
 the website and the runtimes all build from it.
@@ -20,7 +20,7 @@ It fills its box: never place a glyph inside it.
 
 Products do not get their own marks. The thread carries the whole ecosystem; a product is
 the thread on **its own ground**, with a lowercase monospace tag in the bottom-right
-corner. This is the rule PatterKit uses for its runtime plugins; here it runs
+corner. This is the rule Patterkit uses for its runtime plugins; here it runs
 family-wide, so a new tool is a colour and a word, not a new drawing.
 
 | Product | Ground | Tag |
@@ -50,7 +50,7 @@ still says which app it is.
 Cream is no longer the light PAGE ground. Light surfaces, on the website and in Storyletter
 alike, are Storyletter's default light theme, Chambray, whose blue-grey neutrals are listed
 below; cream stays as the ink and mark colour on every plum-deep band, and as the umbrella
-badge fill in the differentiation rule above. The reason is family legibility: PatterKit's
+badge fill in the differentiation rule above. The reason is family legibility: Patterkit's
 site takes its light neutrals from Patterpad's default Paper theme, and cream `#F3EDE2` sits
 within a hair of that parchment `#F1EBE0`, so the two sites read as one. Warm is Patter's;
 cool is ours.
