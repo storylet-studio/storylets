@@ -20,6 +20,13 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.20.5] - 2026-11-05
+
+### Changed
+
+- **`export-html` plays Patter scenes on Patterplay 0.45.0**, in place of 0.38.0: a page made from a project with
+  Patter scenes plays them as the Patter runtimes do now. Nothing changes how a scene plays.
+
 ## [0.20.4] - 2026-10-30
 
 ### Changed

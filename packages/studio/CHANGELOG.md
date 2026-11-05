@@ -10,6 +10,14 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.27.4] - 2026-11-05
+
+### Changed
+
+- **Patter scenes play on Patter 0.45.0.** The Board and an exported playable page play a card's Patter scene with
+  Patterplay 0.45.0, in place of 0.38.0. Nothing changes how a scene plays: the Board and the page show a scene as a
+  transcript the reader steps through, so Patter's quicker unvoiced lines (its 0.43.0) change no timing here.
+
 ## [0.27.3] - 2026-10-30
 
 ### Changed

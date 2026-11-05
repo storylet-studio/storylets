@@ -7,6 +7,13 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-11-05
+
+### Changed
+
+- **Every host runs Patter 0.45.0**, in place of 0.38.0, and the cross-host saves are regenerated on it (Patter's save
+  format 4). Nothing changes how the Hamlet plays: every host shows a scene as a transcript with a Continue button.
+
 ## [0.10.3] - 2026-10-30
 
 ### Changed
