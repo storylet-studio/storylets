@@ -19,7 +19,6 @@
   --l-body: var(--app-ink-read);    /* body text */
   --l-muted: var(--app-muted);      /* muted text */
   --l-hair: var(--app-line);        /* hairline */
-  --l-rule: var(--app-warn);        /* a card's rule and an edge that fails: Storyletter's amber */
   --l-accent: var(--app-accent);
   --l-accent-deep: color-mix(in oklab, var(--app-accent) 85%, var(--app-ink)); /* hover */
 
@@ -77,26 +76,37 @@
 .sy-both { display: block; width: 100%; height: auto; background-color: var(--l-paper-2); border: 1px solid var(--l-hair); border-radius: 8px; }
 .sy-deck-caption { margin: 12px 0 0; font-size: 14px; line-height: 1.5; color: var(--l-muted); max-width: 40em; }
 
-/* the card faces */
+/* The drawing's own inks, named for what the canvas uses them for: the enable and disable
+   edges, and the three decks' colours from the character wheel. */
+.sy-both {
+  --l-on: var(--app-ok);
+  --l-off: var(--app-danger);
+}
+.sy-deck-forge { --l-deck: var(--app-char-1); }
+.sy-deck-gareth { --l-deck: var(--app-char-6); }
+.sy-deck-inn { --l-deck: var(--app-char-9); }
+
+/* the card faces: the node canvas's, a white face with a hairline, 6px corners, no shadow,
+   and the deck's colour as the stripe down the left edge */
 .sy-flow-ground { fill: var(--l-ground); }
-.sy-gc rect { fill: var(--l-paper-2); stroke: var(--l-hair); stroke-width: 1; }
-.sy-gc-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 12.5px; fill: var(--l-ink); }
-/* The rule on a card is code-like content, so it keeps the mono. */
-.sy-gc-r { font-family: var(--sl-font-mono); font-size: 10px; fill: var(--l-rule); }
+.sy-dot { fill: color-mix(in oklab, var(--l-muted) 28%, var(--l-ground)); }
+.sy-gc rect, .sy-fn rect { fill: var(--l-paper-2); stroke: var(--l-hair); stroke-width: 1; }
+.sy-gc rect.sy-stripe, .sy-fn rect.sy-stripe { fill: var(--l-deck); stroke: none; }
+.sy-gc-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 400; font-size: 13.5px; fill: var(--l-ink); }
+/* The rule on a card, in the UI face and muted: a label, not code. */
+.sy-gc-r { font-family: var(--sl-font, "Inter", sans-serif); font-weight: 400; font-size: 10.5px; fill: var(--l-muted); }
 
 /* the same cards as a flow */
-.sy-fn rect { fill: var(--l-paper-2); stroke: var(--l-hair); stroke-width: 1; }
-.sy-fn-sel rect { stroke: var(--l-accent); stroke-width: 1.5; }
-.sy-fn-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 14px; fill: var(--l-ink); }
-.sy-fe path { fill: none; stroke-width: 1.75; }
-.sy-fe text { font-family: var(--sl-font, "Inter", sans-serif); font-weight: 500; font-size: 10.5px; text-anchor: middle; }
-.sy-fe-on path { stroke: var(--l-accent); }
-.sy-fe-on text { fill: var(--l-accent); }
-.sy-fe-off path { stroke: var(--l-rule); }
-.sy-fe-off text { fill: var(--l-rule); }
+.sy-fn-sel rect:not(.sy-stripe) { stroke: var(--l-accent); stroke-width: 1.5; }
+.sy-fn-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 400; font-size: 14.5px; fill: var(--l-ink); }
+/* Edges as the canvas strokes them: straight, border to border, the class's ink. */
+.sy-fe { fill: none; stroke-width: 1.75; }
+.sy-fe-on { stroke: var(--l-on); }
+.sy-fe-off { stroke: var(--l-off); }
+.sy-key text { font-family: var(--sl-font, "Inter", sans-serif); font-weight: 400; font-size: 10.5px; fill: var(--l-muted); }
 
-/* the cut */
-.sy-seam { fill: none; stroke: var(--l-muted); stroke-width: 1; stroke-dasharray: 5 5; opacity: 0.6; }
+/* the cut: a hairline */
+.sy-seam { fill: none; stroke: var(--l-hair); stroke-width: 1; }
 
 /* ---- Where you'd use it ------------------------------------------------------ */
 .sy-uses .sy-wrap { padding-top: 96px; }

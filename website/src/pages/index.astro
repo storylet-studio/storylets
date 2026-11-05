@@ -75,7 +75,10 @@ const description =
 
           {/* One deck, cut on the diagonal: the same six cards as a grid and as a flow. The
               split is the argument the picture makes, so it's one picture rather than two.
-              Card faces top-left, the arrows the tool worked out bottom-right. */}
+              Card faces top-left, the arrows the tool worked out bottom-right. The finish is
+              Storyletter's node canvas (packages/studio node-art.ts): white faces with a
+              hairline and 6px corners, the deck's colour as a stripe down the left, straight
+              edges border to border in the enable and disable inks, named by a key. */}
           <figure class="sy-deck">
             <svg class="sy-both" viewBox="0 0 520 372" role="img" aria-labelledby="sy-both-t">
               <title id="sy-both-t">One deck shown two ways at once, divided on the diagonal. The
@@ -83,70 +86,90 @@ const description =
                 half is the same cards as a flow, with arrows the tool worked out from those rules:
                 one card opens up another, and shuts a third off.</title>
               <defs>
-                <clipPath id="sy-cut-cards"><path d="M0 0 H520 V0 L0 372 Z"></path></clipPath>
+                <clipPath id="sy-cut-cards"><path d="M0 0 H520 L0 372 Z"></path></clipPath>
                 <clipPath id="sy-cut-flow"><path d="M520 0 V372 H0 Z"></path></clipPath>
-                <marker id="sy-a-on" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                  <path d="M0 0 L8 4 L0 8 z" fill="var(--l-accent)"></path>
+                {/* The canvas's arrowhead: 9 long, 7 wide, solid, in the edge's own ink. */}
+                <marker id="sy-a-on" viewBox="0 0 9 7" refX="9" refY="3.5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="7" orient="auto">
+                  <path d="M0 0 L9 3.5 L0 7 z" fill="var(--l-on)"></path>
                 </marker>
-                <marker id="sy-a-off" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                  <path d="M0 0 L8 4 L0 8 z" fill="var(--l-rule)"></path>
+                <marker id="sy-a-off" viewBox="0 0 9 7" refX="9" refY="3.5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="7" orient="auto">
+                  <path d="M0 0 L9 3.5 L0 7 z" fill="var(--l-off)"></path>
                 </marker>
+                <pattern id="sy-dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle class="sy-dot" cx="8" cy="8" r="0.9"></circle></pattern>
+                {/* Each face clipped to its own corners, so the deck stripe follows the curve. */}
+                <clipPath id="sy-c1"><rect x="20" y="16" width="128" height="66" rx="6"></rect></clipPath>
+                <clipPath id="sy-c2"><rect x="156" y="16" width="128" height="66" rx="6"></rect></clipPath>
+                <clipPath id="sy-c3"><rect x="292" y="16" width="128" height="66" rx="6"></rect></clipPath>
+                <clipPath id="sy-c4"><rect x="20" y="96" width="128" height="66" rx="6"></rect></clipPath>
+                <clipPath id="sy-c5"><rect x="156" y="96" width="128" height="66" rx="6"></rect></clipPath>
+                <clipPath id="sy-c6"><rect x="20" y="176" width="128" height="66" rx="6"></rect></clipPath>
+                <clipPath id="sy-f1"><rect x="150" y="268" width="160" height="56" rx="6"></rect></clipPath>
+                <clipPath id="sy-f2"><rect x="370" y="180" width="140" height="52" rx="6"></rect></clipPath>
+                <clipPath id="sy-f3"><rect x="370" y="268" width="140" height="52" rx="6"></rect></clipPath>
               </defs>
 
               <g clip-path="url(#sy-cut-cards)">
-                <g class="sy-gc"><rect x="20" y="16" width="128" height="70" rx="10"></rect>
-                  <text class="sy-gc-t" x="32" y="38">The Blacksmith&apos;s</text>
-                  <text class="sy-gc-t" x="32" y="54">Trouble</text>
-                  <text class="sy-gc-r" x="32" y="72">when: met Gareth</text></g>
-                <g class="sy-gc"><rect x="156" y="16" width="128" height="70" rx="10"></rect>
-                  <text class="sy-gc-t" x="168" y="38">Gareth Asks</text>
-                  <text class="sy-gc-t" x="168" y="54">for Help</text>
-                  <text class="sy-gc-r" x="168" y="72">when: he owes you</text></g>
-                <g class="sy-gc"><rect x="292" y="16" width="128" height="70" rx="10"></rect>
-                  <text class="sy-gc-t" x="304" y="38">The Ring of</text>
-                  <text class="sy-gc-t" x="304" y="54">the Anvil</text>
-                  <text class="sy-gc-r" x="304" y="72">when: always</text></g>
-                <g class="sy-gc"><rect x="20" y="100" width="128" height="70" rx="10"></rect>
-                  <text class="sy-gc-t" x="32" y="122">A Rumour at</text>
-                  <text class="sy-gc-t" x="32" y="138">the Inn</text>
-                  <text class="sy-gc-r" x="32" y="156">when: debt called</text></g>
-                <g class="sy-gc"><rect x="156" y="100" width="128" height="70" rx="10"></rect>
-                  <text class="sy-gc-t" x="168" y="122">The Forge</text>
-                  <text class="sy-gc-t" x="168" y="138">Falls Quiet</text>
-                  <text class="sy-gc-r" x="168" y="156">when: debt called</text></g>
-                <g class="sy-gc"><rect x="20" y="184" width="128" height="70" rx="10"></rect>
-                  <text class="sy-gc-t" x="32" y="206">Mira Pours</text>
-                  <text class="sy-gc-t" x="32" y="222">a Second</text>
-                  <text class="sy-gc-r" x="32" y="240">when: evening</text></g>
+                <g class="sy-gc sy-deck-forge"><rect x="20" y="16" width="128" height="66" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-c1)" x="20" y="16" width="4" height="66"></rect>
+                  <text class="sy-gc-t" x="34" y="36">The Blacksmith&apos;s</text>
+                  <text class="sy-gc-t" x="34" y="52">Trouble</text>
+                  <text class="sy-gc-r" x="34" y="71">when: met Gareth</text></g>
+                <g class="sy-gc sy-deck-gareth"><rect x="156" y="16" width="128" height="66" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-c2)" x="156" y="16" width="4" height="66"></rect>
+                  <text class="sy-gc-t" x="170" y="36">Gareth Asks</text>
+                  <text class="sy-gc-t" x="170" y="52">for Help</text>
+                  <text class="sy-gc-r" x="170" y="71">when: he owes you</text></g>
+                <g class="sy-gc sy-deck-forge"><rect x="292" y="16" width="128" height="66" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-c3)" x="292" y="16" width="4" height="66"></rect>
+                  <text class="sy-gc-t" x="306" y="36">The Ring of</text>
+                  <text class="sy-gc-t" x="306" y="52">the Anvil</text>
+                  <text class="sy-gc-r" x="306" y="71">when: always</text></g>
+                <g class="sy-gc sy-deck-inn"><rect x="20" y="96" width="128" height="66" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-c4)" x="20" y="96" width="4" height="66"></rect>
+                  <text class="sy-gc-t" x="34" y="116">A Rumour at</text>
+                  <text class="sy-gc-t" x="34" y="132">the Inn</text>
+                  <text class="sy-gc-r" x="34" y="151">when: debt called</text></g>
+                <g class="sy-gc sy-deck-forge"><rect x="156" y="96" width="128" height="66" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-c5)" x="156" y="96" width="4" height="66"></rect>
+                  <text class="sy-gc-t" x="170" y="116">The Forge</text>
+                  <text class="sy-gc-t" x="170" y="132">Falls Quiet</text>
+                  <text class="sy-gc-r" x="170" y="151">when: debt called</text></g>
+                <g class="sy-gc sy-deck-inn"><rect x="20" y="176" width="128" height="66" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-c6)" x="20" y="176" width="4" height="66"></rect>
+                  <text class="sy-gc-t" x="34" y="196">Mira Pours</text>
+                  <text class="sy-gc-t" x="34" y="212">a Second</text>
+                  <text class="sy-gc-r" x="34" y="231">when: evening</text></g>
               </g>
 
               <g clip-path="url(#sy-cut-flow)">
-                {/* Its own ground, so the cards it covers read as tucked underneath rather
-                    than as rectangles that failed to draw. */}
+                {/* Its own ground, the canvas's desk with its dots, so the cards it covers read as
+                    tucked underneath rather than as rectangles that failed to draw. */}
                 <path class="sy-flow-ground" d="M520 0 V372 H0 Z"></path>
-                <g class="sy-fe sy-fe-on">
-                  <path d="M310 282 C342 282 340 206 370 206" marker-end="url(#sy-a-on)"></path>
-                  <text x="340" y="196">opens up</text>
+                <path d="M520 0 V372 H0 Z" fill="url(#sy-dots)"></path>
+                <path class="sy-fe sy-fe-on" d="M295 268 L379 232" marker-end="url(#sy-a-on)"></path>
+                <path class="sy-fe sy-fe-off" d="M310 294 L370 294" marker-end="url(#sy-a-off)"></path>
+                <g class="sy-fn sy-fn-sel sy-deck-forge"><rect x="150" y="268" width="160" height="56" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-f1)" x="150" y="268" width="4" height="56"></rect>
+                  <text class="sy-fn-t" x="165" y="291">The Blacksmith&apos;s</text>
+                  <text class="sy-fn-t" x="165" y="309">Trouble</text></g>
+                <g class="sy-fn sy-deck-gareth"><rect x="370" y="180" width="140" height="52" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-f2)" x="370" y="180" width="4" height="52"></rect>
+                  <text class="sy-fn-t" x="385" y="202">Gareth Asks</text>
+                  <text class="sy-fn-t" x="385" y="220">for Help</text></g>
+                <g class="sy-fn sy-deck-forge"><rect x="370" y="268" width="140" height="52" rx="6"></rect>
+                  <rect class="sy-stripe" clip-path="url(#sy-f3)" x="370" y="268" width="4" height="52"></rect>
+                  <text class="sy-fn-t" x="385" y="290">The Forge</text>
+                  <text class="sy-fn-t" x="385" y="308">Falls Quiet</text></g>
+                {/* The key, as the canvas names its edges: a short line in each ink and the word. */}
+                <g class="sy-key">
+                  <path class="sy-fe sy-fe-on" d="M344 352 H362"></path><text x="368" y="355.5">opens up</text>
+                  <path class="sy-fe sy-fe-off" d="M428 352 H446"></path><text x="452" y="355.5">shuts off</text>
                 </g>
-                <g class="sy-fe sy-fe-off">
-                  <path d="M310 300 C342 300 340 294 370 294" marker-end="url(#sy-a-off)"></path>
-                  <text x="341" y="322">shuts off</text>
-                </g>
-                <g class="sy-fn sy-fn-sel"><rect x="150" y="268" width="160" height="56" rx="11"></rect>
-                  <text class="sy-fn-t" x="166" y="292">The Blacksmith&apos;s</text>
-                  <text class="sy-fn-t" x="166" y="310">Trouble</text></g>
-                <g class="sy-fn"><rect x="370" y="180" width="140" height="52" rx="11"></rect>
-                  <text class="sy-fn-t" x="384" y="204">Gareth Asks</text>
-                  <text class="sy-fn-t" x="384" y="222">for Help</text></g>
-                <g class="sy-fn"><rect x="370" y="268" width="140" height="52" rx="11"></rect>
-                  <text class="sy-fn-t" x="384" y="292">The Forge</text>
-                  <text class="sy-fn-t" x="384" y="310">Falls Quiet</text></g>
               </g>
               <path class="sy-seam" d="M520 0 L0 372"></path>
             </svg>
-            <figcaption class="sy-deck-caption">One deck, cut on the diagonal. Above the cut are the cards as you
-              write them, each with its rule. Below it is the flow the tool worked out from those rules, without
-              you drawing a line.</figcaption>
+            <figcaption class="sy-deck-caption">A story made up of cards, each with a rule. The tool works out how
+              the story flows as you play.</figcaption>
           </figure>
         </div>
       </section>
