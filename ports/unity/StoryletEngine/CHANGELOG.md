@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-05
+
 ### Added
 
 - **The Storylet Engine version, in code.** `StoryletEngineVersion.Current` is this runtime's version, as in its

@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-05
+
 ### Added
 
 - **Which Storylet Engine this is.** `StoryletEngineVersion.CURRENT` is the runtime's version, as in its

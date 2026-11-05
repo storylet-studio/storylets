@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-05
+
 ### Added
 
 - **Which Storylet Engine this is.** `STORYLET_ENGINE_VERSION` is the runtime's version, as in its `package.json`,

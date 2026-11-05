@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 /** This runtime's version, as in its package manifest. Written by `npm run bump:play`; never edit it by hand. */
-export const STORYLET_ENGINE_VERSION = "0.15.0";
+export const STORYLET_ENGINE_VERSION = "0.16.0";
 
 type Parsed = { core: [string, string, string]; pre: string[] };
 
