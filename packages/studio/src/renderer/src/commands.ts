@@ -11,6 +11,7 @@
 import { isEditableTarget, showAbout } from "@wildwinter/app-shell";
 import type { PaneShell } from "@wildwinter/app-shell";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
+import { ABOUT_LINKS } from "../../shared/repo.js";
 import { flash, flashError, ok } from "./results.js";
 import { trackFieldUndo } from "./field-undo.js";
 import { remember } from "./session.js";
@@ -273,10 +274,7 @@ export function createCommands(ctx: CommandsContext) {
         // sibling's site. The Help menu's own links were right all along, which is
         // how it went unnoticed: only this one dialog was wrong.
         credits: "Part of Storylet Studio. Made by Ian Thomas.",
-        links: [
-          { label: "storylets.dev", url: "https://storylets.dev" },
-          { label: "ian.wildwinter.net", url: "https://ian.wildwinter.net" },
-        ],
+        links: ABOUT_LINKS,
         onOpenLink: (url: string) => void studio.openExternal(url),
       }); break;
       case "show-resolved":

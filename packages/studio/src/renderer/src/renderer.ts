@@ -58,11 +58,12 @@ import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import {
   askIdentity, el, feedUpdaterDownloadProgress, historyNav, iconNode, initTooltips, keyLabel, mountLinkStatus, mountPaneShell,
-  openCommandPalette, openWhatsNew, promptDialog, whatsNewAfterUpdate, type WhatsNewOptions, revealRowWhenReady, saveIndicator, setDialogFocusFallback, showUpdateReady,
+  openCommandPalette, openWhatsNew, promptDialog, releaseNotesUrl, whatsNewAfterUpdate, type WhatsNewOptions, revealRowWhenReady, saveIndicator, setDialogFocusFallback, showUpdateReady,
   showUpdaterDialog, tipWithKey,
 } from "@wildwinter/app-shell";
 import type { LinkStatus, LinkStatusChip, PaletteItem, PaneShell, ToastKind } from "@wildwinter/app-shell";
 import { applyTheme } from "./theme.js";
+import { STORYLETS_REPO } from "../../shared/repo.js";
 import { setBoxColours } from "./box-tint.js";
 import { hydrateCameras } from "./canvas-memory.js";
 import {
@@ -390,7 +391,7 @@ const whatsNewOpts: Pick<WhatsNewOptions, "appName" | "changelog" | "onShow" | "
   appName: "Storyletter",
   changelog,
   onShow: (show) => studio.setWhatsNewShow(show),
-  releaseNotes: (version) => `https://github.com/storylet-studio/storylets/releases/tag/v${version}`,
+  releaseNotes: (version) => releaseNotesUrl(STORYLETS_REPO, version),
   openExternal: (url) => { void studio.openExternal(url); },
 };
 

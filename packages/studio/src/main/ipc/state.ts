@@ -10,9 +10,10 @@ import { GitProvider, currentUserAsync } from "@wildwinter/simple-vc-lib";
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 import { push } from "./push.js";
+import { externalLinkAllowed } from "@wildwinter/app-shell/external-links";
+import { EXTERNAL_LINKS } from "../../shared/repo.js";
 
 /** The About dialog's links: the only external URLs the renderer can open. */
-const ABOUT_LINKS = new Set(["https://storylets.dev", "https://ian.wildwinter.net"]);
 
 export interface StateIpcDeps extends Pick<MainContext, "session" | "editor" | "store" | "windows" | "menu"> {
   /** The editor's page has a deck in focus, or not; true when that changed. */
@@ -87,10 +88,12 @@ export function registerState(ipc: Ipc, deps: StateIpcDeps): void {
   });
 
   // A closed allow-list, not a scheme check: only the destinations the app
-  // itself puts on screen (the About box's links), so a compromised renderer
-  // cannot launch arbitrary URLs. A URL is the one input that can reach the
+  // itself puts on screen (the About box's links, What's New's release page,
+  // and pages on our own sites that a changelog links to; shared/repo.ts and
+  // app-shell's externalLinkAllowed), so a compromised renderer cannot launch
+  // arbitrary URLs. A URL is the one input that can reach the
   // rest of the machine (Patterpad's rule, parity row 29).
   ipc.handle("shell:openExternal", (_event, url) => {
-    if (ABOUT_LINKS.has(url)) void shell.openExternal(url);
+    if (typeof url === "string" && externalLinkAllowed(url, EXTERNAL_LINKS)) void shell.openExternal(url);
   });
 }

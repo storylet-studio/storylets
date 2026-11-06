@@ -10,6 +10,13 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-11-06
+
+### Fixed
+
+- **What's New's Full release notes link opens the release page.** It did nothing: Storyletter only let its About
+  links open in the browser. A link in a changelog announcement to storylets.dev or storylet.studio opens too.
+
 ## [0.28.0] - 2026-11-06
 
 ### Changed
