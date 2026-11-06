@@ -31,6 +31,9 @@ namespace StoryletStudio.StoryletEngine
         {
             Engine.DefaultOnError = LogWarning;
             Engine.DefaultOnRefit = LogRefit;
+            // The Live Link's lost / back / replaced lines (from its worker
+            // thread; Debug.Log is safe there).
+            StoryletLiveLink.DefaultLog = m => Debug.Log(m);
         }
 
 #if UNITY_EDITOR

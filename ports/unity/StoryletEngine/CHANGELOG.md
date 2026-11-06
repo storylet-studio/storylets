@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The Live Link reconnects.** While the game has it open, `StoryletLiveLink` tries a socket that closed or never
+  opened again after 1 s, doubling to 10 s, and back to 1 s once a hello goes; each new socket says hello again with
+  the current build and open flows, then every open flow's board, all from the game-thread snapshot. It logs one line
+  when an open link is lost and one when it is back (nothing per attempt, nothing for a link that never opened), and
+  queues nothing while the editor is away. The editor closes a game it replaced with another with code 4000, and that
+  link stays closed. `State` reads `Connecting` while it retries, so a refused first connect is `Connecting`, not
+  `Closed`. The rule Patterplay's `PatterDebugLink` follows.
+
+### Added
+
+- `StoryletLiveLink.DefaultLog`, where the link's lost, back and replaced lines go: standard error, which the Unity
+  layer points at `Debug.Log`.
+
 ## [0.16.0] - 2026-11-05
 
 ### Added

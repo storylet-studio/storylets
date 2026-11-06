@@ -12,7 +12,6 @@ import { isEditableTarget, showAbout } from "@wildwinter/app-shell";
 import type { PaneShell } from "@wildwinter/app-shell";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
 import { flash, flashError, ok } from "./results.js";
-import { showInPatterpad } from "./show-in-patterpad.js";
 import { trackFieldUndo } from "./field-undo.js";
 import { remember } from "./session.js";
 import { keyIsTheCards, overlayOpen } from "./browse-keys.js";
@@ -170,7 +169,7 @@ export function createCommands(ctx: CommandsContext) {
     const ins = nav.inspected;
     if (ins?.kind !== "card") { flashError("Open a card first. Its scene is the one named after it."); return; }
     await saves.flush();
-    const result = await showInPatterpad(studio, ins.card);
+    const result = await studio.editInPatterpad(ins.card);
     if (result === null) return;
     if (!ok(result)) return;
     flash(result.published

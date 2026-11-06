@@ -47,6 +47,8 @@ bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& 
 
 #include "WebSocketsModule.h"
 #include "IWebSocket.h"
+#include "StoryletLog.h"
+#include "HAL/PlatformTime.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
@@ -55,6 +57,9 @@ bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& 
 namespace
 {
 	std::string Std(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
+
+	// How often the retry ticker looks at the clock. Coarse is fine: the waits are whole seconds.
+	constexpr float RetryTickInterval = 0.1f;
 }
 
 TSharedRef<FStoryletLiveLink> FStoryletLiveLink::Create(const FString& Build, const FString& Project, const FString& Url)
@@ -84,36 +89,60 @@ void FStoryletLiveLink::Connect()
 	Client = MakePimpl<storylets::LiveLinkClient>(Std(BuildId), ProjectName, [Weak](const std::string& Frame)
 	{
 		TSharedPtr<FStoryletLiveLink> Self = Weak.Pin();
-		if (Self.IsValid() && Self->Socket.IsValid() && Self->Socket->IsConnected())
+		if (!Self.IsValid()) return;
+		const FString Text(UTF8_TO_TCHAR(Frame.c_str()));
+		if (Self->SentForTest)
 		{
-			Self->Socket->Send(FString(UTF8_TO_TCHAR(Frame.c_str())));
+			Self->SentForTest->Add(Text);
+		}
+		else if (Self->Socket.IsValid() && Self->Socket->IsConnected())
+		{
+			Self->Socket->Send(Text);
 		}
 	});
+	// The client says when the link is lost, back or replaced; nothing per
+	// attempt. Display, so a developer sees it in the Output Log and the console
+	// as the JS client's console.info is seen.
+	Client->setLog(Std(Url), [](const std::string& Line)
+	{
+		UE_LOG(LogStoryletEngine, Display, TEXT("Storylet Engine: %s"), UTF8_TO_TCHAR(Line.c_str()));
+	});
+	Dial();
+}
 
+// Dial the editor on a fresh socket (the last one is dropped first, outside its
+// own callbacks). Each callback checks it is still this link's socket, so a
+// late event from one already dropped changes nothing.
+void FStoryletLiveLink::Dial()
+{
+	if (!Client.IsValid() || Client->isClosed()) return;
 	if (!FModuleManager::Get().IsModuleLoaded("WebSockets"))
 	{
 		FModuleManager::Get().LoadModule("WebSockets");
 	}
+	DropSocket();
 	Socket = FWebSocketsModule::Get().CreateWebSocket(Url, TEXT(""));
 	if (!Socket.IsValid())
 	{
+		Client->close();   // no WebSockets here at all: nothing to retry
 		return;
 	}
+	Client->beginAttempt();
 
-	Socket->OnConnected().AddLambda([Weak]()
+	TWeakPtr<FStoryletLiveLink> Weak = AsShared();
+	const IWebSocket* Mine = Socket.Get();
+	Socket->OnConnected().AddLambda([Weak, Mine]()
 	{
 		TSharedPtr<FStoryletLiveLink> Self = Weak.Pin();
-		if (!Self.IsValid() || !Self->Client.IsValid()) return;
-		// Handshake first, then the queue: the editor honours nothing before hello.
-		Self->Client->onOpen();
+		if (Self.IsValid() && Self->Socket.Get() == Mine) Self->HandleConnected();
 	});
 	// Live refresh: the editor pushes {t:"bundle", build, data}. The shape is
 	// checked here so the host's OnBundle never sees a malformed payload;
 	// anything else the editor might send is ignored.
-	Socket->OnMessage().AddLambda([Weak](const FString& Message)
+	Socket->OnMessage().AddLambda([Weak, Mine](const FString& Message)
 	{
 		TSharedPtr<FStoryletLiveLink> Self = Weak.Pin();
-		if (!Self.IsValid() || !Self->OnBundle) return;
+		if (!Self.IsValid() || Self->Socket.Get() != Mine || !Self->OnBundle) return;
 		TSharedPtr<FJsonObject> Msg;
 		const TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Message);
 		if (!FJsonSerializer::Deserialize(Reader, Msg) || !Msg.IsValid()) return;
@@ -125,13 +154,68 @@ void FStoryletLiveLink::Connect()
 			Self->OnBundle(Build, Data);
 		}
 	});
-	Socket->OnConnectionError().AddLambda([](const FString&) { /* editor not listening: stay a no-op */ });
-	Socket->OnClosed().AddLambda([Weak](int32, const FString&, bool)
+	// The editor is not listening: try again later (HandleGone).
+	Socket->OnConnectionError().AddLambda([Weak, Mine](const FString&)
 	{
 		TSharedPtr<FStoryletLiveLink> Self = Weak.Pin();
-		if (Self.IsValid() && Self->Client.IsValid()) Self->Client->onClose();
+		if (Self.IsValid() && Self->Socket.Get() == Mine) Self->HandleGone(-1);
+	});
+	Socket->OnClosed().AddLambda([Weak, Mine](int32 StatusCode, const FString&, bool)
+	{
+		TSharedPtr<FStoryletLiveLink> Self = Weak.Pin();
+		if (Self.IsValid() && Self->Socket.Get() == Mine) Self->HandleGone(StatusCode);
 	});
 	Socket->Connect();
+}
+
+void FStoryletLiveLink::HandleConnected()
+{
+	// Handshake first, then the queue: the editor honours nothing before hello.
+	// On a reconnect the same hello, with the build and the flows open now, then
+	// every flow's board.
+	if (Client.IsValid()) Client->onOpen();
+}
+
+// The socket closed, or never opened. The client decides (retry or not, and the
+// wait); this keeps the clock.
+void FStoryletLiveLink::HandleGone(int32 StatusCode)
+{
+	if (!Client.IsValid()) return;
+	const std::optional<double> Wait = Client->onClose(StatusCode);
+	if (!Wait.has_value()) return;
+	RetryAt = FPlatformTime::Seconds() + *Wait;
+	if (!RetryTicker.IsValid())
+	{
+		// One ticker for the link's life, made the first time it is needed: it
+		// looks at the clock and dials when an attempt is due, so a retry
+		// allocates nothing but its socket.
+		TWeakPtr<FStoryletLiveLink> Weak = AsShared();
+		RetryTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Weak](float)
+		{
+			TSharedPtr<FStoryletLiveLink> Self = Weak.Pin();
+			if (!Self.IsValid()) return false;
+			Self->RetryTick();
+			return true;
+		}), RetryTickInterval);
+	}
+}
+
+void FStoryletLiveLink::RetryTick()
+{
+	if (RetryAt <= 0.0 || FPlatformTime::Seconds() < RetryAt) return;
+	RetryAt = 0.0;
+	Dial();
+}
+
+// Let go of the socket, unbinding it first so nothing it reports later reaches this link.
+void FStoryletLiveLink::DropSocket()
+{
+	if (!Socket.IsValid()) return;
+	Socket->OnConnected().Clear();
+	Socket->OnMessage().Clear();
+	Socket->OnConnectionError().Clear();
+	Socket->OnClosed().Clear();
+	Socket.Reset();
 }
 
 void FStoryletLiveLink::Attach(UStoryletEngine* InEngine)
@@ -178,17 +262,25 @@ void FStoryletLiveLink::Close()
 {
 	Detach();
 	if (Client.IsValid()) Client->close();
+	RetryAt = 0.0;
+	if (RetryTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(RetryTicker);
+		RetryTicker.Reset();
+	}
 	if (Socket.IsValid())
 	{
 		Socket->Close();
-		Socket.Reset();
 	}
+	DropSocket();
 }
 
 FString FStoryletLiveLink::LinkState() const
 {
-	if (!Socket.IsValid()) return TEXT("closed");
-	return Socket->IsConnected() ? TEXT("connected") : TEXT("connecting");
+	// While it waits to try again the link is still "connecting": "closed" is
+	// only Close(), replaced (4000), or no WebSocket at all.
+	if (!Client.IsValid()) return TEXT("closed");
+	return UTF8_TO_TCHAR(Client->state());
 }
 
 #else // UE_BUILD_SHIPPING - the link compiles to nothing.

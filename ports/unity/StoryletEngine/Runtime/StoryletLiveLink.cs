@@ -10,6 +10,17 @@
 // PatterDebugLink: a worker-thread ClientWebSocket, frames queued until the
 // socket opens, an inbox the game drains from its own Update().
 //
+// It reconnects, by the rule Patter's debug link shares: until the game closes
+// it, a socket that closes or never opens is tried again after 1 s, doubling to
+// 10 s, and back to 1 s once a hello goes. Each new socket says hello again with
+// the build and the open flows, then every flow's board, all from the
+// game-thread snapshot (the worker never reads the engine). One line is logged
+// (StoryletLiveLink.DefaultLog) when an open link is lost and one when it is
+// back; a link that never opened logs nothing. Frames queue only while the
+// first socket connects: after any attempt fails, nothing queues until a socket
+// is open. The editor closes a game it replaced (another game connected) with
+// code 4000, and that one does not retry, so two games do not take turns.
+//
 // Wire protocol (one JSON object per message):
 //   hello : { t:"hello", v:2, build, project?, boxes?, flows:[id...] }
 //                                                           - on open, and again on SetBuild
@@ -47,15 +58,30 @@ using Wildwinter.Expr;
 namespace StoryletStudio.StoryletEngine
 {
     /// <summary>Where the link is, for a debug window: Connecting until the
-    /// editor answers, Connected while it does, Closed once it is gone (or was
-    /// never there).</summary>
+    /// editor answers and while it retries after a socket closed or failed,
+    /// Connected while a socket is open, Closed once the game closed the link,
+    /// the editor replaced this game with another (close code 4000), or the
+    /// address could not be dialled at all.</summary>
     public enum LiveLinkState { Connecting, Connected, Closed }
 
     public sealed class StoryletLiveLink : IDisposable
     {
         public const string DefaultUrl = "ws://127.0.0.1:4472";
+        /// <summary>The editor closed this game because another connected: not retried.</summary>
+        internal const int CloseReplaced = 4000;
+        /// <summary>Frames kept while the first socket connects; beyond that
+        /// the oldest go, as in the JS client.</summary>
+        private const int QueueCap = 512;
 
-        private string _build; // mutable: SetBuild() after a live refresh lands
+        /// <summary>Where the link's few lines go (lost, back, replaced): standard
+        /// error by default, which the Unity layer points at Debug.Log as the
+        /// package loads (StoryletUnityLog). Called from the socket's worker
+        /// thread.</summary>
+        public static Action<string> DefaultLog = m => Console.Error.WriteLine(m);
+
+        // mutable: SetBuild() after a live refresh lands; volatile because the
+        // worker reads it for a re-hello.
+        private volatile string _build;
         private readonly string _project;
         private readonly string _url;
         private readonly ILiveLinkSocket _socket;
@@ -68,8 +94,22 @@ namespace StoryletStudio.StoryletEngine
         // the swap happens on the main thread (Unity objects must not be touched
         // from the socket thread).
         private readonly ConcurrentQueue<string> _inbox = new ConcurrentQueue<string>();
-        private volatile bool _closed;
+        private volatile bool _closed;    // the game closed it, the editor replaced it, or it cannot dial
         private volatile bool _connected;
+        // An attempt has failed or closed: nothing queues until a socket is open
+        // again, and the next open sends every flow's board after the hello.
+        private volatile bool _dropped;
+        // The retry's bookkeeping, touched only by the socket's own thread.
+        private readonly int _retryFirstMs;
+        private readonly int _retryMaxMs;
+        private int _waitMs;
+        private bool _wasOpen;          // a socket has been open, so losing it is worth a line
+        private bool _lost;             // logged as lost, waiting to log it back
+
+        /// <summary>Test hooks: the lines the link logs (DefaultLog when null),
+        /// and how many frames wait in the outbox.</summary>
+        internal Action<string> LogHook;
+        internal int QueuedCount => _outbox.Count;
 
         private Engine _engine;
         // The flows the EDITOR believes are open; diffed against Engine.Flows()
@@ -93,6 +133,9 @@ namespace StoryletStudio.StoryletEngine
         // under _flowLock.
         private List<string> _helloFlowIds = new List<string>();
         private List<string> _helloBoxes = new List<string>();
+        // Each open flow's latest board frame, as the game thread last built
+        // it: what a reconnect sends after its hello. Under _flowLock.
+        private readonly Dictionary<string, string> _boards = new Dictionary<string, string>();
 
         /// <summary>Open a link to Storyletter at <paramref name="url"/> (default
         /// ws://127.0.0.1:4472). <paramref name="build"/> is the running bundle's
@@ -107,10 +150,22 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>The test seam: the TestHost replays the shared fixture over a
         /// hand-driven socket. Null means the real worker-thread ClientWebSocket.</summary>
         internal StoryletLiveLink(string build, string project, string url, ILiveLinkSocket socket)
+            : this(build, project, url, socket, 1000, 10000, null)
+        {
+        }
+
+        /// <summary>The TestHost's real-socket check: shorter retry waits, and the
+        /// log hook in place before the first dial.</summary>
+        internal StoryletLiveLink(string build, string project, string url, ILiveLinkSocket socket,
+            int retryFirstMs, int retryMaxMs, Action<string> log)
         {
             _build = build ?? "";
             _project = project;
             _url = string.IsNullOrEmpty(url) ? DefaultUrl : url;
+            _retryFirstMs = retryFirstMs;
+            _retryMaxMs = retryMaxMs;
+            _waitMs = retryFirstMs;
+            LogHook = log;
             _socket = socket ?? new ClientWebSocketLink();
             try { _socket.Start(this, _url); }
             catch { _closed = true; } // a malformed URL etc.: never throw into the game
@@ -173,7 +228,15 @@ namespace StoryletStudio.StoryletEngine
                 try { foreach (var b in flows[0].ListBoxes()) boxes.Add(b.GameId); }
                 catch { /* a flow mid-swap: no boxes */ }
             }
-            lock (_flowLock) { _helloFlowIds = ids; _helloBoxes = boxes; }
+            lock (_flowLock)
+            {
+                _helloFlowIds = ids;
+                _helloBoxes = boxes;
+                // A closed flow's board has no place in a reconnect.
+                List<string> gone = null;
+                foreach (var id in _boards.Keys) if (!ids.Contains(id)) (gone ??= new List<string>()).Add(id);
+                if (gone != null) foreach (var id in gone) _boards.Remove(id);
+            }
         }
 
         private List<Flow> LiveFlows()
@@ -218,8 +281,9 @@ namespace StoryletStudio.StoryletEngine
             if (_closed || build == null || build == _build) return;
             _build = build;
             // Re-handshake: the editor re-reads the build, then gets every
-            // flow's table as the new engine has it. Before the socket opens the
-            // hello it sends on opening already carries the new build.
+            // flow's table as the new engine has it. Before the socket opens
+            // (the first, or a retry) the hello it sends on opening already
+            // carries the new build.
             if (!_connected) return;
             Post(HelloJson());
             var live = LiveFlows();
@@ -233,7 +297,7 @@ namespace StoryletStudio.StoryletEngine
         /// <c>Apply</c>, Attach the flow it returns and report back via SetBuild.</summary>
         public bool TryReceive(out string message) => _inbox.TryDequeue(out message);
 
-        /// <summary>Close the link; every later call is a no-op.</summary>
+        /// <summary>Close the link and stop retrying; every later call is a no-op.</summary>
         public void Close()
         {
             _closed = true;
@@ -251,7 +315,10 @@ namespace StoryletStudio.StoryletEngine
             try
             {
                 SyncFlows();
-                Post(TraceJson(flowId, evt));
+                // While the editor is away nothing queues, so the trace frame
+                // is not even built; the boards below still are, for the
+                // reconnect's snapshot.
+                if (!(_dropped && !_connected)) Post(TraceJson(flowId, evt));
                 if (evt is DealEvent || evt is PlayEvent || evt is DiscardEvent || evt is EvictEvent || evt is TurnsEvent)
                 {
                     Engine e;
@@ -266,13 +333,26 @@ namespace StoryletStudio.StoryletEngine
         private void PostBoard(Flow flow)
         {
             if (flow == null) return;
-            try { Post(BoardJson(flow)); } catch { /* never into the game */ }
+            try
+            {
+                var json = BoardJson(flow);
+                lock (_flowLock) _boards[flow.Id] = json;
+                Post(json);
+            }
+            catch { /* never into the game */ }
         }
 
         private void Post(string json)
         {
             if (_closed) return;
+            // After an attempt has failed the editor is away: nothing queues
+            // until a socket is open again, and the hello and boards stand in
+            // for what was missed.
+            if (_dropped && !_connected) return;
             _outbox.Enqueue(json);
+            // A cap for the first connecting window, where queueing is the
+            // point: beyond that many, keep the most recent story.
+            while (_outbox.Count > QueueCap && _outbox.TryDequeue(out _)) { }
             _socket.Kick();
         }
 
@@ -442,15 +522,85 @@ namespace StoryletStudio.StoryletEngine
         private static string Esc(string s) => s == null ? "null" : ExprValue.JsonQuote(s);
 
         // -- the socket side ---------------------------------------------------------
+        // Everything here runs on the socket's thread (the worker, or the
+        // TestHost's hand), so it reads only the snapshot, never the engine.
 
-        /// <summary>The socket tells the link it is open (the link answers with
-        /// the hello, ahead of the queue) or gone.</summary>
-        internal void OnSocketOpened() => _connected = true;
-        internal void OnSocketClosed()
+        /// <summary>What a socket sends the moment it opens, ahead of the
+        /// queue: the hello, and on a reconnect every open flow's board after it
+        /// (on the first socket the boards are already queued behind the
+        /// hello).</summary>
+        internal List<string> HelloFrames()
+        {
+            var frames = new List<string>();
+            // A Post racing the last close may have queued after the drop; stale.
+            if (_dropped) while (_outbox.TryDequeue(out _)) { }
+            frames.Add(HelloJson());
+            if (_dropped)
+            {
+                lock (_flowLock)
+                {
+                    foreach (var id in _helloFlowIds)
+                    {
+                        if (_boards.TryGetValue(id, out var board)) frames.Add(board);
+                    }
+                }
+            }
+            return frames;
+        }
+
+        /// <summary>The socket is open and its hello has gone: the wait goes back
+        /// to the first, and a link that was lost says it is back.</summary>
+        internal void OnSocketOpened()
+        {
+            _waitMs = _retryFirstMs;
+            _wasOpen = true;
+            _connected = true;
+            if (_lost)
+            {
+                _lost = false;
+                Log("[storylets] Live Link is back (" + _url + ").");
+            }
+        }
+
+        /// <summary>A socket closed, or an attempt never opened (<paramref
+        /// name="closeCode"/> is the editor's close code, or -1 for none). Drops
+        /// the queue, and answers how long to wait before the next attempt in
+        /// milliseconds, or -1 to stop: the game closed the link, or the editor
+        /// replaced this game with another.</summary>
+        internal int OnSocketClosed(int closeCode)
+        {
+            _connected = false;
+            _dropped = true;
+            while (_outbox.TryDequeue(out _)) { }
+            if (_closed) return -1;
+            if (closeCode == CloseReplaced)
+            {
+                _closed = true;
+                Log("[storylets] Live Link: another game took the editor's link (" + _url + ").");
+                return -1;
+            }
+            if (_wasOpen && !_lost)
+            {
+                _lost = true;
+                Log("[storylets] Live Link lost (" + _url + "); retrying.");
+            }
+            int wait = _waitMs;
+            _waitMs = Math.Min(_waitMs * 2, _retryMaxMs);
+            return wait;
+        }
+
+        /// <summary>The socket can never connect (an address that does not
+        /// parse), or its worker ended: the link is closed.</summary>
+        internal void OnSocketStopped()
         {
             _connected = false;
             _closed = true;
             while (_outbox.TryDequeue(out _)) { }
+        }
+
+        private void Log(string line)
+        {
+            try { (LogHook ?? DefaultLog)?.Invoke(line); } catch { /* never into the game */ }
         }
         internal bool TryDequeueOutgoing(out string json) => _outbox.TryDequeue(out json);
         internal void EnqueueIncoming(string json) => _inbox.Enqueue(json);
@@ -459,8 +609,11 @@ namespace StoryletStudio.StoryletEngine
 
     /// <summary>The wire under the link: the real one is a ClientWebSocket on a
     /// worker thread; the TestHost's is hand-driven and records what it is given.
-    /// The socket sends the link's HelloJson() first when it opens, then drains
-    /// TryDequeueOutgoing, and puts every editor message into EnqueueIncoming.</summary>
+    /// Each time a socket opens it sends the link's HelloFrames() first, then
+    /// calls OnSocketOpened and drains TryDequeueOutgoing, and puts every editor
+    /// message into EnqueueIncoming. Each time one closes or fails to open it
+    /// calls OnSocketClosed with the close code, and waits the answer before the
+    /// next attempt (a negative answer stops it).</summary>
     internal interface ILiveLinkSocket
     {
         /// <summary>Connect in the background; never throws past the ctor.</summary>
@@ -469,15 +622,17 @@ namespace StoryletStudio.StoryletEngine
         /// TestHost's drains the queue there and then. Called from the game
         /// thread, so it must never throw.</summary>
         void Kick();
+        /// <summary>The game closed the link: stop, including any wait.</summary>
         void Close();
     }
 
-    /// <summary>Patterplay's PatterDebugLink transport: connect, hello, then
-    /// send and receive loops run concurrently on the thread pool until the
-    /// editor goes away or the link closes. Two departures from it: the send
-    /// loop sleeps until Kick says a frame is queued, where Patterplay's polls
-    /// every 15 ms for the life of the link, and the socket and its token
-    /// source are disposed when the run ends.</summary>
+    /// <summary>Patterplay's PatterDebugLink transport: dial, hello, then send
+    /// and receive loops run concurrently on the thread pool until the editor
+    /// goes away, then wait and dial again, until the link stops. Two
+    /// departures from it: the send loop sleeps until Kick says a frame is
+    /// queued, where Patterplay's polls every 15 ms, and the retry policy lives
+    /// in the link (OnSocketClosed answers the wait) so the TestHost can drive
+    /// it without a socket.</summary>
     internal sealed class ClientWebSocketLink : ILiveLinkSocket
     {
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
@@ -487,9 +642,10 @@ namespace StoryletStudio.StoryletEngine
         // wait leaves the count at 1 and is not lost. Never disposed: a
         // SemaphoreSlim only owns a kernel handle once AvailableWaitHandle is
         // read, which nothing here does, and Kick must stay callable from the
-        // game thread after the run has ended.
+        // game thread after the run has ended. Shared by every attempt: a count
+        // left over from the last socket costs one empty pass of the next loop.
         private readonly SemaphoreSlim _queued = new SemaphoreSlim(0, 1);
-        private ClientWebSocket _ws;
+        private volatile ClientWebSocket _ws;
 
         public void Start(StoryletLiveLink link, string url)
         {
@@ -511,49 +667,82 @@ namespace StoryletStudio.StoryletEngine
 
         private async Task RunAsync(StoryletLiveLink link, string url, CancellationToken ct)
         {
+            byte[] buffer = null; // the receive buffers, made on the first open and kept
+            System.IO.MemoryStream frame = null;
             try
             {
-                _ws = new ClientWebSocket();
-                await _ws.ConnectAsync(new Uri(url), ct).ConfigureAwait(false);
-                // Handshake first, so the editor can verify the build before any frame.
-                await SendRaw(link.HelloJson(), ct).ConfigureAwait(false);
-                link.OnSocketOpened();
-                await Task.WhenAll(SendLoop(link, ct), ReceiveLoop(link, ct)).ConfigureAwait(false);
+                Uri uri;
+                try { uri = new Uri(url); }
+                catch { return; } // an address that cannot parse is never going to answer
+                while (!ct.IsCancellationRequested)
+                {
+                    var ws = new ClientWebSocket();
+                    _ws = ws;
+                    try
+                    {
+                        await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
+                        // Handshake first, so the editor can verify the build
+                        // before any frame; on a reconnect, the boards after it.
+                        foreach (var f in link.HelloFrames()) await SendRaw(ws, f, ct).ConfigureAwait(false);
+                        link.OnSocketOpened();
+                        if (buffer == null) { buffer = new byte[64 * 1024]; frame = new System.IO.MemoryStream(); }
+                        await Task.WhenAll(SendLoop(ws, link, ct), ReceiveLoop(ws, link, buffer, frame, ct)).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // Editor not listening / link dropped: tried again below (never throw into the game).
+                    }
+                    // CloseStatus is set once the editor's Close message arrived (ReceiveLoop returns on it).
+                    int code = ws.CloseStatus.HasValue ? (int)ws.CloseStatus.Value : -1;
+                    try { ws.Dispose(); } catch { /* already gone */ }
+                    int wait = link.OnSocketClosed(code);
+                    if (wait < 0 || ct.IsCancellationRequested) return;
+                    await Task.Delay(wait, ct).ConfigureAwait(false);
+                }
             }
             catch
             {
-                // Editor not listening / link closed: go quiet and stop queuing (never throw into the game).
+                // Close() cancelled the wait: stop.
             }
             finally
             {
-                link.OnSocketClosed();
-                // The run owns both from here: nothing reads them once it is
-                // over, and Close tolerates finding them disposed.
-                try { _ws?.Dispose(); } catch { /* already gone */ }
+                link.OnSocketStopped();
+                frame?.Dispose();
+                // The run owns the token source from here: nothing reads it once
+                // the run is over, and Close tolerates finding it disposed.
                 _cts.Dispose();
             }
         }
 
-        private async Task SendLoop(StoryletLiveLink link, CancellationToken ct)
+        private async Task SendLoop(ClientWebSocket ws, StoryletLiveLink link, CancellationToken ct)
         {
-            while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
+            try
             {
-                if (link.TryDequeueOutgoing(out var msg)) await SendRaw(msg, ct).ConfigureAwait(false);
-                else await _queued.WaitAsync(ct).ConfigureAwait(false);
+                while (!ct.IsCancellationRequested && ws.State == WebSocketState.Open)
+                {
+                    if (link.TryDequeueOutgoing(out var msg)) await SendRaw(ws, msg, ct).ConfigureAwait(false);
+                    else await _queued.WaitAsync(ct).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // A failed send leaves the receive waiting on a socket that is
+                // gone: drop it, so the receive ends too and the run can dial again.
+                try { ws.Abort(); } catch { /* already gone */ }
+                throw;
             }
         }
 
-        private async Task ReceiveLoop(StoryletLiveLink link, CancellationToken ct)
+        private async Task ReceiveLoop(ClientWebSocket ws, StoryletLiveLink link, byte[] buffer, System.IO.MemoryStream frame, CancellationToken ct)
         {
-            var buffer = new byte[64 * 1024];
             // Bytes, not text, until the message ends: a pushed bundle spans many
             // chunks and a chunk boundary can fall inside a multi-byte character.
-            var frame = new System.IO.MemoryStream();
+            frame.SetLength(0);
             try
             {
-                while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
+                while (!ct.IsCancellationRequested && ws.State == WebSocketState.Open)
                 {
-                    var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct).ConfigureAwait(false);
+                    var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close) return;
                     if (result.MessageType != WebSocketMessageType.Text) continue;
                     frame.Write(buffer, 0, result.Count);
@@ -566,15 +755,15 @@ namespace StoryletStudio.StoryletEngine
             {
                 // The editor went away. The send loop may be asleep with nothing
                 // queued; wake it so it sees the socket is no longer open and the
-                // run can end. The poll it replaced noticed within 15 ms.
+                // attempt can end.
                 Kick();
             }
         }
 
-        private async Task SendRaw(string json, CancellationToken ct)
+        private static async Task SendRaw(ClientWebSocket ws, string json, CancellationToken ct)
         {
             var bytes = Encoding.UTF8.GetBytes(json);
-            await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
         }
     }
 }

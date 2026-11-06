@@ -7,7 +7,7 @@
 
 import { plannedColours } from "./box-colours.js";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { boxColourOf, contractNotes, countClashes, deckColourOf, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
+import { boxColourOf, bundleOutputPath, contractNotes, countClashes, deckColourOf, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { planProject } from "@patterkit/core";
 import { planCardScene } from "./patter-scene.js";
@@ -784,6 +784,33 @@ export function currentProjectHash(session: ProjectSession): string | null {
   const loaded = loadProject(session.loaded.dir);
   return loaded.source ? boardStamp(projectHash(loaded.source), patterStamp(loaded)) : null;
 }
+
+/** What Live Link judges a game's build by: the project's content hash alone, which is the
+ *  `content.hash` a compiled bundle carries and the game says hello with. Not the Board's stamp:
+ *  with a paired Patter project that carries the Patter bundle's time too, and no game's build
+ *  would ever have matched it. Null if the project no longer loads. */
+export function liveBuildHash(session: ProjectSession): string | null {
+  const loaded = loadProject(session.loaded.dir);
+  return loaded.source ? projectHash(loaded.source) : null;
+}
+
+/** The published bundle's content hash, read from the file Publish Bundle writes (or the CLI's
+ *  export), or null when there is none or it cannot be read. Live Link reads it at every status,
+ *  so it is kept per path and modification time and the file is parsed again only when it changed. */
+export function publishedBundleHash(session: ProjectSession): string | null {
+  const path = bundleOutputPath(session.loaded);
+  let mtime: number;
+  try { mtime = statSync(path).mtimeMs; } catch { return null; }
+  if (publishedCache?.path === path && publishedCache.mtime === mtime) return publishedCache.hash;
+  let hash: string | null = null;
+  try {
+    const content = (JSON.parse(readFileSync(path, "utf8")) as { content?: { hash?: unknown } }).content;
+    if (typeof content?.hash === "string") hash = content.hash;
+  } catch { /* not a bundle we can read: nothing published */ }
+  publishedCache = { path, mtime, hash };
+  return hash;
+}
+let publishedCache: { path: string; mtime: number; hash: string | null } | undefined;
 
 /** What the Board compares to know it is out of date: the project's content hash, and the paired
  *  Patter bundle's modification time when the Board plays Patter scenes. */

@@ -17,6 +17,7 @@ import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-sh
 import { registerCommandPalette } from "@wildwinter/app-shell/palette-main";
 import { registerWhatsNew } from "@wildwinter/app-shell/whats-new-main";
 import { guardAllWindows } from "@wildwinter/app-shell/window-guard";
+import { createWindowPrompt } from "@wildwinter/app-shell/prompt-main";
 import { clearParseCache } from "@storylet-studio/compiler";
 import { clearCanonicalCache, countClashes } from "@storylet-studio/ops";
 import { StudioStore } from "./store.js";
@@ -109,12 +110,16 @@ let shownClashes = 0;
 
 const jobs = createJobs();
 const flush = createEditorFlush(() => window);
+// Main's questions, asked in the editor (app-shell's window prompt, as Patterpad asks): the renderer draws
+// them with `promptDialog`, through the preload's `onPrompt`.
+const windowPrompt = createWindowPrompt({ window: () => window });
 
 /** What every domain reads through. */
 const ctx: MainContext = {
   session: () => session,
   editor: () => window,
   store: () => store,
+  ask: (prompt) => windowPrompt.ask(prompt),
   windows: () => windows,
   menu: () => menu(),
   openAt: (path) => openAt(path),
@@ -324,6 +329,7 @@ void app.whenReady().then(() => {
       deckFocused = on;
       return true;
     },
+    published: () => live.published(),
     hosts: [exchange, live, coverage, launch, tools, views],
   });
   // Live Link: every saved edit reaches a connected game. And the unpushed

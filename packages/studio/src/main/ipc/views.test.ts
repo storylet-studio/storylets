@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseManifest } from "@wildwinter/toolkit/extensions";
 import type { InstalledExtension } from "@wildwinter/app-shell/view-host";
+import type { AppPrompt } from "@wildwinter/app-shell/prompt-channels";
 
 const shell = vi.hoisted(() => ({
   installed: [] as unknown[],
@@ -27,7 +28,8 @@ const shell = vi.hoisted(() => ({
   version: "1.1.0",
   requires: [] as string[],
   queue: [] as unknown[],
-  /** The native box's answers, in order (0 when none is left). */
+  /** The window prompt's answers, in order, counted as the host's `buttons` run, the answer first (0 when none
+   *  is left). */
   answers: [] as number[],
   asked: [] as string[],
   details: [] as string[],
@@ -38,13 +40,6 @@ vi.mock("electron", () => ({
   app: { getPath: () => "/user-data", isPackaged: true },
   dialog: {
     showOpenDialog: async () => ({ canceled: false, filePaths: [shell.pick] }),
-    showMessageBox: async (_w: unknown, o: { message: string; buttons: string[] }) => {
-      // Off macOS the package picker first asks file or folder: a file, unasked by the tests.
-      if (o.buttons.includes("Package File\u2026")) return { response: 0 };
-      shell.asked.push(o.message);
-      shell.details.push((o as { detail?: string }).detail ?? "");
-      return { response: shell.answers.shift() ?? 0 };
-    },
   },
 }));
 vi.mock("@wildwinter/app-shell/tool-window", () => ({
@@ -102,6 +97,16 @@ function host() {
   const editor = { isDestroyed: () => false, webContents: { send: vi.fn() } };
   const views = createViewHost({
     session: () => session, editor: () => editor as never, menu,
+    // The window prompt, as main's: the buttons arrive the family's way round, the way out first.
+    ask: async (p: AppPrompt) => {
+      // Off macOS the package picker first asks file or folder: a file, unasked by the tests.
+      if (p.buttons.includes("Package File\u2026")) return p.buttons.indexOf("Package File\u2026");
+      expect(p.buttons[p.cancelId]).toMatch(/^(Cancel|Not Now)$/);
+      expect(p.defaultId).toBe(p.buttons.length - 1);
+      shell.asked.push(p.title);
+      shell.details.push(p.sub ?? "");
+      return p.buttons.length - 1 - (shell.answers.shift() ?? 0);
+    },
     store: () => ({ window: () => ({ bounds: () => undefined, remember: () => undefined, pinned: () => true, setPinned: () => undefined }) }) as never,
   });
   const handlers = new Map<string, (...args: unknown[]) => unknown>();

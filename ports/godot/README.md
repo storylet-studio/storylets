@@ -24,6 +24,7 @@ ports/godot/
   godot --headless --path ports/godot --script res://test/test_editor_view.gd
   godot --headless --path ports/godot --script res://test/test_state_panel.gd
   godot --headless --path ports/godot --script res://test/test_live_link.gd
+  godot --headless --path ports/godot --script res://test/test_live_link_reconnect.gd
   ```
 
   On this machine Godot is not on `$PATH`: it is
@@ -39,6 +40,10 @@ ports/godot/
   The fifth replays the shared Live Link fixture
   (`packages/conformance/live-link/`) through `StoryletLiveLink` over a fake
   socket and holds every frame it sends to the reference's, byte for byte.
+  `test/test_live_link_reconnect.gd` drives the reconnect rule over a fake
+  socket on a fake clock: the 1, 2, 4, 8, 10, 10 s waits, the hello and
+  boards again on a reconnect, nothing queued while away, and the 4000 close
+  that stops it.
 
   A sixth, `test/test_state_logger.gd`, drives the state logger from the
   outside: snapshot, write a shared `@story` property, snapshot again, and

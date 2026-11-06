@@ -8,6 +8,7 @@
 
 import type { BrowserWindow } from "electron";
 import type { ToolWindows } from "@wildwinter/app-shell/tool-window";
+import type { AppPrompt } from "@wildwinter/app-shell/prompt-channels";
 import type { ProjectSession } from "./project.js";
 import type { StudioStore } from "./store.js";
 import type { OpenResult } from "../shared/api.js";
@@ -22,6 +23,9 @@ export interface MainContext {
   editor(): BrowserWindow | undefined;
   /** The app's settings. */
   store(): StudioStore;
+  /** Ask the author in the editor window, on the family's dialog frame (app-shell's window prompt): the
+   *  index of the button chosen, `cancelId` with no window to ask. */
+  ask(prompt: AppPrompt): Promise<number>;
   /** The tool windows' table. */
   windows(): ToolWindows<ToolName>;
   /** Rebuild the menu and the window title from where things now stand. */

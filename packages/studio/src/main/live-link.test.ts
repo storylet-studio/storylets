@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { createLiveLinkServer, isLocalOrigin } from "./live-link.js";
-import type { LiveLinkServer } from "./live-link.js";
+import type { LiveLinkDeps, LiveLinkServer } from "./live-link.js";
 import type { LiveLinkFrame, LiveLinkStatus } from "../shared/api.js";
 
 /** A port per test, high and random, so parallel files do not collide. */
@@ -24,7 +24,7 @@ interface Harness {
   until(pred: () => boolean): Promise<void>;
 }
 
-function harness(hash: string | null = "h1"): Harness {
+function harness(hash: string | null = "h1", extra: Pick<LiveLinkDeps, "onStaleHello" | "publishedBuildHash"> = {}): Harness {
   const port = freePort();
   const statuses: LiveLinkStatus[] = [];
   const frames: LiveLinkFrame[] = [];
@@ -47,6 +47,7 @@ function harness(hash: string | null = "h1"): Harness {
     onFrame: (f) => frames.push(f),
     onStatus: (s) => statuses.push(s),
     port,
+    ...extra,
   });
   return h;
 }
@@ -67,8 +68,8 @@ const last = <T>(xs: T[]): T => xs[xs.length - 1]!;
 describe("the Live Link server", () => {
   let open: Harness[] = [];
   afterEach(() => { for (const h of open) h.server.stop(); open = []; });
-  const up = async (hash: string | null = "h1"): Promise<Harness> => {
-    const h = harness(hash);
+  const up = async (hash: string | null = "h1", extra: Pick<LiveLinkDeps, "onStaleHello" | "publishedBuildHash"> = {}): Promise<Harness> => {
+    const h = harness(hash, extra);
     open.push(h);
     h.server.start();
     await h.until(() => h.statuses.some((s) => s.state === "listening"));
@@ -148,7 +149,10 @@ describe("the Live Link server", () => {
     first.send({ t: "hello", v: 1, build: "h1", project: "one" });
     await h.until(() => last(h.statuses).state === "connected");
     const second = await game(h.port);
-    await new Promise<void>((resolve) => first.ws.once("close", () => resolve()));
+    // Closed with 4000, "replaced": a client that retries stops on it, so two
+    // running games do not take turns knocking each other off.
+    const code = await new Promise<number>((resolve) => first.ws.once("close", (c) => resolve(c)));
+    expect(code).toBe(4000);
     // The newcomer has not said hello: listening again until it does.
     await h.until(() => last(h.statuses).state === "listening");
     second.send({ t: "hello", v: 1, build: "h1", project: "two" });
@@ -177,6 +181,44 @@ describe("the Live Link server", () => {
     h.server.pushBundle("h2", "{}");   // now in sync: not pushed again
     await new Promise((r) => setTimeout(r, 50));
     expect(g.received).toHaveLength(1);
+    g.close();
+  });
+
+  it("asks for a push when a game says hello on an older build, once per connection", async () => {
+    let asked = 0;
+    const h = await up("h2", { onStaleHello: () => { asked++; } });
+    const g = await game(h.port);
+    g.send({ t: "hello", v: 2, build: "h2", flows: [] });     // in sync: nothing to catch up
+    await h.until(() => last(h.statuses).state === "connected");
+    expect(asked).toBe(0);
+    g.close();
+    await h.until(() => last(h.statuses).state === "listening");
+    const behind = await game(h.port);                       // a game started from an older bundle, or back after edits
+    behind.send({ t: "hello", v: 2, build: "h1", flows: [] });
+    await h.until(() => asked === 1);
+    behind.send({ t: "hello", v: 2, build: "h0", flows: [] });  // still behind: not offered again on this connection
+    await new Promise((r) => setTimeout(r, 50));
+    expect(asked).toBe(1);
+    behind.close();
+  });
+
+  it("says Unpublished edits while the game runs a pushed bundle that is not the published one", async () => {
+    let published: string | null = "h1";
+    const h = await up("h1", { publishedBuildHash: () => published });
+    const g = await game(h.port);
+    g.send({ t: "hello", v: 2, build: "h1", flows: [] });     // the published bundle: nothing unpublished
+    await h.until(() => last(h.statuses).state === "connected");
+    expect(last(h.statuses)).not.toHaveProperty("unpublished");
+    h.setHash("h2");                                         // a save, pushed
+    h.server.pushBundle("h2", "{}");
+    await h.until(() => g.received.length === 1);
+    g.send({ t: "hello", v: 2, build: "h2", flows: [] });
+    await h.until(() => (last(h.statuses) as { build?: string }).build === "match");
+    expect(last(h.statuses)).toMatchObject({ state: "connected", unpublished: true });
+    expect(h.server.gameBuild()).toBe("h2");
+    published = "h2";                                        // Publish Bundle caught the file up
+    h.server.refreshStatus();
+    await h.until(() => !("unpublished" in last(h.statuses)));
     g.close();
   });
 

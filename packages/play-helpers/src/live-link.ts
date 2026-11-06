@@ -24,9 +24,19 @@
 // own ids are gameIds now, so the rule has no exception left.
 //
 // Patterpad's createDebugLink is the template (Patter play-helpers/debug.ts):
-// hello first, frames queue until the socket opens, a missing editor is a
-// silent no-op, nothing here ever throws into the game, and no WebSocket
-// implementation at all degrades to a no-op handle. `observe(...)` became a
+// hello first, frames queue until the first socket opens, a missing editor is
+// a silent no-op, nothing here ever throws into the game, and no WebSocket
+// implementation at all degrades to a no-op handle.
+//
+// It reconnects, by the rule Patter's debug link shares: until the game closes
+// it, a socket that closes or never opens is tried again after 1 s, doubling to
+// 10 s, and back to 1 s once a hello goes. Each new socket says hello again with
+// the build and the open flows, then every flow's board. One line is logged when
+// an open link is lost and one when it is back; a link that never opened logs
+// nothing. Frames queue only while the first socket connects: after any attempt
+// fails, nothing queues until a socket is open. The editor closes a game it
+// replaced (another game connected) with code 4000, and that one does not
+// retry, so two games do not take turns. `observe(...)` became a
 // trace subscription, which is why this one takes an ENGINE: attach(engine)
 // subscribes, detach() stops, and a live refresh replaces the flow
 // (detach the old one, attach the new one, then setBuild).
@@ -43,7 +53,10 @@ export interface LiveSocketLike {
   readyState: number;
   send(data: string): void;
   close(): void;
-  addEventListener(type: "open" | "close" | "error", listener: () => void): void;
+  addEventListener(type: "open" | "error", listener: () => void): void;
+  /** The close event's `code` says why: 4000 is the editor replacing this
+   *  game with another, which is not retried. */
+  addEventListener(type: "close", listener: (ev?: { code?: number }) => void): void;
   /** Incoming editor messages (the pushed bundle). Optional so a bare
    *  send-only socket still fits. */
   addEventListener(type: "message", listener: (ev: { data: unknown }) => void): void;
@@ -73,9 +86,11 @@ export interface LiveLinkOptions {
 export type LiveLinkState = "connecting" | "connected" | "closed";
 
 export interface LiveLink {
-  /** Where the link is, read at the moment of asking: "connecting" until the
-   *  socket opens, "connected" while it is open, "closed" once it has closed,
-   *  failed, been closed by `close()`, or there was no WebSocket to open. An
+  /** Where the link is, read at the moment of asking: "connecting" until a
+   *  socket opens and while it retries after one closed or failed, "connected"
+   *  while one is open, "closed" once `close()` was called, the editor replaced
+   *  this game with another (close code 4000), or there was no WebSocket to
+   *  open. An
    *  examiner shows it so a host can tell "the editor is not listening" from
    *  "I never attached". */
   readonly state: LiveLinkState;
@@ -100,7 +115,7 @@ export interface LiveLink {
    *  with the new build and a fresh board snapshot, so the editor's chip goes
    *  back to in sync and it stops re-pushing the same bundle). */
   setBuild(build: string): void;
-  /** Close the link; every later call is a no-op. */
+  /** Close the link and stop retrying; every later call is a no-op. */
   close(): void;
 }
 
@@ -120,6 +135,11 @@ const OPEN = 1; // WebSocket.OPEN
  *  editor's socket is still connecting. */
 const QUEUE_CAP = 512;
 const DEFAULT_URL = "ws://127.0.0.1:4472";
+/** The editor closed this game because another connected: do not retry. */
+const LIVE_LINK_REPLACED = 4000;
+/** The retry's first wait and its longest, in ms. */
+const RETRY_FIRST = 1000;
+const RETRY_MAX = 10000;
 
 /** The trace kinds that move the board, and so are followed by a snapshot. */
 // A discard changes the board as a play does.
@@ -153,6 +173,11 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
   // The flows the EDITOR believes are open. Diffed against engine.flows() so
   // flowOpen / flowClose are the link's own business, not the host's.
   let announced = new Set<string>();
+  let dropped = false; // an attempt has failed or closed: queue nothing until a socket opens
+  let wasOpen = false; // a socket has been open, so losing it is worth a line
+  let lost = false;    // logged as lost, waiting to log it back
+  let wait = RETRY_FIRST;
+  let retry: ReturnType<typeof setTimeout> | null = null;
 
   if (!Ctor) {
     // No WebSocket available (no global, none passed): a silent no-op link.
@@ -165,14 +190,18 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
     queue = [];
   };
   const post = (frame: LiveFrame): void => {
-    if (closed) return;
+    if (closed || !sock || sock.readyState > OPEN) return;
+    // After an attempt has failed, the editor is away: nothing queues until a
+    // socket is open again, and the hello and boards stand in for what was
+    // missed (the 2026-08-29 fix, kept across retries).
+    if (dropped && sock.readyState !== OPEN) return;
     queue.push(JSON.stringify(frame));
     // A cap for the CONNECTING window, where queueing is the point: the hello
     // and the frames a game emits during those first milliseconds have to
-    // land. Beyond that many, the editor is not coming - drop the oldest, so
+    // land. Beyond that many, the editor is not coming: drop the oldest, so
     // what survives is the most recent story rather than the first moments of
-    // it. Once the socket has actually closed the queue is dropped outright
-    // (see the close listener); this is only the never-opened case.
+    // it. Once a socket has closed or failed the queue is dropped outright
+    // (see the close listener); this is only the first connecting window.
     if (queue.length > QUEUE_CAP) queue.splice(0, queue.length - QUEUE_CAP);
     flush();
   };
@@ -193,7 +222,7 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
     }
     // The editor's list starts from the hello, so the diff starts there too.
     announced = new Set(flows.map((f) => f.id));
-    try { sock?.send(JSON.stringify(hello)); } catch { /* race: closed immediately */ }
+    try { sock?.send(JSON.stringify(hello)); wait = RETRY_FIRST; } catch { /* race: closed immediately */ }
   };
   const postBoard = (flow: Flow): void => {
     try { post(boardFrame(flow)); } catch { /* never into the game */ }
@@ -227,16 +256,27 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
     } catch { /* never into the game */ }
   };
 
-  try {
-    sock = new Ctor(url);
-    sock.addEventListener("open", () => {
+  const connect = (): void => {
+    retry = null;
+    if (closed) return;
+    let s: LiveSocketLike;
+    try { s = new Ctor(url); } catch { sock = null; closed = true; return; } // malformed URL etc.: never throw into the game
+    sock = s;
+    s.addEventListener("open", () => {
+      if (sock !== s) return;
+      wasOpen = true;
+      if (lost) { lost = false; console.info(`[storylets] Live Link is back (${url}).`); }
       sendHello();
+      // A reconnect: nothing was queued while the editor was away, so every
+      // flow's board follows the hello and the editor's Board comes back as
+      // the game has it. (The first socket's boards are already queued.)
+      if (dropped) for (const f of liveFlows()) postBoard(f);
       flush();
     });
     // Live refresh: the editor pushed a new bundle. The shape is checked here
     // so the host's handler never sees a malformed frame; anything else the
     // editor might send is ignored.
-    sock.addEventListener("message", (ev: { data: unknown }) => {
+    s.addEventListener("message", (ev: { data: unknown }) => {
       if (!opts.onBundle || typeof ev.data !== "string") return;
       try {
         const msg = JSON.parse(ev.data) as Record<string, unknown>;
@@ -245,16 +285,26 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
         }
       } catch { /* not for us */ }
     });
-    sock.addEventListener("error", () => { /* editor not listening: stay a no-op */ });
-    // The socket is gone and this link does not reconnect, so the link is
-    // INERT from here rather than merely unable to send. It used to set `sock`
-    // to null and nothing else, leaving `closed` false, so every later trace
-    // event pushed another string onto a queue nothing would ever drain: one
-    // heap allocation per deal, play and write for the rest of the session.
-    // Godot and Unity both already stopped at this point; JS and Unreal did
-    // not. Found by the pre-release audit, 2026-08-29.
-    sock.addEventListener("close", () => { sock = null; closed = true; queue = []; });
-  } catch { sock = null; closed = true; } // malformed URL etc.: never throw into the game
+    s.addEventListener("error", () => { /* editor not listening: the close that follows retries */ });
+    // The socket is gone: drop the queue (nothing queues until the next socket
+    // opens, so a game that shipped with the link wired in does no work per
+    // event while the editor is away), then retry unless the game closed the
+    // link or the editor replaced this game with another.
+    s.addEventListener("close", (ev?: { code?: number }) => {
+      if (sock !== s) return;
+      sock = null; queue = []; dropped = true;
+      if (closed) return;
+      if (ev?.code === LIVE_LINK_REPLACED) {
+        closed = true;
+        console.info(`[storylets] Live Link: another game took the editor's link (${url}).`);
+        return;
+      }
+      if (wasOpen && !lost) { lost = true; console.info(`[storylets] Live Link lost (${url}); retrying.`); }
+      retry = setTimeout(connect, wait);
+      wait = Math.min(wait * 2, RETRY_MAX);
+    });
+  };
+  connect();
 
   const detach = (): void => {
     unsubscribe?.();
@@ -266,6 +316,7 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
   return {
     get state(): LiveLinkState {
       if (closed) return "closed";
+      // Between attempts there is no socket, but the link is still trying.
       return sock !== null && sock.readyState === OPEN ? "connected" : "connecting";
     },
     attach(next: Engine): void {
@@ -293,6 +344,7 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
       closed = true;
       detach();
       queue = [];
+      if (retry) { clearTimeout(retry); retry = null; }
       try { sock?.close(); } catch { /* already gone */ }
       sock = null;
     },

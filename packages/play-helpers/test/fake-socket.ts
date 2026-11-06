@@ -3,11 +3,12 @@
 // LiveSocketLike the client accepts, nothing more.
 import type { LiveSocketLike } from "../src/live-link.js";
 
-type Listener = (ev: { data: unknown }) => void;
+type Listener = (ev: { data: unknown; code?: number }) => void;
 
 export class FakeSocket implements LiveSocketLike {
   static instances: FakeSocket[] = [];
-  /** The most recently constructed socket (the client makes exactly one). */
+  /** The most recently constructed socket (a retrying client makes one per
+   *  attempt; this is the one it is on). */
   static last(): FakeSocket {
     const s = FakeSocket.instances[FakeSocket.instances.length - 1];
     if (!s) throw new Error("no FakeSocket constructed");
@@ -39,7 +40,11 @@ export class FakeSocket implements LiveSocketLike {
 
   // --- the test's side of the wire ----------------------------------------
   open(): void { this.readyState = 1; this.fire("open"); }
-  fail(): void { this.readyState = 3; this.fire("error"); this.fire("close"); }
+  /** The editor was not listening: an error, then a close. */
+  fail(): void { this.readyState = 3; this.fire("error"); this.fire("close", { data: undefined, code: 1006 }); }
+  /** The editor dropped an open socket (quit, stopped its link: 1006 / 1001),
+   *  or replaced this game with another (4000). */
+  drop(code = 1006): void { this.readyState = 3; this.fire("close", { data: undefined, code }); }
   /** The editor sent something. */
   receive(data: unknown): void { this.fire("message", { data }); }
   /** Every sent frame, parsed. */
@@ -47,7 +52,7 @@ export class FakeSocket implements LiveSocketLike {
   /** The `t` of every sent frame, in order. */
   kinds(): string[] { return this.frames().map((f) => f.t as string); }
 
-  private fire(type: string, ev: { data: unknown } = { data: undefined }): void {
+  private fire(type: string, ev: { data: unknown; code?: number } = { data: undefined }): void {
     for (const l of this.listeners.get(type) ?? []) l(ev);
   }
 }

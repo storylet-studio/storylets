@@ -55,9 +55,11 @@ vi.mock("@wildwinter/app-shell/view-host", () => ({
 /** The updater's channels are the shell's, and held by updater-channels.test.ts; the view port's is the shell's
  *  too, held below; and so are the command palette's and What's New's, whose main halves app-shell's
  *  registerCommandPalette and registerWhatsNew register themselves (main/index.ts calls both at startup),
- *  held below as well. */
+ *  held below as well. The window prompt's two are the shell's too (createWindowPrompt registers the reply's
+ *  handler in main/index.ts), held by prompt-channels.test.ts. */
 const shellOwned = (channel: string): boolean =>
-  channel.startsWith("updater:") || channel.startsWith("palette:") || channel.startsWith("whatsNew:") || channel === VIEW_PORT_CHANNEL;
+  channel.startsWith("updater:") || channel.startsWith("palette:") || channel.startsWith("whatsNew:") || channel === VIEW_PORT_CHANNEL
+  || channel === "app:prompt" || channel === "app:promptReply";
 
 /** The page's window, for the view port's hand-over the listeners below are fired through. */
 vi.stubGlobal("window", { postMessage: () => undefined });

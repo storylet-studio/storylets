@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The Live Link reconnects**, by the rule Patterplay's debug link shares. Until the game closes it, a socket that
+  closes or never opens is tried again after 1 s, doubling to at most 10 s, and back to 1 s once a hello goes. Each
+  new socket says hello again with the build as `SetBuild` last left it and the open flows, then every flow's board.
+  `LinkState()` reads `connecting` while it retries (a refused first connect too) and `closed` only after `Close()`,
+  when the editor replaced this game with another (close code 4000, which is not retried), or with no WebSockets at
+  all. It logs one Display line on `LogStoryletEngine` when an open link is lost and one when it is back, nothing per
+  attempt and nothing for a link that has never opened. Frames queue only while the first socket connects; the queue
+  is dropped on every close, so a game whose editor is away does no work per event. The rule lives in the std-only
+  `storylets::LiveLinkClient` (`onClose(code)` returns the wait before the next attempt, `beginAttempt`, `state`,
+  `setLog`), and the TestHost holds it.
+
 ## [0.16.0] - 2026-11-05
 
 ### Added

@@ -112,7 +112,9 @@ transliteration in C#; the three stay in lockstep.
   they open and close; `OnBundle` (game thread) delivers the
   bundle a save pushes, `FStoryletLiveLink::ApplyLiveBundle` /
   `UStoryletEngine::ApplyLiveBundle` swap it in IN PLACE with the run
-  carried across, then `SetBuild`. Compiles to no-ops in Shipping (the
+  carried across, then `SetBuild`. It reconnects while the game keeps it
+  open (1 s, doubling to 10 s) and says hello again when the editor is
+  back. Compiles to no-ops in Shipping (the
   WebSockets dependency is dropped there). The frames it sends are held to
   the shared fixture `packages/conformance/live-link/` by the TestHost. See
   [Live Link](https://storylets.dev/play/live-link/).

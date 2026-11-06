@@ -39,7 +39,7 @@ import type { Ipc } from "./registrar.js";
 const VIEW_DEFAULT = { width: 760, height: 560 };
 const VIEW_MIN = { width: 360, height: 240 };
 
-export type ViewHostDeps = Pick<MainContext, "session" | "editor" | "store" | "menu"> & Partial<Pick<MainContext, "windows">>;
+export type ViewHostDeps = Pick<MainContext, "session" | "editor" | "store" | "menu" | "ask"> & Partial<Pick<MainContext, "windows">>;
 
 export interface ViewHost {
   register(ipc: Ipc): void;
@@ -120,15 +120,17 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
     }
   }
 
-  /** Ask the author a question in a native box; the button chosen, by index (the last is Cancel). The editor
-   *  comes in front of the pinned windows while it's up (the Extensions window among them), so a question asked
-   *  from one is never hidden under it. */
+  /** Ask the author a question in the editor window (app-shell's window prompt, as Patterpad asks); the button
+   *  chosen, by index into `buttons`, which run from the answer to the way out (the last is Cancel). The window
+   *  draws them the family's way, the way out first, so they go across reversed: the first of `buttons` stays
+   *  the default, the last what Esc answers. The editor comes in front of the pinned windows while it's up
+   *  (the Extensions window among them), so a question asked from one is never hidden under it. */
   async function ask(message: string, detail: string, buttons: string[]): Promise<number> {
-    const editor = deps.editor()!;
-    const release = frontForModal(editor);
+    const last = buttons.length - 1;
+    const release = frontForModal(deps.editor()!);
     try {
-      const r = await dialog.showMessageBox(editor, { type: "question", message, detail, buttons, defaultId: 0, cancelId: buttons.length - 1 });
-      return r.response;
+      const shown = await deps.ask({ title: message, sub: detail, buttons: [...buttons].reverse(), defaultId: last, cancelId: 0 });
+      return last - shown;
     } finally { release(); }
   }
 
@@ -267,12 +269,10 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
     const editor = deps.editor()!;
     let properties: ("openFile" | "openDirectory")[] = ["openFile", "openDirectory"];
     if (process.platform !== "darwin") {
-      const asked = await dialog.showMessageBox(editor, {
-        type: "question", message: title, detail: "An extension's package is a folder, or a .tgz file made by npm pack.",
-        buttons: ["Package File\u2026", "Package Folder\u2026", "Cancel"], defaultId: 0, cancelId: 2,
-      });
-      if (asked.response === 2) return null;
-      properties = asked.response === 0 ? ["openFile"] : ["openDirectory"];
+      const asked = await ask(title, "An extension's package is a folder, or a .tgz file made by npm pack.",
+        ["Package File\u2026", "Package Folder\u2026", "Cancel"]);
+      if (asked === 2) return null;
+      properties = asked === 0 ? ["openFile"] : ["openDirectory"];
     }
     const picked = await dialog.showOpenDialog(editor, {
       title, message: prompt, buttonLabel: "Choose", properties,

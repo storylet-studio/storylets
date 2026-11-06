@@ -12,8 +12,16 @@
 // It is a debug tool: in a Shipping build every method is a no-op and the
 // WebSockets dependency is compiled out entirely (see
 // StoryletEngineRuntime.Build.cs), so it is safe to leave wired in. A missing
-// editor is a silent no-op, and nothing here ever throws into the game. Hold
-// the returned shared pointer for as long as you want the link open:
+// editor is a silent no-op, and nothing here ever throws into the game.
+//
+// It reconnects, by the rule Patterplay's debug link shares: until the game
+// closes it, a socket that closes or never opens is tried again after 1 s,
+// doubling to at most 10 s, and back to 1 s once a hello goes. Each new socket
+// says hello again with the build and the open flows, then every flow's board.
+// It logs one line when an open link is lost and one when it is back, nothing
+// per attempt, and nothing at all for a link that has never opened. A link the
+// editor replaced with another game (close code 4000) stays closed. Hold the
+// returned shared pointer for as long as you want the link open:
 //
 //   Link = FStoryletLiveLink::Create(Bundle->GetBuildId(), TEXT("My Game"));
 //   Link->Attach(Engine);               // forward every flow's trace; a board each goes first
@@ -40,6 +48,7 @@
 #include "CoreMinimal.h"
 #include "Templates/PimplPtr.h"
 #include "Templates/SharedPointer.h"
+#include "Containers/Ticker.h"
 #include "UObject/WeakObjectPtr.h"
 
 class IWebSocket;
@@ -74,10 +83,13 @@ public:
 	 *  back to in sync and it stops re-pushing the same bundle). */
 	void SetBuild(const FString& Build);
 
-	/** Close the link; every later call is a no-op. */
+	/** Close the link and stop retrying; every later call is a no-op. */
 	void Close();
 
-	/** Where the link is: "connecting", "connected" or "closed" - the same
+	/** Where the link is: "connecting" until a socket opens and while it
+	 *  retries, "connected" while one is open, "closed" once Close() was
+	 *  called, the editor replaced this game with another (close code 4000),
+	 *  or there is no WebSocket here at all - the same
 	 *  three Unity's LiveLinkState carries and Godot's link_state() returns.
 	 *  For the Runtime State panel, so a host can tell "the editor is not
 	 *  listening" from "I never attached" (2026-08-29: Unity's examiner showed
@@ -116,8 +128,15 @@ public:
 	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FString& OutReportJson);
 
 private:
+	friend struct FStoryletLiveLinkTestAccess;   // the automation test drives the socket's events itself
+
 	FStoryletLiveLink(const FString& InBuild, const FString& InProject, const FString& InUrl);
-	void Connect();
+	void Connect();                         // make the client, then dial
+	void Dial();                            // a fresh socket: the first attempt, or a retry
+	void HandleConnected();
+	void HandleGone(int32 StatusCode);      // the socket closed (OnClosed's code) or never opened (-1)
+	void RetryTick();
+	void DropSocket();
 
 	FString BuildId;
 	FString Project;
@@ -126,4 +145,7 @@ private:
 	int32 TraceHandle = 0;
 	TPimplPtr<storylets::LiveLinkClient> Client;   // the frames and their order; the socket is ours
 	TSharedPtr<IWebSocket> Socket;
+	double RetryAt = 0.0;                   // FPlatformTime::Seconds() of the next attempt; 0 while none is due
+	FTSTicker::FDelegateHandle RetryTicker;
+	TArray<FString>* SentForTest = nullptr; // the automation test's: what the socket would have been sent
 };

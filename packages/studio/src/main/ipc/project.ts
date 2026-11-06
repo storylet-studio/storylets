@@ -16,7 +16,7 @@ import {
 import { shippedExample } from "../trust.js";
 import { saveProjectSettings } from "../mutate/settings.js";
 import { planMapUpgrade, upgradeProjectMap } from "../map-upgrade.js";
-import { findPatterpad, launchPatterpad, patterpadExecutable } from "../patterpad.js";
+import { SIBLING_APPS, launchApp, locateApp } from "@wildwinter/app-shell/sibling-app";
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 import { sessionGuards } from "./registrar.js";
@@ -24,7 +24,7 @@ import { EXAMPLES } from "../../shared/examples.js";
 import type { OpenResult, ProjectSettingsDto, StudioApi, VcStatusDto, VcsSetting } from "../../shared/api.js";
 import { VCS_OPTIONS } from "../../shared/api.js";
 
-export interface ProjectIpcDeps extends Pick<MainContext, "session" | "editor" | "store" | "openAt"> {
+export interface ProjectIpcDeps extends Pick<MainContext, "session" | "editor" | "store" | "openAt" | "ask"> {
   /** May the author leave the open project? (exchange.ts) */
   mayLeaveProject(act: "quit" | "close"): Promise<boolean>;
   /** Is this a path the app already knows (the last project, a recent)? */
@@ -248,7 +248,7 @@ export function registerProject(ipc: Ipc, deps: ProjectIpcDeps): void {
 
   // Show Scene in Patterpad: the paired Patter project, at the scene named after the card.
   // Patterpad forwards a second launch to the running app, which jumps in place.
-  ipc.handle("patter:edit", async (_e, cardId, locate): ReturnType<StudioApi["editInPatterpad"]> => {
+  ipc.handle("patter:edit", async (_e, cardId): ReturnType<StudioApi["editInPatterpad"]> => {
     const session = deps.session();
     if (!session?.loaded.source) return { error: "no project open" };
     const { link, issues } = readPatterLink(session.loaded);
@@ -257,28 +257,20 @@ export function registerProject(ipc: Ipc, deps: ProjectIpcDeps): void {
     if (!card) return { error: "that card isn't in the project any more" };
     const address = effectiveGameId(card);
     const store = deps.store();
-    let executable = findPatterpad(store.patterpadPath());
-    if (executable === undefined) {
-      // Asked in the window, in the shell's confirm with Cancel first, as Patterpad asks
-      // its mirror; the renderer comes back with `locate` once the author says yes.
-      if (locate !== true) {
-        return { locate: { title: "Storyletter can't find Patterpad", body: "Point to it once and Storyletter will remember where it is." } };
-      }
-      const picked = await dialog.showOpenDialog(deps.editor()!, {
-        title: "Locate Patterpad",
-        message: "Choose the Patterpad app. Storyletter will remember where it is.",
-        buttonLabel: "Use Patterpad",
-        properties: ["openFile"],
-        ...(process.platform === "darwin" ? { defaultPath: "/Applications", filters: [{ name: "Applications", extensions: ["app"] }] } : {}),
-        ...(process.platform === "win32" ? { filters: [{ name: "Patterpad", extensions: ["exe"] }] } : {}),
-      });
-      const chosen = picked.filePaths[0];
-      if (picked.canceled || chosen === undefined) return null;
-      executable = findPatterpad(chosen);
-      if (executable === undefined) return { error: `${basename(chosen)} isn't Patterpad (no ${basename(patterpadExecutable(chosen))} in it)` };
-      store.setPatterpadPath(chosen);
-    }
-    try { launchPatterpad(executable, link.dir, address); }
+    // The family's one flow (app-shell's sibling-app, as Patterpad's Show Card in Storyletter): remembered,
+    // then the usual places, then asked in the window and picked, then remembered.
+    const found = await locateApp({
+      app: SIBLING_APPS.patterpad, from: "Storyletter", remembered: store.patterpadPath(),
+      ask: deps.ask,
+      pick: async (options) => {
+        const picked = await dialog.showOpenDialog(deps.editor()!, options);
+        return picked.canceled ? undefined : picked.filePaths[0];
+      },
+      remember: (path) => store.setPatterpadPath(path),
+    });
+    if ("canceled" in found) return null;
+    if ("error" in found) return { error: found.error };
+    try { launchApp(found.executable, link.dir, address); }
     catch (e) { return { error: `couldn't start Patterpad: ${e instanceof Error ? e.message : String(e)}` }; }
     // Whether the PUBLISHED bundle has the scene: Patterpad resolves from its own shards, which may
     // be ahead, so this only colours the confirmation and never stops the launch.

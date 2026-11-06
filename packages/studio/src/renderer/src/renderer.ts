@@ -58,7 +58,7 @@ import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import {
   askIdentity, el, feedUpdaterDownloadProgress, historyNav, iconNode, initTooltips, keyLabel, mountLinkStatus, mountPaneShell,
-  openCommandPalette, openWhatsNew, whatsNewAfterUpdate, type WhatsNewOptions, revealRowWhenReady, saveIndicator, setDialogFocusFallback, showUpdateReady,
+  openCommandPalette, openWhatsNew, promptDialog, whatsNewAfterUpdate, type WhatsNewOptions, revealRowWhenReady, saveIndicator, setDialogFocusFallback, showUpdateReady,
   showUpdaterDialog, tipWithKey,
 } from "@wildwinter/app-shell";
 import type { LinkStatus, LinkStatusChip, PaletteItem, PaneShell, ToastKind } from "@wildwinter/app-shell";
@@ -511,6 +511,7 @@ function linkStatusOf(s: LiveLinkStatus): LinkStatus {
     state: "connected", port: s.port, build: s.build,
     ...(s.project !== undefined ? { project: s.project } : {}),
     ...(note !== "" ? { note } : {}),
+    ...(s.unpublished === true ? { unpublished: true } : {}),
   };
 }
 
@@ -986,6 +987,9 @@ async function boot(): Promise<void> {
   });
   studio.onLiveLinkStatus((s) => liveLinkChip?.apply(linkStatusOf(s)));
   studio.onMenu(commands.onMenu);
+  // Main's questions, on the family's dialog frame (app-shell's window prompt), registered at boot as the
+  // updater's are.
+  studio.onPrompt(promptDialog);
   // The updater's four channels. Registered at boot, not lazily: main starts its
   // first background check 10 seconds after ready, and a prompt that arrives with
   // nobody listening waits 300 seconds and then answers itself.

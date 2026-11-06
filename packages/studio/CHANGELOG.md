@@ -10,6 +10,21 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **A game catches up when it connects.** A game that says hello over Live Link on an older build (one started from
+  an older bundle, or back after edits) is sent the current bundle straight away, rather than at the next save.
+- **Unpublished edits.** While the connected game runs edits Live Link pushed that you haven't published, the Live
+  Link icon says **Unpublished edits**, as Patterpad's does. It clears once you publish the bundle.
+- **Games reconnect.** Every engine's Live Link client tries again when Storyletter restarts or turns its link on
+  after the game started (1 second, doubling to 10). A second game that connects takes the link, and the first stops
+  trying.
+
+### Fixed
+
+- **A project paired with Patter no longer shows every game as a different build.** Live Link compared the game's
+  build with a stamp that also carried the Patter bundle's time, so the icon stayed red however in sync the game was.
+
 ## [0.27.4] - 2026-11-05
 
 ### Changed

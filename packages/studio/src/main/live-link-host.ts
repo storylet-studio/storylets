@@ -4,10 +4,16 @@
 // the game's run instead of its own in Live mode; the status goes to the
 // editor (its bottom-right chip) and the Board (its banner and Live / Local
 // switch), and re-ticks the menu item.
+//
+// A game catches up on its own: one that says hello on an older build (started
+// from an older bundle, or reconnected after edits, since the clients retry) is
+// pushed the current bundle at once, not at the next save. While the game runs
+// a pushed bundle that is not the published one, the chip says Unpublished
+// edits, until Publish Bundle catches the file up.
 // ---------------------------------------------------------------------------
 
 import { createLiveLinkServer, type LiveLinkServer } from "./live-link.js";
-import { compileForLivePush, currentProjectHash } from "./project.js";
+import { compileForLivePush, liveBuildHash, publishedBundleHash } from "./project.js";
 import type { MainContext } from "./context.js";
 import type { Ipc } from "./ipc/registrar.js";
 import { push } from "./ipc/push.js";
@@ -18,6 +24,8 @@ export interface LiveLinkHost {
   isOn(): boolean;
   /** After a write: recompile and push to a connected game, debounced. */
   schedulePush(): void;
+  /** After Publish Bundle wrote the bundle: the Unpublished edits marker may clear. */
+  published(): void;
   /** Stop the server, and any push still waiting: closing the project or the editor. */
   stop(): void;
   register(ipc: Ipc): void;
@@ -28,7 +36,9 @@ export function createLiveLinkHost(ctx: Pick<MainContext, "session" | "editor" |
   function ensureLiveLink(): LiveLinkServer {
     if (!liveLink) {
       liveLink = createLiveLinkServer({
-        currentBuildHash: () => { const session = ctx.session(); return session ? currentProjectHash(session) : null; },
+        currentBuildHash: () => { const session = ctx.session(); return session ? liveBuildHash(session) : null; },
+        publishedBuildHash: () => { const session = ctx.session(); return session ? publishedBundleHash(session) : null; },
+        onStaleHello: pushNow,
         onFrame: (frame) => { const board = ctx.windows().get("board"); if (board) push(board.webContents, "liveLink:frame", frame); },
         onStatus: sendLiveStatus,
       });
@@ -56,19 +66,26 @@ export function createLiveLinkHost(ctx: Pick<MainContext, "session" | "editor" |
   function schedulePush(): void {
     if (!liveLink?.isOn() || liveLink.status().state !== "connected") return;
     clearTimeout(livePushTimer);
-    livePushTimer = setTimeout(() => {
-      const session = ctx.session();
-      if (!session || !liveLink) return;
-      const out = compileForLivePush(session);
-      const held = "error" in out ? out.error : undefined;
-      if (held !== liveHeld) { liveHeld = held; sendLiveStatus(liveLink.status()); }
-      if (!("error" in out)) liveLink.pushBundle(out.hash, out.json);
-    }, 500);
+    livePushTimer = setTimeout(pushNow, 500);
+  }
+  /** Compile and push now, cancelling a push still waiting on its debounce:
+   *  the save's push, or a game that said hello on an older build. A project
+   *  that does not compile holds the push and says why in the chip's tip. */
+  function pushNow(): void {
+    clearTimeout(livePushTimer);
+    livePushTimer = undefined;
+    const session = ctx.session();
+    if (!session || !liveLink) return;
+    const out = compileForLivePush(session);
+    const held = "error" in out ? out.error : undefined;
+    if (held !== liveHeld) { liveHeld = held; sendLiveStatus(liveLink.status()); }
+    if (!("error" in out)) liveLink.pushBundle(out.hash, out.json);
   }
 
   return {
     isOn: () => liveLink?.isOn() ?? false,
     schedulePush,
+    published: () => liveLink?.refreshStatus(),
     stop: () => {
       clearTimeout(livePushTimer);   // a push still waiting would compile a project no longer open
       liveLink?.stop();

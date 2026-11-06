@@ -38,6 +38,7 @@
 #include <optional>
 #include "Storylets/StateLogger.h"
 #include "LiveLinkFixture.h"
+#include "LiveLinkReconnect.h"
 #include "OneRegistry.h"   // the JS one-registry.test.ts, ported
 #include "Storylets/Bundle.h"
 #include "Storylets/DescribeBundle.h"   // the bundle inspector compiles under -Wall -Wextra
@@ -2820,6 +2821,10 @@ int main(int argc, char** argv)
         int sv = runSave(peek);
         size_t liveTotal = 0;
         size_t live = runLiveLink(path, liveLinkDump, liveTotal);
+        // The reconnect rule (shared with Patter's debug link), in the std-only client.
+        const std::string corpusDir = path.find_last_of('/') == std::string::npos ? std::string(".") : path.substr(0, path.find_last_of('/'));
+        const auto reconnect = livelinkreconnect::checks(corpusDir + "/../..");
+        const int reconnectPassed = runChecks("live-link reconnect", reconnect);
         const oneregistry::Result oneRegistry = oneregistry::Run();
         for (const std::string& f : oneRegistry.failures) fail("one-registry", "engine", f);
         const oneregistry::Result kernelErrors = oneregistry::RunKernelErrors();
@@ -2842,6 +2847,7 @@ int main(int argc, char** argv)
             << "  scripted: " << s << "/" << scripted.arr.size()
             << "  load: " << l << "/" << load.arr.size() << "\n";
         std::cout << "live-link fixture: " << live << "/" << liveTotal << " frames\n";
+        std::cout << "live-link reconnects: " << reconnectPassed << "/" << reconnect.size() << "\n";
         std::cout << "one registry per game: " << oneRegistry.passed << "/" << oneRegistry.total << "\n";
         std::cout << "kernel errors reach the game as the engine's own: " << kernelErrors.passed << "/" << kernelErrors.total << "\n";
         std::cout << "port fixes (engine review 2026-10): " << portFixes << "/" << portFixTotal << "\n";

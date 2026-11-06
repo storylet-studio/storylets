@@ -24,7 +24,6 @@ import type { ProblemNames } from "./problem-copy.js";
 import type { ViewActions } from "./views.js";
 import type { Session } from "./session.js";
 import type { BoxDto, OpenResult, Problem, ReviewAt } from "../../shared/api.js";
-import { showInPatterpad } from "./show-in-patterpad.js";
 
 type Boxes = readonly BoxDto[];
 
@@ -392,7 +391,7 @@ export function createProblems(ctx: ProblemsContext) {
         const made = await studio.createPatterScene(fix.card);
         if (!ok(made)) return;
         await ctx.refreshProject();
-        const opened = await showInPatterpad(studio, fix.card);
+        const opened = await studio.editInPatterpad(fix.card);
         const tail = opened !== null && ok(opened, quietly) ? " Opening it in Patterpad." : "";
         flash(`Created the scene “${made.address}” in the Patter project.${tail} Publish it from Patterpad to play it.`, "ok");
       })();

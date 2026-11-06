@@ -19,6 +19,8 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="LiveLinkFixture.cs" />
+    <!-- The Live Link reconnect rule (shared with Patter): driven and over a real loopback socket. -->
+    <Compile Include="LiveLinkReconnect.cs" />
     <!-- One registry per game: packages/runtime/test/one-registry.test.ts, ported. -->
     <Compile Include="OneRegistry.cs" />
     <!-- Durable state from the game's side: packages/runtime/test/durable.test.ts, ported. -->

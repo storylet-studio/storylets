@@ -15,6 +15,8 @@ import type { TraceEvent } from "@storylet-studio/runtime";   // Live Link: the 
 // main all read one definition rather than three that can drift.
 import type { UpdaterDownloadProgress, UpdaterPromptOptions, UpdaterReadyInfo } from "@wildwinter/app-shell/updater";
 export type { UpdaterDownloadProgress, UpdaterPromptOptions, UpdaterReadyInfo };
+import type { AppPrompt } from "@wildwinter/app-shell/prompt-channels";
+export type { AppPrompt };
 // The command palette's rows are the shell's flattened menu (app-shell palette-main).
 import type { MenuCommand as PaletteCommand } from "@wildwinter/app-shell/menu";
 import type { WhatsNewState } from "@wildwinter/app-shell/whats-new-main";
@@ -1797,7 +1799,10 @@ export type LiveLinkStatus =
       /** Why the last save did not reach the game: the project has a load error or does not
        *  compile, so nothing was pushed and the game runs the build before it. Cleared by the
        *  next push. */
-      held?: string };
+      held?: string;
+      /** The game runs a bundle Live Link pushed to it that isn't the one last published (app-shell's
+       *  server judges it): its edits end with the run unless the author publishes. */
+      unpublished?: true };
 
 /** The game's cheap snapshot: hand gameId -> card gameIds in dealt order, box
  *  gameId -> clock. */
@@ -2483,11 +2488,9 @@ export interface StudioApi {
   choosePatterProject(): Promise<{ path: string } | null>;
   /** Show Scene in Patterpad: open the paired Patter project at the scene named after the card.
    *  `published` says whether the Patter project's published bundle already has that scene.
-   *  When Patterpad can't be found, `locate` is the question to ask in the window (the shell's
-   *  confirm, as Patterpad asks its mirror); asked again with `locate` true, main offers the file
-   *  picker. Null = cancelled (the author didn't point at it). */
-  editInPatterpad(cardId: string, locate?: boolean): Promise<
-    { address: string; published: boolean } | { locate: { title: string; body: string } } | { error: string } | null>;
+   *  When Patterpad can't be found, main asks in the window (`onPrompt`) and offers the file picker.
+   *  Null = cancelled (the author didn't point at it). */
+  editInPatterpad(cardId: string): Promise<{ address: string; published: boolean } | { error: string } | null>;
 
   // --- the send envelope (.storyletpack, Reboot 7.1) -------------------------
   /** Write the open project to a .storyletpack (native save dialog).
@@ -2563,6 +2566,12 @@ export interface StudioApi {
   /** The answered prompt's last word: the revision a push landed as, held for a
    *  beat, or nothing to say and straight down. */
   onLeaveSettled(handler: (opts: LeaveSettledDto) => void): void;
+
+  // --- main's questions (app-shell's window prompt) ----------------------------
+  /** main asks a question in the window (Show Scene in Patterpad's Locate, the view extensions' asks);
+   *  answer with the index of the button chosen. Registered at boot: a question nobody answers waits five
+   *  minutes, then takes its `cancelId`. */
+  onPrompt(handler: (prompt: AppPrompt) => Promise<number>): void;
 
   // --- The auto-updater (design/shared-shell.md, sixth slice) -----------------
   // Four channels the shell's updater expects a renderer to answer. It does NOT

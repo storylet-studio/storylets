@@ -117,10 +117,12 @@ describe("undoing a pull (2026-10-07)", () => {
   });
 });
 
-describe("Show Scene in Patterpad (the Patterpad review, 2026-10-07)", () => {
-  it("hands the can't-find question to the window instead of a native message box", () => {
+describe("Show Scene in Patterpad (the Patterpad review, 2026-10-07; app-shell's sibling-app, 2026-11-06)", () => {
+  it("runs the family's one Locate flow, asking in the window instead of a native message box", () => {
     const edit = handler("patter:edit");
-    expect(edit).toContain("Storyletter can't find Patterpad");
+    expect(edit).toContain("locateApp({");
+    expect(edit).toContain("SIBLING_APPS.patterpad");
+    expect(edit).toContain("ask: deps.ask");
     expect(edit).not.toContain("showMessageBox");
   });
 });

@@ -10,7 +10,8 @@ shipped package; end users never need them. Both are pinned to C# 9 to stay Unit
 dotnet run --project ports/unity/TestHost
 ```
 
-Replays the conformance corpus, the expr and registry corpora, the Live Link fixture and the
+Replays the conformance corpus, the expr and registry corpora, the Live Link fixture, the
+Live Link reconnect checks (`LiveLinkReconnect.cs`, driven and over a loopback socket) and the
 one-registry checks (`OneRegistry.cs`) through the runtime, and ends `ALL PASS` or `N FAILED`.
 It compiles the Storylet Engine's own copy of the kernel (`Runtime/Expr`), as Unity does when
 Patterplay is not installed.

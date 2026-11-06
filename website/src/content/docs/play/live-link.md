@@ -40,9 +40,16 @@ The icon's **colour** tells you the state, and hovering it spells the status out
 - **Amber** means listening, waiting for a game.
 - **Green** means connected and **in sync** (the game is running this exact build).
 - **Red** means connected, but to a **different build**. You've saved or edited since the game
-  launched. A game wired for [live refresh](#live-refresh) re-syncs itself, because saving
-  pushes the new bundle into it and the icon goes green again. Otherwise rebuild and relaunch
-  to re-sync.
+  launched. A game wired for [live refresh](#live-refresh) re-syncs itself: saving pushes the
+  new bundle into it, and a game that connects on an older build is sent the current one as
+  soon as it says hello, so the icon goes green again. Otherwise rebuild and relaunch to
+  re-sync.
+
+The game's link reconnects by itself. Restart Storyletter, or turn the Live Link on after the
+game has started, and the game connects again within a few seconds: it tries after a second,
+then less often, up to every ten seconds, until it's back. Storyletter takes one game at a
+time, so a second game that connects takes the link, and the first stops trying until you
+switch its link off and on.
 
 If you run Patterpad on the same machine, the two don't collide. Patterpad listens on 4471
 and Storyletter on 4472.
@@ -92,6 +99,11 @@ It works the same when the engine shares the game's registry with Patter. The ol
 its values to the replacement on that registry, the report says which properties the edit
 dropped or defaulted, and nothing belonging to Patter or the game is touched. Only then is the
 old engine spent, so re-take every handle from the new one.
+
+A pushed bundle lives only in the running game. The next run still reads the bundle you last
+published, so **publish to keep the edit** (**Publish ▸ Publish Bundle**). While the game is
+running edits you haven't published, **Unpublished edits** shows beside the Live Link icon,
+and it clears once you publish.
 
 There are honest limits. Your game's own side effects don't rewind (things already spawned
 stay spawned). A card already on the table stays there if it still exists and is evicted if
@@ -264,7 +276,11 @@ For a custom client, the protocol is one small JSON object per message over the 
 
 The transport is a WebSocket, with the editor listening on `ws://127.0.0.1:4472`, one JSON
 object per text frame, UTF-8. A client sends `hello` first, and the editor ignores everything
-else until it has. The editor accepts one game at a time (a new connection replaces the old).
+else until it has. The editor accepts one game at a time: a new connection replaces the old,
+which the editor closes with code `4000` (`"replaced"`). When the socket closes or never opens,
+try again after 1 second, doubling to at most 10 seconds, and back to 1 second once a hello
+goes; each new socket says `hello` again with the open flows, then sends every flow's board.
+Queue frames only while the first socket connects. The one close not to retry is `4000`.
 Every field not listed is ignored by the receiver, so either end may add fields without a
 version bump. `v` bumps only when a listed field changes meaning.
 

@@ -18,7 +18,6 @@ import { openBoxKitPicker } from "./kits.js";
 import { boxReport, cardsReport, deckReport, handReport, leftMapReport, templateReport } from "./deletes.js";
 import { noteMadeInDeck, setDocTab } from "./inspector.js";
 import { flash, ok } from "./results.js";
-import { showInPatterpad } from "./show-in-patterpad.js";
 import { remember } from "./session.js";
 import type { InspectorHost } from "./inspector.js";
 import type { Focus, ViewActions } from "./views.js";
@@ -445,7 +444,7 @@ export function createActions(ctx: ActionsContext) {
     showScene(cardId) {
       void (async () => {
         await saves.flush();
-        const result = await showInPatterpad(studio, cardId);
+        const result = await studio.editInPatterpad(cardId);
         if (result === null || !ok(result)) return;
         flash(result.published
           ? `Opening ${result.address} in Patterpad`

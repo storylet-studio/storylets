@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
-import { compileForLivePush, exportBundle, openProject, refusal } from "./project.js";
+import { compileForLivePush, exportBundle, liveBuildHash, openProject, publishedBundleHash, refusal } from "./project.js";
 import type { ProjectSession } from "./project.js";
 import { spreadsheetExport } from "./spreadsheet.js";
 
@@ -51,6 +51,33 @@ describe("a project with a load error", () => {
     const r = compileForLivePush(session);
     expect("json" in r).toBe(false);
     expect("error" in r && r.error).toContain("encounters/decks/market.storyletdeck: unparseable JSON5");
+  });
+});
+
+describe("what Live Link judges a game's build by", () => {
+  it("is the hash a compiled bundle carries, the one a game says hello with", () => {
+    const { session } = scratch();
+    const out = compileForLivePush(session);
+    if ("error" in out) throw new Error(out.error);
+    expect(liveBuildHash(session)).toBe(out.hash);
+  });
+
+  it("reads the published bundle's hash: none until Publish Bundle, then the file's, again after it changes", () => {
+    const { dir, bundle, session } = scratch();
+    expect(publishedBundleHash(session)).toBeNull();
+    expect("error" in exportBundle(session)).toBe(false);
+    const first = publishedBundleHash(session);
+    expect(first).toBe(liveBuildHash(session));
+    // An edit, published again: the file changed, so the hash is read again.
+    const proj = join(dir, "saltmarsh.storyletproj");
+    const shard = parseSource(readFileSync(proj, "utf8")) as { project: Record<string, unknown> };
+    shard.project = { ...shard.project, name: "Saltmarsh Edited" };
+    writeFileSync(proj, canonicalStringify(shard));
+    expect("error" in exportBundle(session)).toBe(false);
+    const second = publishedBundleHash(session);
+    expect(second).not.toBe(first);
+    expect(second).toBe(liveBuildHash(session));
+    expect(JSON.parse(readFileSync(bundle, "utf8")).content.hash).toBe(second);
   });
 });
 

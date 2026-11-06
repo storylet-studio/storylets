@@ -6,7 +6,7 @@
 // WebSocket at all is a no-op, and nothing ever throws into the game.
 // ---------------------------------------------------------------------------
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Engine } from "@storylet-studio/runtime";
 import { expandBundle } from "@storylet-studio/conformance";
 import { boardFrame, createLiveLink } from "../src/index.js";
@@ -191,9 +191,11 @@ describe("createLiveLink", () => {
     expect(l.state).toBe("connected");
     l.close();
     expect(l.state).toBe("closed");
-    // An editor that is not listening closes the link too.
+    // An editor that is not listening leaves the link retrying, not closed.
     const refused = link();
     FakeSocket.last().fail();
+    expect(refused.state).toBe("connecting");
+    refused.close();
     expect(refused.state).toBe("closed");
     // No WebSocket implementation at all: there is nothing to connect.
     const saved = (globalThis as { WebSocket?: unknown }).WebSocket;
@@ -255,6 +257,111 @@ describe("createLiveLink", () => {
     sock.send = () => { throw new Error("gone"); };
     l2.attach(sessionEngine);
     expect(() => session.deal("seat")).not.toThrow();
+  });
+});
+
+describe("the Live Link reconnects until the game closes it (the rule shared with Patter)", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.spyOn(console, "info").mockImplementation(() => {}); });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  /** How long the link waits before its next socket, to the nearest 100 ms. */
+  const waitForNext = (): number => {
+    const before = FakeSocket.instances.length;
+    let waited = 0;
+    while (FakeSocket.instances.length === before && waited < 60000) { vi.advanceTimersByTime(100); waited += 100; }
+    return waited;
+  };
+
+  it("retries a refused link after 1 s, doubling to 10 s, logging nothing while it has never opened", () => {
+    const l = link();
+    const waits: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      FakeSocket.last().fail();
+      expect(l.state).toBe("connecting");
+      waits.push(waitForNext());
+    }
+    expect(waits).toEqual([1000, 2000, 4000, 8000, 10000, 10000]);
+    expect(console.info).not.toHaveBeenCalled();
+    l.close();
+  });
+
+  it("retries a dropped link, says hello again with the build and open flows, then each flow's board", () => {
+    const l = link();
+    const e = new Engine(bundle, { seed: 0 });
+    const main = e.openFlow("main");
+    e.openFlow("side");
+    l.attach(e);
+    FakeSocket.last().open();
+    main.deal("seat");
+    FakeSocket.last().drop();             // the editor quit
+    expect(l.state).toBe("connecting");
+    expect(waitForNext()).toBe(1000);
+    FakeSocket.last().fail();             // not back yet: 2 s next
+    expect(waitForNext()).toBe(2000);
+    l.setBuild("B2");                     // a pushed bundle took while it was away
+    const sock = FakeSocket.last();
+    sock.open();
+    expect(l.state).toBe("connected");
+    expect(sock.kinds()).toEqual(["hello", "board", "board"]);
+    expect(sock.frames()[0]).toEqual({ t: "hello", v: 2, build: "B2", project: "Test", flows: ["main", "side"], boxes: ["box"] });
+    expect(sock.frames()[1]).toEqual({ t: "board", flow: "main", hands: { seat: ["a"] }, turns: { box: 0 } });
+    expect(sock.frames()[2]).toMatchObject({ t: "board", flow: "side" });
+    l.close();
+  });
+
+  it("resets the wait to 1 s once a hello goes, and logs lost and back once each", () => {
+    const l = link();
+    FakeSocket.last().open();
+    FakeSocket.last().drop();
+    expect(waitForNext()).toBe(1000);
+    FakeSocket.last().fail();
+    expect(waitForNext()).toBe(2000);
+    FakeSocket.last().fail();
+    expect(waitForNext()).toBe(4000);
+    FakeSocket.last().open();             // the hello put the wait back to 1 s
+    FakeSocket.last().drop();
+    expect(waitForNext()).toBe(1000);
+    expect(vi.mocked(console.info).mock.calls.map((c) => String(c[0]))).toEqual([
+      expect.stringContaining("lost"), expect.stringContaining("back"), expect.stringContaining("lost"),
+    ]);
+    l.close();
+  });
+
+  it("queues nothing while a retry connects, so the hello and boards stand in for what was missed", () => {
+    const l = link();
+    const e = new Engine(bundle, { seed: 0 });
+    const main = e.openFlow("main");
+    l.attach(e);
+    FakeSocket.last().fail();
+    waitForNext();
+    main.deal("seat");                    // the editor is away: nowhere to go
+    const sock = FakeSocket.last();
+    sock.open();
+    expect(sock.kinds()).toEqual(["hello", "board"]);
+    main.play("c_a", "go", "seat");
+    const after = sock.kinds().slice(2);  // a play's traces (its write and the play), then a board
+    expect(after.at(-1)).toBe("board");
+    expect(new Set(after.slice(0, -1))).toEqual(new Set(["trace"]));
+    l.close();
+  });
+
+  it("stops for good when the editor replaced it with another game (code 4000)", () => {
+    const l = link();
+    FakeSocket.last().open();
+    FakeSocket.last().drop(4000);
+    expect(l.state).toBe("closed");
+    vi.advanceTimersByTime(60000);
+    expect(FakeSocket.instances.length).toBe(1);
+    expect(vi.mocked(console.info).mock.calls.map((c) => String(c[0]))).toEqual([expect.stringContaining("another game")]);
+  });
+
+  it("stops retrying once the game closes it", () => {
+    const l = link();
+    FakeSocket.last().fail();
+    l.close();
+    vi.advanceTimersByTime(60000);
+    expect(FakeSocket.instances.length).toBe(1);
+    expect(l.state).toBe("closed");
   });
 });
 

@@ -177,7 +177,9 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 foreach (var f in failures) Fail("live-link", "fixture", f);
                 var applyFailures = LiveLinkFixture.RunApply(repoRoot);
                 foreach (var f in applyFailures) Fail("live-link", "apply", f);
-                if (failures.Count == 0 && applyFailures.Count == 0) return 1;
+                var reconnectFailures = LiveLinkReconnect.Run(repoRoot);
+                foreach (var f in reconnectFailures) Fail("live-link", "reconnect", f);
+                if (failures.Count == 0 && applyFailures.Count == 0 && reconnectFailures.Count == 0) return 1;
             }
             catch (Exception ex)
             {

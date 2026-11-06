@@ -160,7 +160,10 @@ diagnostic; never a silent pass, never a crash.
   editor pushes the new bundle in (`bundle_pushed`, then
   `StoryletLiveLink.apply_live_bundle`). The link discovers your flows
   itself, so a multi-participant run needs nothing extra from the host; the
-  Board follows one of them at a time. The demo is wired this way.
+  Board follows one of them at a time. It reconnects while the game has it
+  on: a lost or missing editor is tried again after 1 s, doubling to 10 s,
+  with one line printed when an open link is lost and one when it is back.
+  The demo is wired this way.
   See [Live Link](https://storylets.dev/play/live-link/).
 - **Which Storylet Engine this is**: `StoryletEngineVersion.CURRENT` is this runtime's version, as in its
   `plugin.cfg` (`"0.15.0"`). Something that ships apart from the engine checks it at start-up with

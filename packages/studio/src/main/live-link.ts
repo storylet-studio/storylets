@@ -45,6 +45,11 @@ export interface LiveLinkServer {
   pushBundle(build: string, data: string): void;
   /** Point the Board at another participant's flow. */
   follow(flowId: string): void;
+  /** Send the status again: the published bundle changed, so the unpublished
+   *  marker may have. */
+  refreshStatus(): void;
+  /** The build the connected game last said it runs; null with no game. */
+  gameBuild(): string | null;
 }
 
 export interface LiveLinkDeps {
@@ -56,6 +61,14 @@ export interface LiveLinkDeps {
   onFrame: (frame: LiveLinkFrame) => void;
   /** Push the latest status to the windows and the menu. */
   onStatus: (status: LiveLinkStatus) => void;
+  /** A game said hello on a build that is not the project's (it started from
+   *  an older bundle, or reconnected after edits): compile and push the current
+   *  one now. Once per connection, so a bundle the game cannot take is not
+   *  pushed in a loop. */
+  onStaleHello?: () => void;
+  /** The published bundle's hash, for the Unpublished edits marker. Read at
+   *  every status, so it must be cheap. */
+  publishedBuildHash?: () => string | null;
   port?: number;
 }
 
@@ -81,6 +94,8 @@ export function createLiveLinkServer(deps: LiveLinkDeps): LiveLinkServer {
     port: deps.port ?? LIVE_LINK_PORT,
     currentBuildHash: deps.currentBuildHash,
     onStatus: deps.onStatus,
+    ...(deps.onStaleHello ? { onStaleHello: deps.onStaleHello } : {}),
+    ...(deps.publishedBuildHash ? { publishedBuildHash: deps.publishedBuildHash } : {}),
     protocol: ({ pushStatus }) => ({
       hello: ({ build, project, msg }) => {
         // A hello is a run beginning (or a refresh landing): the story so far is
@@ -149,6 +164,8 @@ export function createLiveLinkServer(deps: LiveLinkDeps): LiveLinkServer {
       server.pushStatus();
     },
     pushBundle: (build, data) => server.pushBundle(build, data),
+    refreshStatus: () => server.pushStatus(),
+    gameBuild: () => server.gameBuild(),
     start: () => server.start(),
     stop: () => server.stop(),
   };

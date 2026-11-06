@@ -23,22 +23,48 @@ namespace StoryletStudio.StoryletEngine.TestHost
     /// <summary>The test's side of the wire: the harness opens it, and from then
     /// on every frame the link queues is drained straight into Sent. Before it
     /// is opened frames wait in the link's outbox, as they do on a real socket
-    /// that is still connecting.</summary>
+    /// that is still connecting. Drop and Fail are the editor going away and an
+    /// attempt that never opened; each answers the wait the link asked for,
+    /// which the reconnect check reads in place of a clock.</summary>
     internal sealed class FakeLiveLinkSocket : ILiveLinkSocket
     {
         public readonly List<string> Sent = new List<string>();
+        /// <summary>Every wait the link asked for before its next attempt, in ms.</summary>
+        public readonly List<int> Waits = new List<int>();
+        public bool Closed;
         private StoryletLiveLink _link;
         private bool _open;
 
         public void Start(StoryletLiveLink link, string url) { _link = link; }
 
-        /// <summary>The editor answered: hello first, then whatever queued.</summary>
+        /// <summary>The editor answered: hello first (and on a reconnect the
+        /// boards), then whatever queued.</summary>
         public void Open()
         {
             _open = true;
-            Sent.Add(_link.HelloJson());
+            Sent.AddRange(_link.HelloFrames());
             _link.OnSocketOpened();
             Kick();
+        }
+
+        /// <summary>An open socket closed by the editor with this code.</summary>
+        public int Drop(int code = 1000)
+        {
+            _open = false;
+            return Record(_link.OnSocketClosed(code));
+        }
+
+        /// <summary>An attempt that never opened.</summary>
+        public int Fail()
+        {
+            _open = false;
+            return Record(_link.OnSocketClosed(-1));
+        }
+
+        private int Record(int wait)
+        {
+            Waits.Add(wait);
+            return wait;
         }
 
         public void Kick()
@@ -47,7 +73,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             while (_link.TryDequeueOutgoing(out var json)) Sent.Add(json);
         }
 
-        public void Close() { _open = false; }
+        public void Close() { _open = false; Closed = true; }
     }
 
     internal static class LiveLinkFixture

@@ -23,6 +23,8 @@ interface Registers { register(ipc: Ipc): void }
 
 export interface IpcDeps extends MainContext,
   Pick<ProjectIpcDeps, "mayLeaveProject" | "isKnownPath" | "closeProject">, Pick<StateIpcDeps, "setDeckFocused"> {
+  /** Publish Bundle wrote the bundle (Live Link's Unpublished edits marker). */
+  published?: () => void;
   /** The stateful domains: the exchange, Live Link, coverage, the launch, the tool windows. */
   hosts: Registers[];
 }

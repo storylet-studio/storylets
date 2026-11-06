@@ -213,6 +213,22 @@ namespace storylets
      * and onTrace with every event that flow emits. A missing editor is a
      * socket that never opens: frames queue, bounded by kQueueCap, and
      * nothing is sent.
+     *
+     * It reconnects, by the rule Patter's debug link shares, and the rule
+     * lives here so the TestHost can hold it with no socket at all: until the
+     * game closes the link, a socket that closes or never opens is tried
+     * again. onClose hands back the wait before the next attempt (1 s,
+     * doubling to 10 s, back to 1 s once a hello goes), or nothing when there
+     * is no next attempt; the host keeps the clock, calls beginAttempt as it
+     * dials, then feeds that socket's events in as before. Each new socket
+     * says hello again with the build and the open flows, then every flow's
+     * board. Frames queue only while the FIRST socket connects: once any
+     * attempt has failed or closed, nothing queues until a socket is open, and
+     * the queue is dropped on every close. One line goes to the log when an
+     * open link is lost and one when it is back; a link that never opened logs
+     * nothing. The editor closes a game it replaced (another game connected)
+     * with code 4000, and that one stays closed, so two games do not take
+     * turns.
      */
     class LiveLinkClient
     {
@@ -221,8 +237,15 @@ namespace storylets
          *  the point of queueing is that a game's first moments are not lost
          *  while the editor's socket is still connecting. */
         static constexpr std::size_t kQueueCap = 512;
+        /** The close code the editor uses for a game it replaced with another. */
+        static constexpr int kCloseReplaced = 4000;
+        /** The retry's first wait and its longest, in seconds. */
+        static constexpr double kRetryFirst = 1.0;
+        static constexpr double kRetryMax = 10.0;
 
         using Sink = std::function<void(const std::string&)>;
+        /** Where the link's few lines go (lost, back, replaced). */
+        using Log = std::function<void(const std::string&)>;
         /** The engine to forward, fetched on demand: the wrapper layer's
          *  object can be swapped under us by a live refresh, so the client
          *  holds a getter rather than a pointer. */
@@ -233,18 +256,68 @@ namespace storylets
         {
         }
 
-        /** The socket opened: hello first, then the queue, in order. */
+        /** Name the editor's address for the log lines, and where they go.
+         *  Without one the link logs nothing. */
+        void setLog(std::string url, Log log)
+        {
+            url_ = std::move(url);
+            log_ = std::move(log);
+        }
+
+        /** The socket opened: hello first, then the queue, in order. On a
+         *  reconnect nothing was queued while the editor was away, so every
+         *  flow's board follows the hello (the first socket's boards are
+         *  already queued behind it). */
         void onOpen()
         {
             if (closed_) return;
             open_ = true;
+            retryPending_ = false;
+            wasOpen_ = true;
+            if (lost_)
+            {
+                lost_ = false;
+                say("Live Link is back (" + url_ + ").");
+            }
             sendHello();
+            if (dropped_) for (const FlowPtr& f : liveFlows()) postBoard(*f);
             flush();
         }
 
-        /** The socket closed (or failed to open): frames queue again until
-         *  the host reopens, or are dropped by close(). */
-        void onClose() { open_ = false; }
+        /** The host is dialling a new socket (the first, or a retry). */
+        void beginAttempt() { retryPending_ = false; }
+
+        /** The socket closed, or failed to open. `code` is the close code
+         *  (kCloseReplaced: the editor replaced this game; anything else,
+         *  including none, is retried). The queue is dropped and nothing queues
+         *  until a socket is open again. Returns the seconds to wait before the
+         *  next attempt, or nothing when there is none: the game closed the
+         *  link, the editor replaced it, or this attempt was already counted (a
+         *  socket that reports both an error and a close). */
+        std::optional<double> onClose(int code = 0)
+        {
+            open_ = false;
+            queue_.clear();
+            dropped_ = true;
+            if (closed_ || retryPending_) return std::nullopt;
+            if (code == kCloseReplaced)
+            {
+                closed_ = true;
+                engine_ = nullptr;
+                announced_.clear();
+                say("Live Link: another game took the editor's link (" + url_ + ").");
+                return std::nullopt;
+            }
+            if (wasOpen_ && !lost_)
+            {
+                lost_ = true;
+                say("Live Link lost (" + url_ + "); retrying.");
+            }
+            retryPending_ = true;
+            const double wait = wait_;
+            wait_ = wait_ * 2 < kRetryMax ? wait_ * 2 : kRetryMax;
+            return wait;
+        }
 
         /** Start forwarding an ENGINE: every flow's events, each frame naming
          *  the flow it came from, so the editor can follow one participant and
@@ -302,8 +375,8 @@ namespace storylets
             }
         }
 
-        /** Close the link; every later call is a no-op. The host closes the
-         *  socket itself. */
+        /** Close the link and stop retrying; every later call is a no-op. The
+         *  host closes the socket itself and drops any retry it scheduled. */
         void close()
         {
             closed_ = true;
@@ -317,6 +390,20 @@ namespace storylets
         bool isClosed() const { return closed_; }
         const std::string& build() const { return build_; }
 
+        /** "connecting" until a socket opens and while it retries (between
+         *  attempts too), "connected" while one is open, "closed" once the
+         *  game closed the link or the editor replaced it. */
+        const char* state() const
+        {
+            if (closed_) return "closed";
+            return open_ ? "connected" : "connecting";
+        }
+
+        /** The wait the next failed attempt will be given, in seconds. */
+        double nextWait() const { return wait_; }
+        /** How many frames are waiting for a socket. */
+        std::size_t queued() const { return queue_.size(); }
+
     private:
         void send(const std::string& frame)
         {
@@ -326,18 +413,16 @@ namespace storylets
         void post(std::string frame)
         {
             if (closed_) return;
+            // After an attempt has failed, the editor is away: nothing queues
+            // until a socket is open again, and the hello and boards stand in
+            // for what was missed.
+            if (dropped_ && !open_) return;
             queue_.push_back(std::move(frame));
-            // BOUNDED. Until 2026-08-29 this grew without limit whenever the
-            // socket was not open, which is the ordinary state of a
-            // Development build handed to a playtester with no editor running:
-            // one heap-allocated string per deal, play and write, for the
-            // length of the session. The header below claimed "no cost".
-            //
-            // A cap rather than dropping the queue outright (which is what the
-            // JS client does) because this class is host-driven and onClose
-            // documents that a host may open the socket again; what survives a
-            // long wait should be the most recent story, not the first
-            // moments of it.
+            // BOUNDED, for the first connecting window, where queueing is the
+            // point: the hello and the frames a game emits in its first moments
+            // have to land. Beyond that many the editor is not coming: drop the
+            // oldest, so what survives is the most recent story. Once a socket
+            // has closed or failed the queue is dropped outright (onClose).
             if (queue_.size() > kQueueCap)
             {
                 queue_.erase(queue_.begin(), queue_.begin() + (queue_.size() - kQueueCap));
@@ -401,6 +486,12 @@ namespace storylets
             announced_.clear();
             for (const FlowPtr& f : flows) announced_.insert(f->id());
             send(hello);
+            wait_ = kRetryFirst;   // a hello went: the next retry starts from 1 s again
+        }
+
+        void say(const std::string& line)
+        {
+            try { if (log_) log_(line); } catch (...) { /* never into the game */ }
         }
 
         void postBoard(const Flow& flow)
@@ -414,7 +505,14 @@ namespace storylets
         EngineProvider engine_;
         std::set<std::string> announced_;
         std::vector<std::string> queue_;   // frames awaiting an open socket
+        std::string url_;
+        Log log_;
+        double wait_ = kRetryFirst;   // the next retry's wait, in seconds
         bool open_ = false;
-        bool closed_ = false;
+        bool closed_ = false;          // closed by the game, or replaced by another (4000)
+        bool dropped_ = false;         // an attempt has failed or closed: queue nothing until a socket opens
+        bool wasOpen_ = false;         // a socket has been open, so losing it is worth a line
+        bool lost_ = false;            // logged as lost, waiting to log it back
+        bool retryPending_ = false;    // this attempt has been counted; the next is the host's to dial
     };
 }

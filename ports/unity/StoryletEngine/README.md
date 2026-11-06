@@ -108,7 +108,14 @@ multi-participant run needs nothing extra from the host.
 after a save, which `StoryletLiveBundle.TryParsePush` + `Apply` swap in under
 the run through `Engine.HotSwap` (a new engine carrying the old one's run, on
 the same registry, the game's included), then `Attach` the new engine and
-`SetBuild` to re-hello. The socket runs on a worker thread,
+`SetBuild` to re-hello. The link reconnects while the game has it open: a
+socket that closes or never opens is tried again after 1 s, doubling to 10 s,
+and a new socket says hello again with the current build and open flows, then
+every flow's board. It logs one line (through `StoryletLiveLink.DefaultLog`,
+which the Unity layer points at `Debug.Log`) when an open link is lost and one
+when it is back, and queues nothing while the editor is away. A game the
+editor replaced with another (close code 4000) stays closed until it makes a
+new link. The socket runs on a worker thread,
 nothing in it throws into the game, and a missing editor is a silent no-op;
 wire it behind `#if UNITY_EDITOR || DEVELOPMENT_BUILD` all the same, as the
 demo does. The shared fixture `packages/conformance/live-link/` holds the

@@ -6,6 +6,17 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Live Link reconnects.** While the game has `StoryletLiveLink` on, a socket that closes or never opens is
+  tried again after 1 s, doubling to at most 10 s, and back to 1 s once a hello goes. Each reconnect says hello
+  again with the current build (as `set_build` last left it) and the open flows, then sends every open flow's board.
+  It prints one line when an open link is lost and one when it is back, nothing per attempt, and nothing for a link
+  that never opened. Frames queue only while the first socket connects; after a close, nothing queues until a socket
+  is open again. The editor closes a game it replaced with another (close code 4000), and that link stays closed
+  until the game calls `open()` again. `link_state()` reads `"connecting"` while it retries, so a refused first
+  connect is `"connecting"` now, not `"closed"`. The same rule as the JS client and Patterplay's debug link.
+
 ## [0.16.0] - 2026-11-05
 
 ### Added

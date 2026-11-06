@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type {
   BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, MapLayerPrefs, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
-  ProjectKit, UpdaterPromptOptions, VcsSetting,
+  AppPrompt, ProjectKit, UpdaterPromptOptions, VcsSetting,
   UpdaterDownloadProgress, UpdaterReadyInfo,
   InvokeArgs, InvokeChannel, InvokeResult, PushArgs, PushChannel, SendArgs, SendChannel,
 } from "../shared/api.js";
@@ -257,7 +257,7 @@ const api: StudioApi = {
   exportPack: () => invoke("pack:export"),
   shareScopes: () => invoke("project:shareScopes"),
   choosePatterProject: () => invoke("patter:choose"),
-  editInPatterpad: (cardId: string, locate?: boolean) => invoke("patter:edit", cardId, locate),
+  editInPatterpad: (cardId: string) => invoke("patter:edit", cardId),
   choosePack: () => invoke("pack:choose"),
   openPackAt: (path: string) => invoke("pack:openAt", path),
   // The pack exchange: three calls, and the key never crosses this bridge.
@@ -306,6 +306,10 @@ const api: StudioApi = {
   // open past the click, so somebody has to take it down: either with a closing
   // word (a push landed) or with nothing to say (cancelled, left, refused).
   onLeaveSettled: (handler) => { listen("server:leave-settled", handler); },
+
+  // Main's questions in the window: app-shell's PROMPT_CHANNELS, written out as the updater's are, since a
+  // sandboxed preload can't load the package (prompt-channels.test.ts pins them to the shell's).
+  onPrompt: (handler: (prompt: AppPrompt) => Promise<number>) => { ipcRenderer.on("app:prompt", (_e, id: number, prompt: AppPrompt) => { void handler(prompt).then((i) => ipcRenderer.invoke("app:promptReply", id, i)); }); },
 
   // The auto-updater's four channels. The names are the shell's UPDATER_CHANNELS
   // values, written out literally rather than imported: this file is the sandbox

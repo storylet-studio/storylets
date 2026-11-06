@@ -14,6 +14,16 @@
 # leave wired in. A missing editor is a silent no-op, and nothing here ever
 # push_errors or throws into the game.
 #
+# It reconnects, by the rule Patter's debug link shares: until the game closes
+# it, a socket that closes or never opens is tried again after 1 s, doubling to
+# 10 s, and back to 1 s once a hello goes. Each new socket says hello again with
+# the build and the open flows, then every flow's board. One line is printed
+# when an open link is lost and one when it is back; a link that never opened
+# prints nothing. Frames queue only while the first socket connects: after any
+# attempt fails or closes, nothing queues until a socket is open again. The
+# editor closes a game it replaced (another game connected) with code 4000, and
+# that one does not retry, so two games do not take turns.
+#
 # Usage - add it under any node and attach your ENGINE (v2: the link discovers
 # your flows itself, so every flow is followed and none is announced by hand):
 #   var link := StoryletLiveLink.new(bundle["content"]["hash"], "My Game")
@@ -54,20 +64,36 @@ const DEFAULT_URL := "ws://127.0.0.1:4472"
 # The trace kinds that move the board, and so are followed by a snapshot.
 # A discard changes the board as a play does.
 const BOARD_EVENTS := ["deal", "play", "discard", "evict", "turns"]
+# The editor's server closes a game it replaced (another game connected) with
+# this code. A replaced link stays closed: retrying would only take the editor
+# back from the game that took it over.
+const CLOSE_REPLACED := 4000
+# The wait before trying again after a close or a failed attempt: 1 s,
+# doubling to at most 10 s, back to 1 s once a hello goes out.
+const RETRY_FIRST_MS := 1000
+const RETRY_MAX_MS := 10000
 
 ## The socket. A WebSocketPeer, created by open() when nothing is set; a test
 ## sets a stand-in with the same surface first (connect_to_url, poll,
-## get_ready_state, send_text, get_available_packet_count, get_packet, close)
-## and drives poll() by hand.
+## get_ready_state, get_close_code, send_text, get_available_packet_count,
+## get_packet, close) and drives poll() by hand. A retry dials the same socket
+## again.
 var socket = null
 
 var _build: String
 var _project: String
 var _url: String
-var _queue: Array[String] = []   # frames awaiting an open socket
-var _hello_sent := false
-var _enabled := false            # a socket is connecting or open
+var _queue: Array[String] = []   # frames awaiting the first socket's open
+var _hello_sent := false         # this socket has said hello (so it opened)
+var _enabled := false            # the game wants the link: on until close(), or the editor replaced us
 var _closed := false
+var _dropped := false            # an attempt has failed or closed: queue nothing until a socket opens
+var _retry_at := 0               # clock ms of the next attempt; 0 while one is under way
+var _retry_wait := RETRY_FIRST_MS
+var _lost := false               # an open link went away and we said so; say so when it's back
+# A test's clock: when 0 or more it stands in for Time.get_ticks_msec(), so the
+# waits are asserted without sleeping through them.
+var _clock_ms := -1
 var _engine: StoryletEngine = null
 # The flows the EDITOR believes are open; diffed against engine.flows() so
 # flowOpen / flowClose are the link's own business, not the host's.
@@ -89,15 +115,16 @@ func _ready() -> void:
 
 
 ## Open the socket. _ready() does this in a debug build; call it yourself only
-## when the node is not in a tree (a headless test). A second call is a no-op.
+## when the node is not in a tree (a headless test). A second call is a no-op,
+## and so is any call after close(). A link the editor replaced (another game
+## took its place) is switched back on by calling open() again.
 func open() -> void:
 	if _closed or _enabled:
 		return
 	if socket == null:
 		socket = WebSocketPeer.new()
-	if socket.connect_to_url(_url) == OK:
-		_enabled = true   # otherwise the editor is unreachable: stay a silent no-op
-
+	_enabled = true
+	_dial()
 
 
 ## Freeing the node releases everything, so a scene change or a despawn is a
@@ -121,21 +148,48 @@ func _process(_delta: float) -> void:
 func poll() -> void:
 	if not _enabled:
 		return
-	socket.poll()
+	if _retry_at > 0:
+		# Between attempts there is no socket to pump: wait for the next one.
+		if _now() < _retry_at:
+			return
+		_retry_at = 0
+		_dial()
+		return
+	if socket.get_ready_state() == WebSocketPeer.STATE_CONNECTING:
+		# Godot warns from inside poll() when an attempt finds nobody listening
+		# ("Unable to set TCP no delay option" on macOS), which with retries
+		# would be a warning every few seconds for as long as the editor is
+		# away. Attempts are meant to be silent, so the poll that settles one
+		# is too.
+		var printing := Engine.print_error_messages
+		Engine.print_error_messages = false
+		socket.poll()
+		Engine.print_error_messages = printing
+	else:
+		socket.poll()
 	match socket.get_ready_state():
 		WebSocketPeer.STATE_OPEN:
 			if not _hello_sent:
 				# The handshake goes straight to the socket, never through the
 				# queue: the editor must read it ahead of anything queued while
-				# the socket was still connecting.
+				# the socket was still connecting. On a reconnect it is the same
+				# hello, with the build and the flows open now.
 				_send_hello()
 				_hello_sent = true
+				if _lost:
+					_lost = false
+					print("[storylets] Live Link is back (%s)." % _url)
+				# A reconnect: nothing was queued while the editor was away, so
+				# every flow's board follows the hello and the editor's Board
+				# comes back as the game has it. (The first socket's boards are
+				# already queued.)
+				if _dropped:
+					for f in _live_flows():
+						_post(board_frame(f as StoryletFlow))
 			_flush()
 			_drain_incoming()
 		WebSocketPeer.STATE_CLOSED:
-			# The editor closed the link, or was never there: go quiet.
-			_enabled = false
-			_queue.clear()
+			_socket_gone(socket.get_close_code())
 
 
 ## Where the link is: "connecting", "connected" or "closed". The same three
@@ -143,6 +197,9 @@ func poll() -> void:
 ## cross a boundary usefully. For the Runtime State panel, which shows it so a
 ## host can tell "the editor is not listening" from "I never attached"
 ## (2026-08-29: Unity's examiner had this and the other two did not).
+## "connecting" covers a link that is retrying, between attempts too: "closed"
+## is only close(), a link the editor replaced with another game, or a URL the
+## socket cannot even parse.
 func link_state() -> String:
 	if _closed or not _enabled:
 		return "closed"
@@ -209,11 +266,12 @@ func set_build(build: String) -> void:
 			_post(board_frame(f as StoryletFlow))
 
 
-## Close the link; every later call is a no-op.
+## Close the link and stop retrying; every later call is a no-op.
 func close() -> void:
 	_closed = true
 	detach()
 	_queue.clear()
+	_retry_at = 0
 	if _enabled and socket.get_ready_state() != WebSocketPeer.STATE_CLOSED:
 		socket.close()
 	_enabled = false
@@ -291,6 +349,44 @@ func _hello_frame() -> Dictionary:
 
 func _send_hello() -> void:
 	socket.send_text(to_json(_hello_frame()))
+	_retry_wait = RETRY_FIRST_MS
+
+
+func _now() -> int:
+	return _clock_ms if _clock_ms >= 0 else Time.get_ticks_msec()
+
+
+# Dial the editor. An address the socket cannot even parse is never going to
+# work, so that one closes the link for good, silently; anything else that
+# fails is tried again.
+func _dial() -> void:
+	var err: int = socket.connect_to_url(_url)
+	if err == ERR_INVALID_PARAMETER:
+		_enabled = false
+	elif err != OK:
+		_socket_gone(-1)
+
+
+# The socket closed, or never opened. Retry while the game wants the link,
+# unless the editor replaced us with another game. One line when an open link
+# is lost, none per attempt, and nothing at all for a link that never opened.
+func _socket_gone(code: int) -> void:
+	var was_open := _hello_sent
+	_hello_sent = false
+	# The startup queue only holds frames for the first socket; once that is
+	# gone a frame with no open socket has nowhere to go, so it is dropped
+	# rather than kept, and nothing queues until a socket is open again.
+	_dropped = true
+	_queue.clear()
+	if code == CLOSE_REPLACED:
+		_enabled = false
+		print("[storylets] Live Link: another game took the editor's link (%s)." % _url)
+		return
+	if was_open and not _lost:
+		_lost = true
+		print("[storylets] Live Link lost (%s); retrying." % _url)
+	_retry_at = maxi(_now() + _retry_wait, 1)
+	_retry_wait = mini(_retry_wait * 2, RETRY_MAX_MS)
 
 
 ## Announce anything that opened or closed since the last look. Runs before
@@ -326,6 +422,10 @@ func _on_trace(flow_id: String, event: Dictionary) -> void:
 
 func _post(frame: Dictionary) -> void:
 	if _closed or not _enabled:
+		return
+	# After an attempt has failed the editor is away: nothing queues until a
+	# socket is open again (the hello and boards stand in for what was missed).
+	if _dropped and (_retry_at > 0 or socket.get_ready_state() != WebSocketPeer.STATE_OPEN):
 		return
 	_queue.append(to_json(frame))
 	_flush()

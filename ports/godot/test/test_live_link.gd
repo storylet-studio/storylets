@@ -34,6 +34,9 @@ class FakePeer:
 	func get_ready_state() -> int:
 		return state
 
+	func get_close_code() -> int:
+		return 1000
+
 	func send_text(text: String) -> int:
 		if state != WebSocketPeer.STATE_OPEN:
 			push_error("fake peer: send on a socket that is not open")

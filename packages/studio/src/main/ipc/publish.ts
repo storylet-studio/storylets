@@ -76,7 +76,10 @@ function previewSaveLoad(open: ProjectSession, file: SaveFile): { report: LoadRe
   }
 }
 
-export function registerPublish(ipc: Ipc, deps: Pick<MainContext, "session" | "editor" | "windows" | "flushEditor" | "runJob">): void {
+export function registerPublish(ipc: Ipc, deps: Pick<MainContext, "session" | "editor" | "windows" | "flushEditor" | "runJob"> & {
+  /** The bundle was written: Live Link's Unpublished edits marker may clear. */
+  published?: () => void;
+}): void {
   // Publish Bundle. The manual one pins first (design/pin-on-publish.md): the
   // editor flushes its pending edits, since one carrying an old empty gameId
   // would otherwise land on top of the pin and undo it, then the pins commit
@@ -94,7 +97,9 @@ export function registerPublish(ipc: Ipc, deps: Pick<MainContext, "session" | "e
         pinned = pins.pinned.length;
       }
       const r = exportBundle(s);
-      return "error" in r ? r : { ...r, pinned };
+      if ("error" in r) return r;
+      deps.published?.();
+      return { ...r, pinned };
     });
   });
 

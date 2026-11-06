@@ -103,6 +103,9 @@ jobs:
       - name: Live Link fixture
         run: |
           "$GODOT" --headless --path ports/godot --script res://test/test_live_link.gd
+      - name: Live Link reconnects
+        run: |
+          "$GODOT" --headless --path ports/godot --script res://test/test_live_link_reconnect.gd
       - name: State logger
         run: |
           "$GODOT" --headless --path ports/godot --script res://test/test_state_logger.gd
