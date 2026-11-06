@@ -10,12 +10,20 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-06
+
 ### Changed
 
 - **A game catches up when it connects.** A game that says hello over Live Link on an older build (one started from
   an older bundle, or back after edits) is sent the current bundle straight away, rather than at the next save.
 - **Unpublished edits.** While the connected game runs edits Live Link pushed that you haven't published, the Live
   Link icon says **Unpublished edits**, as Patterpad's does. It clears once you publish the bundle.
+- **Patter scenes play on Patter 0.46.0.** The Board and an exported playable page play a card's Patter scene with
+  Patterplay 0.46.0, in place of 0.45.0. Nothing changes how a scene plays.
+- **Show Scene in Patterpad finds Patterpad as Patterpad finds Storyletter.** It looks where you last pointed it, then
+  the usual places, and only then searches the Mac, so Storyletter no longer stalls when Patterpad isn't installed.
+  When it can't find Patterpad it asks in Storyletter's own window, then remembers your answer. The questions an
+  extension's views ask appear in the window too, rather than in a system dialog.
 - **Games reconnect.** Every engine's Live Link client tries again when Storyletter restarts or turns its link on
   after the game started (1 second, doubling to 10). A second game that connects takes the link, and the first stops
   trying.

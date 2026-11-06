@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-06
+
 ### Changed
 
 - **The Live Link reconnects.** While the game has `StoryletLiveLink` on, a socket that closes or never opens is

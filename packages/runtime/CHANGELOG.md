@@ -8,6 +8,19 @@ section for it.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-06
+
+### Changed
+
+- **The Live Link reconnects** (`@storylet-studio/play-helpers`' `createLiveLink`, on every runtime alike). While the
+  game has it open, a socket that closes or never opens is tried again after 1 s, doubling to 10 s, and back to 1 s
+  once a hello goes; each new socket says hello again with the build and the open flows, then every flow's board.
+  One line is logged when an open link is lost and one when it's back, and a link that never opened logs nothing.
+  Frames queue only while the first attempt connects. A link Storyletter closes with code 4000 (another game
+  connected) stops, so two games don't take turns. `state` reads `connecting` while it retries. Restart Storyletter,
+  or turn its Live Link on after the game has started, and the Board and live edits come back by themselves. The
+  same rule as Patterplay 0.46.0's debug link. The engine itself is unchanged.
+
 ## [0.16.0] - 2026-11-05
 
 ### Added

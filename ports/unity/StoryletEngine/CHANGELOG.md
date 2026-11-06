@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-06
+
 ### Changed
 
 - **The Live Link reconnects.** While the game has it open, `StoryletLiveLink` tries a socket that closed or never

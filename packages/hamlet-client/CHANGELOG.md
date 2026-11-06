@@ -7,6 +7,14 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-06
+
+### Changed
+
+- **Live Link reconnects on every host.** The Storylet Engine 0.17.0 and Patterplay 0.46.0 both try the editor again
+  when it restarts or turns its link on after the game started, by one rule, so the Hamlet's two links come back
+  together. Nothing changes how the Hamlet plays.
+
 ## [0.10.4] - 2026-11-05
 
 ### Changed

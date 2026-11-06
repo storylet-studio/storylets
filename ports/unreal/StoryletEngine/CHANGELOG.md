@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-06
+
 ### Changed
 
 - **The Live Link reconnects**, by the rule Patterplay's debug link shares. Until the game closes it, a socket that
