@@ -8,7 +8,9 @@ sidebar:
 If your cards lead into conversations, [Patter](https://patterkit.dev) can perform them. The
 Storylet Engine decides which beat happens next, Patter plays the dialogue for it, and your game
 owns the world both of them read. Nothing in either project knows about the other. The join is a
-naming convention your game follows, and a build-time check keeps it honest.
+naming convention your game follows, and a build-time check keeps it honest. For how the two
+fit together in different kinds of game, see Patter's
+[Example game types](https://patterkit.dev/game-types/overview/).
 
 **The Hamlet (Patter Version)** is the worked example (seventeen cards, seventeen scenes, one
 save): the Hamlet's cards, paired with a Patter project that holds a scene for each. It is playable
