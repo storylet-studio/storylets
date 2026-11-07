@@ -142,25 +142,20 @@ export interface SourceManifest {
 }
 
 /**
- * The box's map, wherever it is written.
- *
- * ONE reader for the compatibility window (design/engine-server.md 9.1 point 5).
- * The map shard is the address; `ViewShard.map` is where every project written
- * before 2026-09-06 keeps it, and is read here until the next release and never
- * written. The map shard wins when a box somehow has both, which is what
- * `parseProjectFiles` warns about.
+ * The box's map: its map shard's (design/engine-server.md 9.1 point 5). The view
+ * shard's old `map`, from before 2026-09-06, is not read since 1.0.0: the parser
+ * drops it, and `storyletengine format` takes it out of the file.
  *
  * Exported because three layers ask the same question - the compiler for the
  * bundle's sites, ops for the editor's writes, and the formatter for the
- * migration - and a second copy of this expression is how the two locations
- * start disagreeing.
+ * migration - and one reader keeps them answering it the same way.
  *
  * Only the SITES are a box's since the project map (design/project-map-contract.md
  * 1.3). A shard written before it may still carry `frames`, which are the
  * project map's now: they are here to be moved by `storyletengine format`, and
  * nothing else reads them.
  */
-export const boxMapOf = (box: SourceBox): BoxMap | undefined => box.map?.map ?? box.view?.map;
+export const boxMapOf = (box: SourceBox): BoxMap | undefined => box.map?.map;
 
 /** Has this box opted in to the project map (its box shard's `usesMap`)? */
 export const usesProjectMap = (box: SourceBox): boolean => box.box.box.usesMap === true;

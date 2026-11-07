@@ -7,7 +7,7 @@ sidebar:
 
 <p><img class="sy-engine" src="/plugin-unity.svg" alt="" width="48" height="48" />The native C# runtime. No web view, no JavaScript, no IPC. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
 
-> Needs Unity 2021.3 or later, and `com.unity.nuget.newtonsoft-json` (MIT), which the
+> Needs Unity 6 (6000.x), and `com.unity.nuget.newtonsoft-json` (MIT), which the
 > package declares as a dependency. Some C# is expected, because this is the game-developer side.
 
 ## Install
@@ -185,7 +185,7 @@ The registry is one type to every engine because the expression kernel is shared
 `Wildwinter.Expr` namespace, in its own assembly. Patterplay carries the same kernel, and with
 both packages installed it compiles once, in Patterplay's `Patterplay.Expr`; on its own, this
 package compiles its copy, `StoryletEngine.Expr`. So beside Patterplay, the Storylet Engine
-needs Patterplay 0.14.0 or newer, and stops the compile with an error saying so if it finds an
+needs Patterplay 0.28.0 or newer, and stops the compile with an error saying so if it finds an
 older one. If your scripts have their own assembly definition, reference `StoryletEngine.Expr`
 and `Patterplay.Expr` beside `StoryletEngine.Runtime`: Unity ignores whichever is not installed.
 The engine's own errors are still `StoryletError` and `EvalError`; a call you make straight to
@@ -352,9 +352,9 @@ stay in step.
 
 ## Which Storylet Engine is this?
 
-**`StoryletEngineVersion.Current`** is the runtime's version, as in its package manifest (`"0.15.0"`). A game, a tool
+**`StoryletEngineVersion.Current`** is the runtime's version, as in its package manifest (`"1.0.0"`). A game, a tool
 or an extension that ships apart from the engine checks it at start-up with
-**`StoryletEngineVersion.InRange(StoryletEngineVersion.Current, "0.15.0", "0.16.0")`**: at least the first version and
+**`StoryletEngineVersion.InRange(StoryletEngineVersion.Current, "1.0.0", "2.0.0")`**: at least the first version and
 below the second, by semantic-version order. Every runtime has the same pair.
 
 ## Next

@@ -527,23 +527,11 @@ namespace
 		Out = FStoryletLoadReport();
 		return [&Out](const storylets::LoadReport& Report) { Out = StoryletLoadReportToUe(Report); };
 	}
-
-	/** The report as JSON text, for the deprecated forms. */
-	TFunction<void(const storylets::LoadReport&)> ReportJsonInto(FString& Out)
-	{
-		Out.Reset();
-		return [&Out](const storylets::LoadReport& Report) { Out = Ue(storylets::reportToJson(Report)); };
-	}
 }
 
 UStoryletFlow* UStoryletEngine::OpenFlowRestoring(const FString& FlowId, const FString& Json, FStoryletLoadReport& OutReport)
 {
 	return OpenFlowRestoringWith(FlowId, Json, ReportInto(OutReport), TEXT("OpenFlowRestoring"));
-}
-
-UStoryletFlow* UStoryletEngine::OpenFlowFromJson(const FString& FlowId, const FString& Json, FString& OutReportJson)
-{
-	return OpenFlowRestoringWith(FlowId, Json, ReportJsonInto(OutReportJson), TEXT("OpenFlowFromJson"));
 }
 
 UStoryletFlow* UStoryletEngine::OpenFlowRestoringWith(const FString& FlowId, const FString& Json, const FReportSink& Sink,
@@ -570,13 +558,6 @@ UStoryletFlow* UStoryletEngine::OpenFlowRestoringWith(const FString& FlowId, con
 bool UStoryletEngine::PreviewFlowRestore(const FString& FlowId, const FString& Json, FStoryletLoadReport& OutReport) const
 {
 	return PreviewFlowRestoreWith(FlowId, Json, ReportInto(OutReport), TEXT("PreviewFlowRestore"));
-}
-
-FString UStoryletEngine::PreviewFlowRestoreJson(const FString& FlowId, const FString& Json) const
-{
-	FString Out;
-	PreviewFlowRestoreWith(FlowId, Json, ReportJsonInto(Out), TEXT("PreviewFlowRestoreJson"));
-	return Out;
 }
 
 bool UStoryletEngine::PreviewFlowRestoreWith(const FString& FlowId, const FString& Json, const FReportSink& Sink,
@@ -615,11 +596,6 @@ bool UStoryletEngine::LoadDurable(const FString& Json, FStoryletLoadReport& OutR
 	return LoadDurableWith(Json, ReportInto(OutReport), TEXT("LoadDurable"));
 }
 
-bool UStoryletEngine::LoadDurableFromJson(const FString& Json, FString& OutReportJson)
-{
-	return LoadDurableWith(Json, ReportJsonInto(OutReportJson), TEXT("LoadDurableFromJson"));
-}
-
 bool UStoryletEngine::LoadDurableWith(const FString& Json, const FReportSink& Sink, const TCHAR* Verb)
 {
 	if (!IsValidEngine())
@@ -646,17 +622,6 @@ UStoryletFlow* UStoryletEngine::OpenFlowWithDurableSeeded(const FString& FlowId,
 	FStoryletLoadReport& OutReport)
 {
 	return OpenFlowDurableWith(FlowId, Json, Seed, ReportInto(OutReport), TEXT("OpenFlowWithDurableSeeded"));
-}
-
-UStoryletFlow* UStoryletEngine::OpenFlowWithDurableJson(const FString& FlowId, const FString& Json, FString& OutReportJson)
-{
-	return OpenFlowDurableWith(FlowId, Json, TOptional<int32>(), ReportJsonInto(OutReportJson), TEXT("OpenFlowWithDurableJson"));
-}
-
-UStoryletFlow* UStoryletEngine::OpenFlowWithDurableJsonSeeded(const FString& FlowId, const FString& Json, int32 Seed,
-	FString& OutReportJson)
-{
-	return OpenFlowDurableWith(FlowId, Json, Seed, ReportJsonInto(OutReportJson), TEXT("OpenFlowWithDurableJsonSeeded"));
 }
 
 UStoryletFlow* UStoryletEngine::OpenFlowDurableWith(const FString& FlowId, const FString& Json, TOptional<int32> Seed,
@@ -1359,11 +1324,6 @@ bool UStoryletEngine::ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutEr
 bool UStoryletEngine::ApplyLiveBundleWithLoadReport(UStoryletBundle* NewBundle, FString& OutError, FStoryletLoadReport& OutReport)
 {
 	return ApplyLiveBundleWith(NewBundle, OutError, ReportInto(OutReport));
-}
-
-bool UStoryletEngine::ApplyLiveBundleWithReport(UStoryletBundle* NewBundle, FString& OutError, FString& OutReportJson)
-{
-	return ApplyLiveBundleWith(NewBundle, OutError, ReportJsonInto(OutReportJson));
 }
 
 bool UStoryletEngine::ApplyLiveBundleWith(UStoryletBundle* NewBundle, FString& OutError, const FReportSink& Sink)

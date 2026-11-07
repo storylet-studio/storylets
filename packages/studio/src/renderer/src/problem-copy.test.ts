@@ -19,7 +19,6 @@ const SAMPLES: Record<string, string> = {
   "wrong-schema": 'schema tag "storylet-deck@1" is not "storylet-box@1"',
   "project-count": "a project has exactly one *.storyletproj at its root; found 2",
   "box-without-shard": "box folder has no box.storyletbox",
-  "stale-view-map": "this project's map lives in the view shard; open it in Storyletter or run `storyletengine format` to move it; the view shard's map is ignored after the next release",
   "stray-file": "unexpected file in decks/ (not *.storyletdeck); ignored",
   "map-in-box": 'tag group "zone" in box "village" is a map: a map belongs to the project now; run `storyletengine format` to move it',
   "map-frames-in-box": "the map's frames belong to the project map now, and these are ignored; run `storyletengine format` to move them",
@@ -68,9 +67,8 @@ const SAMPLES: Record<string, string> = {
   "field-type": 'field "mood" does not match its declared type "number"',
   "redraw-string": 'redraw is the string "4", so its cooldown never fires: write it as the number 4',
   "redraw-invalid": 'redraw must be "always", "never" or a whole number of turns (got "soon")',
-  "copies": 'copies must be an integer >= 1 (got "x")',
+  "copies": "copies is replaced by acrossHands: run `storyletengine format` to rewrite it",
   "shared-copies": 'sharedCopies must be an integer >= 1 (got "x")',
-  "shared-copies-below": "sharedCopies (1) is below copies (3): the world cannot hold fewer than one participant may",
   "shared-copies-unused": "sharedCopies is set but the card is not shared, so it does nothing",
   "durable-redraw": 'durable, but its redraw is "always": only "never" means anything past the run, since a cooldown is a turn of a clock that resets with it',
   "change-not-ref": 'change target "gold" is not a property reference (@scope.name)',
@@ -136,7 +134,7 @@ describe("problemCode", () => {
 describe("problemText", () => {
   it("names the item by its title, in a sentence with a next step", () => {
     expect(problemText(problem(SAMPLES["copies"]!), { title: "Ambush at the ford" }))
-      .toBe("“Ambush at the ford”’s copies must be a whole number, at least 1.");
+      .toBe("“Ambush at the ford” still has the old Copies setting, which Across hands has replaced. Choose Across hands on its Dealing tab to clear it.");
     expect(problemText(problem(SAMPLES["unknown-property"]!), { title: "Flee" }))
       .toBe("“Flee” changes @story.gone, which isn’t set up yet. Declare it in the project settings, or fix the name.");
     expect(problemText(problem(SAMPLES["duplicate-gameid"]!), { title: "Ambush" }))

@@ -131,8 +131,7 @@ describe("the project map shard", () => {
   // they ship as `map.geometry.sites`, and a venue provisions kiosks against
   // them. They are hashed whenever the box is on the map, whether or not this
   // export carries geometry, the same way the zone group is: so turning the
-  // flag on never needs a second rule. Read through `boxMapOf`, so the old
-  // view-shard address counts only where it is the one that is read.
+  // flag on never needs a second rule. Read through `boxMapOf`, the map shard's.
   describe("and a box's sites", () => {
     const BOARD = { id: "h_board", gameId: "board", rule: { bindings: { d_district: "v_quay" } } };
     const sited = (at: { x: number; y: number } | undefined, opts: { usesMap?: true; view?: unknown } = {}): SourceProject => {
@@ -174,14 +173,12 @@ describe("the project map shard", () => {
       expect(projectHash(empty)).toBe(projectHash(bare));
     });
 
-    it("reads the view shard's old address only when there is no map shard, as `boxMapOf` does", () => {
+    it("never reads the view shard's old address, map shard or none", () => {
       const legacy = (at: { x: number; y: number }) => ({ schema: "storylets/view@0", map: { sites: { h_board: at } } });
-      // The map shard wins, so a stale copy under `view.map` is not content.
       expect(projectHash(sited({ x: 1, y: 2 }, { usesMap: true, view: legacy({ x: 9, y: 9 }) })))
         .toBe(projectHash(sited({ x: 1, y: 2 }, { usesMap: true })));
-      // With no map shard it is the one that ships, so moving it is.
       expect(projectHash(sited(undefined, { usesMap: true, view: legacy({ x: 9, y: 9 }) })))
-        .not.toBe(projectHash(sited(undefined, { usesMap: true, view: legacy({ x: 1, y: 2 }) })));
+        .toBe(projectHash(sited(undefined, { usesMap: true, view: legacy({ x: 1, y: 2 }) })));
     });
   });
 });

@@ -100,7 +100,10 @@ function applyEdit(box: SourceBox, existing: Card<string>, edit: CardEdit): Card
   }
   if (edit.acrossHands !== undefined) {
     if (edit.acrossHands === null) delete next.acrossHands; else next.acrossHands = edit.acrossHands;
-    delete next.copies;   // replaced: Across hands says it now
+    // A shard from before 1.0.0 may still hold the old `copies`, which the
+    // compiler refuses: setting Across hands is the in-app way to clear it.
+    // Taken off the raw card, since the type no longer has it; never read.
+    delete (next as { copies?: unknown }).copies;
   }
   // Scarcity across flows (design/shared-scarcity.md). null is the third state:
   // clear the card's override and let the deck's flag stand, which is what the

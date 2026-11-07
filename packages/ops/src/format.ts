@@ -6,8 +6,9 @@
 // It also carries the migrations a formatter is allowed to carry, both about
 // where a value BELONGS, which is part of canonical form:
 //
-//   - a box map still living in its view shard is moved into `map.storyletmap`
-//     (design/engine-server.md 9.1 point 5)
+//   - a box map left in its view shard, from before `map.storyletmap`, is
+//     dropped: nothing reads it since 1.0.0 (design/engine-server.md 9.1
+//     point 5), and a view shard left with nothing else in it goes
 //   - per-box map groups are collapsed into the one PROJECT MAP at the root,
 //     or refused with a sentence per difference (design/project-map-contract.md
 //     4.2; project-map-migration.ts)
@@ -31,9 +32,8 @@ import { join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 import type { LoadedProject } from "./load.js";
-import { MANIFEST_EXTENSION, migrateLegacyWorld } from "@storylet-studio/model";
+import { MANIFEST_EXTENSION, SHARD_EXTENSIONS, migrateLegacyWorld } from "@storylet-studio/model";
 import { planExtensionUpgrades } from "./extensions.js";
-import { planMapMigration } from "./map.js";
 import { planProjectMapMigration } from "./project-map-migration.js";
 import type { PlannedMove } from "./project-map-migration.js";
 import type { PlannedWrite } from "./write.js";
@@ -42,7 +42,7 @@ export interface FormatResult {
   /** Shards whose bytes are not canonical, with their canonical content. */
   changed: PlannedWrite[];
   /** Absolute paths of shards the format DELETES: a view shard that held
-   *  nothing but a map, once the map has moved out, or a box map shard that
+   *  nothing but an old map, once that is dropped, or a box map shard that
    *  held nothing but frames, once they have moved to the project map. Emptied
    *  to its schema it would be a file saying nothing, and the project format's
    *  rule is that a shard exists because it has something in it. */
@@ -72,10 +72,7 @@ export function runFormat(loaded: LoadedProject): FormatResult {
   const copiesReport: string[] = [];
 
   // The migrations first, so a moved value is canonicalised by the same pass
-  // that moved it rather than left for the next one. The project map's goes
-  // first and, when it plans anything, wholly replaces the view-to-map move: it
-  // moves every box's map itself, view shard and all, and two planners writing
-  // one file would leave the second to undo the first.
+  // that moved it rather than left for the next one.
   const projectMap = loaded.source !== undefined
     ? planProjectMapMigration(loaded.dir, loaded.source)
     : undefined;
@@ -84,11 +81,6 @@ export function runFormat(loaded: LoadedProject): FormatResult {
     return { changed: [], removed: [], moved: [], migrated: [], issues };
   }
   const migrated = new Map<string, string>(projectMap?.writes ?? []);
-  if (migrated.size === 0) {
-    for (const box of loaded.source?.boxes ?? []) {
-      for (const write of planMapMigration(loaded.dir, box)) migrated.set(write.path, write.content);
-    }
-  }
   const dropped = new Set(projectMap?.removed ?? []);
   // Extensions taken at a new version. Only on a run whose project-map
   // migration wrote nothing, so the two never write one project shard; the
@@ -104,8 +96,8 @@ export function runFormat(loaded: LoadedProject): FormatResult {
     const moved = migrated.get(path);
     if (moved !== undefined) {
       migrated.delete(path);
-      // A view shard whose only content was the map is deleted rather than left
-      // holding a schema tag and nothing else.
+      // A shard a migration emptied is deleted rather than left holding a
+      // schema tag and nothing else.
       if (moved === canonicalStringify(emptyOf(moved))) { removed.push(path); continue; }
       if (moved !== file.text) changed.push({ path, content: moved });
       continue;
@@ -113,6 +105,13 @@ export function runFormat(loaded: LoadedProject): FormatResult {
     let canonical: string;
     try {
       const parsed = parseSource(file.text);
+      // The view shard's old map: read by nothing since 1.0.0, so dropped,
+      // quietly, rather than carried forever; the shard goes too when the map
+      // was all it held.
+      if (file.path.endsWith(SHARD_EXTENSIONS.view) && dropViewMap(parsed)) {
+        const left = canonicalStringify(parsed);
+        if (left === canonicalStringify(emptyOf(left))) { removed.push(path); continue; }
+      }
       const replaced = file.path.endsWith(".storyletdeck") ? replaceCopies(parsed) : 0;
       if (replaced > 0) copiesReport.push(`${file.path}: ${replaced === 1 ? "1 card's copies is" : `${replaced} cards' copies are`} now acrossHands`);
       if (file.path.endsWith(".storyletproj") && parsed !== null && typeof parsed === "object") {
@@ -144,6 +143,14 @@ export function runFormat(loaded: LoadedProject): FormatResult {
     changed, removed, moved: projectMap?.moved ?? [],
     migrated: [...(projectMap?.report ?? []), ...(upgrades?.report ?? []), ...copiesReport], issues,
   };
+}
+
+/** A view shard's old `map` (from before `map.storyletmap`) taken out, in
+ *  place. Whether there was one. */
+function dropViewMap(shard: unknown): boolean {
+  if (shard === null || typeof shard !== "object" || !("map" in shard)) return false;
+  delete (shard as { map?: unknown }).map;
+  return true;
 }
 
 /** A deck shard's cards moved from `copies` to `acrossHands`, in place: 1

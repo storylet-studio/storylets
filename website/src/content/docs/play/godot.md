@@ -334,9 +334,9 @@ leaves it out of the export. In that case add `*.storyletsc` to your export pres
 
 ## Which Storylet Engine is this?
 
-**`StoryletEngineVersion.CURRENT`** is this runtime's version, as in its `plugin.cfg` (`"0.15.0"`). A game, a tool
+**`StoryletEngineVersion.CURRENT`** is this runtime's version, as in its `plugin.cfg` (`"1.0.0"`). A game, a tool
 or an extension that ships apart from the engine checks it at start-up with
-**`StoryletEngineVersion.in_range(StoryletEngineVersion.CURRENT, "0.15.0", "0.16.0")`**: at least the first
+**`StoryletEngineVersion.in_range(StoryletEngineVersion.CURRENT, "1.0.0", "2.0.0")`**: at least the first
 version and below the second, by semantic-version order. Every runtime has the same pair.
 
 ## The demo

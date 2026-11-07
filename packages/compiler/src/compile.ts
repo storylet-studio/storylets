@@ -142,8 +142,7 @@ export function projectHash(source: SourceProject): string {
       // A box's sites are shape, not arrangement (design/engine-server.md
       // 4.3): they ship as `map.geometry.sites` under `export.map`, and a venue
       // provisions kiosks against them. Hashed whenever the box is on the map,
-      // flag or no flag, as the zone group is; read through `boxMapOf`, so the
-      // old view-shard address counts only where it is the one read. A box
+      // flag or no flag, as the zone group is; read through `boxMapOf`. A box
       // with nothing placed hashes exactly as it always has.
       const sites = usesProjectMap(b) ? boxMapOf(b)?.sites : undefined;
       return {
@@ -1017,8 +1016,12 @@ export function compileProject(source: SourceProject): CompileResult {
               ? `redraw is the string ${JSON.stringify(card.redraw)}, so its cooldown never fires: write it as the number ${asNumber}`
               : `redraw must be "always", "never" or a whole number of turns (got ${JSON.stringify(card.redraw)})` });
         }
-        if (card.copies !== undefined && (!Number.isInteger(card.copies) || card.copies < 1)) {
-          report({ severity: "error", path, where: effectiveGameId(card), field: "copies", message: `copies must be an integer >= 1 (got ${JSON.stringify(card.copies)})` });
+        // `copies` left the source model in 1.0.0: `acrossHands` says it now.
+        // Read off the raw card, since the type no longer has it, and refused
+        // rather than read, so a shard from before cannot deal differently
+        // from what its author meant without anyone saying so.
+        if ("copies" in card) {
+          report({ severity: "error", path, where: effectiveGameId(card), field: "copies", message: "copies is replaced by acrossHands: run `storyletengine format` to rewrite it" });
         }
         // Weights, In one hand and Across hands (the hands-on review, 2026-10),
         // the card's own or its Card template's.
@@ -1032,17 +1035,8 @@ export function compileProject(source: SourceProject): CompileResult {
         if (dealing.acrossHands !== undefined && dealing.acrossHands !== "one" && dealing.acrossHands !== "any") {
           report({ severity: "error", path, where: effectiveGameId(card), field: "acrossHands", message: `acrossHands is "one" or "any" (got ${JSON.stringify(dealing.acrossHands)})` });
         }
-        if (card.copies !== undefined && card.acrossHands !== undefined) {
-          report({ severity: "warning", path, where: effectiveGameId(card), field: "copies", message: "copies is replaced by acrossHands, which this card also sets: copies does nothing (storyletengine format removes it)" });
-        }
         if (card.sharedCopies !== undefined && (!Number.isInteger(card.sharedCopies) || card.sharedCopies < 1)) {
           report({ severity: "error", path, where: effectiveGameId(card), field: "sharedCopies", message: `sharedCopies must be an integer >= 1 (got ${JSON.stringify(card.sharedCopies)})` });
-        }
-        // sharedCopies is the WORLD cap and copies the per-flow one, so a world
-        // cap below the per-flow cap says two contradictory things and the
-        // smaller silently wins. Refuse it rather than pick (design/shared-scarcity 9.1).
-        if (card.sharedCopies !== undefined && dealing.acrossHands === undefined && card.sharedCopies < (card.copies ?? 1)) {
-          report({ severity: "error", path, where: effectiveGameId(card), field: "sharedCopies", message: `sharedCopies (${card.sharedCopies}) is below copies (${card.copies ?? 1}): the world cannot hold fewer than one participant may` });
         }
         // sharedCopies only means anything on a shared card; the deck may be
         // what makes it shared, so this is a warning about a dead setting
@@ -1178,7 +1172,6 @@ export function compileProject(source: SourceProject): CompileResult {
           ...(dealing.weight !== undefined && dealing.weight !== 1 ? { weight: dealing.weight } : {}),
           ...(dealing.inOneHand !== undefined && dealing.inOneHand !== 1 ? { inOneHand: dealing.inOneHand } : {}),
           ...(dealing.acrossHands === "any" ? { acrossHands: "any" as const } : {}),
-          ...(card.copies !== undefined && dealing.acrossHands === undefined ? { copies: card.copies } : {}),
           ...(card.shared !== undefined ? { shared: card.shared } : {}),
           ...(card.sharedCopies !== undefined ? { sharedCopies: card.sharedCopies } : {}),
           ...(card.durable !== undefined ? { durable: card.durable } : {}),

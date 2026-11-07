@@ -91,7 +91,7 @@ export type { ContractNote } from "./contract.js";
 export { boxColourOf, canvasFurniture, cardPositions, deckCanvas, deckColourOf, planBoxColour, planCanvasFurniture, planCardPositions, planDeckColour, planForgetCanvas, viewPath } from "./view.js";
 export type { CanvasRef } from "./view.js";
 export {
-  boxMap, boxesOnMap, mapPath, mapSites, planForgetSites, planMapMigration, planMapSites,
+  boxMap, boxesOnMap, mapPath, mapSites, planForgetSites, planMapSites,
   planProjectMapFrames, planProjectMapGroup, projectMapPath,
 } from "./map.js";
 export { PROJECT_MAP_CANVAS, planProjectMapMigration } from "./project-map-migration.js";

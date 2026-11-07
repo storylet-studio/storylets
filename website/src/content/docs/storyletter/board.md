@@ -200,7 +200,7 @@ Each card's name opens it in the editor, and so does its reason, at the place th
 about. "Condition not met" opens the card's **Dealing** tab at its **When** condition, lit for
 a moment, and "deck condition not met" opens its deck at the deck's own **When**. The rest (a
 full hand, a cooldown, a copy held elsewhere) open the card's **Dealing** tab, where its
-priority, redraw and copies are set.
+priority, redraw, In one hand and Across hands are set.
 
 Because it's the hand's own deal, everything that decided it counts: conditions that read
 the hand, how many cards it holds, and the copies already on the board. It explains what is

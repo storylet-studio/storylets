@@ -36,13 +36,6 @@ bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& 
 	return NewBundle && Engine->ApplyLiveBundleWithLoadReport(NewBundle, OutError, OutReport);
 }
 
-bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FString& OutReportJson)
-{
-	OutReportJson.Reset();
-	UStoryletBundle* NewBundle = CompilePushed(Engine, Data, OutError);
-	return NewBundle && Engine->ApplyLiveBundleWithReport(NewBundle, OutError, OutReportJson);
-}
-
 #if !UE_BUILD_SHIPPING
 
 #include "WebSocketsModule.h"

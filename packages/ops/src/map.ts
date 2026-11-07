@@ -15,13 +15,9 @@
 // answers to content that moves underneath it. A hand with no site has not been
 // placed; a site for a hand that no longer exists is inert and is left alone.
 //
-// THE COMPATIBILITY WINDOW. Every project written before the split keeps its map
-// in `view.storyletview` under `map`. It is READ from there (`boxMapOf`, in the
-// compiler, is the one reader that knows both addresses) and never written back:
-// each planner here writes the map shard and, in the same breath, plans the view
-// shard without its `map`, so a project migrates itself the first time anybody
-// touches its map. `runFormat` does the whole project at once, which is what the
-// compiler's warning tells an author to run.
+// A project written before the split kept its map in `view.storyletview` under
+// `map`. That address is not read since 1.0.0: the map shard is the only one
+// (`boxMapOf`, in the compiler), and `runFormat` drops a map left in a view shard.
 //
 // Writes are planned, never performed: ops hands back PlannedWrites and the
 // caller commits them through the VC layer, as everywhere else.
@@ -30,8 +26,8 @@
 import { join } from "node:path";
 import { boxMapOf, canonicalStringify } from "@storylet-studio/compiler";
 import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
-import { MAP_SCHEMA, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS, VIEW_SCHEMA } from "@storylet-studio/model";
-import type { BoxMap, Frame, MapShard, ProjectMapShard, TagGroup, ViewPoint, ViewShard } from "@storylet-studio/model";
+import { MAP_SCHEMA, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS } from "@storylet-studio/model";
+import type { BoxMap, Frame, MapShard, ProjectMapShard, TagGroup, ViewPoint } from "@storylet-studio/model";
 import type { PlannedWrite } from "./write.js";
 
 // --- the project map -------------------------------------------------------------
@@ -73,13 +69,7 @@ export function mapPath(dir: string, box: SourceBox): string {
   return join(dir, box.path, `map${SHARD_EXTENSIONS.map}`);
 }
 
-/** Where the box keeps its canvases. Duplicated from view.ts rather than
- *  imported, to keep the two modules from depending on each other in a circle;
- *  both are one `join` over the same constant. */
-const viewShardPath = (dir: string, box: SourceBox): string =>
-  join(dir, box.path, `view${SHARD_EXTENSIONS.view}`);
-
-/** The box's map as recorded, wherever it is recorded, or an empty one. Its
+/** The box's map as recorded, or an empty one. Its
  *  sites, that is: frames a shard from before the project map still carries are
  *  read by nothing but the formatter, and are kept as they are by every write
  *  here until it moves them. */
@@ -133,40 +123,10 @@ function mapWrite(dir: string, box: SourceBox, map: BoxMap): PlannedWrite[] {
 }
 
 /**
- * The view shard as it should be written once its map has moved out: the same
- * shard minus `map`.
- *
- * Returns nothing when there is nothing to move, which is every project written
- * after the split. Never called on its own: the map has to land in its new file
- * in the same commit, or the positions are lost between the two writes.
- */
-function viewDrop(dir: string, box: SourceBox): PlannedWrite[] {
-  if (box.view?.map === undefined) return [];
-  const shard: ViewShard = { ...box.view, schema: VIEW_SCHEMA };
-  delete shard.map;
-  return [{ path: viewShardPath(dir, box), content: canonicalStringify(shard) }];
-}
-
-/** The migration on its own: the map moved into its own shard, the view shard
- *  left without it. Empty for a box that has nothing to move. What `runFormat`
- *  applies across a whole project, and the reason the compiler's warning can
- *  name a command. */
-export function planMapMigration(dir: string, box: SourceBox): PlannedWrite[] {
-  const map = box.view?.map;
-  if (map === undefined) return [];
-  // A box with both: the map shard already wins everywhere that reads, so the
-  // migration is only the removal of the copy nobody reads.
-  if (box.map !== undefined) return viewDrop(dir, box);
-  return [...mapWrite(dir, box, map), ...viewDrop(dir, box)];
-}
-
-/**
  * Plan the writes that record where a box's hands now sit on its map.
  *
  * Merged into whatever the map already holds, whole numbers, and empty when
- * nothing would change so an idle drag never touches a file. A second write
- * comes back when the map still lives in the view shard: the move out is part of
- * the same commit, never a separate one.
+ * nothing would change so an idle drag never touches a file.
  */
 export function planMapSites(
   dir: string, box: SourceBox, placements: SitePlacement[],
@@ -181,7 +141,7 @@ export function planMapSites(
     changed = true;
   }
   if (!changed) return [];
-  return [...mapWrite(dir, box, { ...boxMap(box), sites }), ...viewDrop(dir, box)];
+  return mapWrite(dir, box, { ...boxMap(box), sites });
 }
 
 /**
@@ -206,6 +166,6 @@ export function planForgetSites(dir: string, box: SourceBox, handIds: string[]):
   // emptied in place.
   const map: BoxMap = { ...boxMap(box) };
   if (Object.keys(sites).length > 0) map.sites = sites; else delete map.sites;
-  return [...mapWrite(dir, box, map), ...viewDrop(dir, box)];
+  return mapWrite(dir, box, map);
 }
 

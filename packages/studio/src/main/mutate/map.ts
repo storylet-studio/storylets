@@ -593,9 +593,6 @@ export async function moveSitesOnMap(
   for (const p of placements) moved[p.id] = { x: Math.round(p.x), y: Math.round(p.y) };
   const rebound = bindSitesToZones(boxWithMap(session.loaded.source, box), groupId, moved);
 
-  // One or two files: the map shard, and - for a project whose map still lives in
-  // its view shard - the view shard without it. The move out rides the same
-  // commit as the drag that triggered it, so it undoes as one step too.
   const planned = planMapSites(session.loaded.dir, box, placements);
   // Nothing to write: the sites landed where they already were and nobody moved
   // zone. Still a fresh read, so the caller's DTOs and problems are current.

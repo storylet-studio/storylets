@@ -13,14 +13,14 @@ import { revealCard } from "./session.js";
 
 /** Where a reason leads in the editor: a failed condition to that When, the
  *  card's own or its deck's, and the rest (a full hand, a cooldown, a copy held
- *  elsewhere) to the card's Dealing tab, where priority, redraw and copies are
- *  set. Nowhere for a card that is not for this hand: its tags are the whole
+ *  elsewhere) to the card's Dealing tab, where priority, redraw, In one hand
+ *  and Across hands are set. Nowhere for a card that is not for this hand: its tags are the whole
  *  reason. */
 export function reasonTarget(v: NotDealt["verdict"]): { section: "when" | "dealing"; deck: boolean; tip: string } | undefined {
   if (v === undefined || v === "tags") return undefined;
   if (v === "condition") return { section: "when", deck: false, tip: "Open its When condition" };
   if (v === "deck-gate") return { section: "when", deck: true, tip: "Open the deck's When condition" };
-  return { section: "dealing", deck: false, tip: "Open its dealing settings: priority, redraw and copies" };
+  return { section: "dealing", deck: false, tip: "Open its dealing settings: priority, redraw, In one hand and Across hands" };
 }
 
 export function whyPanel(b: Board): HTMLElement {

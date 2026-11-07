@@ -122,7 +122,7 @@ export default defineConfig({
           ],
         },
         { label: "The CLI", items: ["cli", "cli-walkthrough"] },
-        { label: "Reference", items: ["licensing", "contact"] },
+        { label: "Reference", items: ["whats-new", "licensing", "contact"] },
       ],
     }),
   ],

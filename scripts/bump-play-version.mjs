@@ -24,8 +24,9 @@
 // AND refuse one whose changelog has no dated section, so this script is the one
 // route to a release rather than a convenience over four hand edits.
 //
-// (Patter's bump-play-version.mjs, carried across. Ours has no Changesets note
-// because we publish nothing to npm yet: public-split step 6a.)
+// (Patter's bump-play-version.mjs, carried across.) The runtime and the helpers
+// reach npm through the Release workflow once this version is on main: a
+// bump:play release needs no changeset, and an empty one stops the publish.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -71,7 +72,7 @@ bumpJsonVersion("ports/unity/StoryletEngine/package.json");
 // version no longer in the tree. npm then concludes the dependency must be on a
 // registry, and `npm ci` dies with
 //   404 '@storylet-studio/runtime@0.0.0' is not in this registry
-// on a scope where we publish nothing. That failure landed in a release run
+// (the version a stale pin asks for was never published). That failure landed in a release run
 // rather than locally, because an existing node_modules keeps working and only a
 // clean install re-resolves. Patter's script refreshes these pins for the same
 // reason; ours did not, for exactly one release.

@@ -339,8 +339,7 @@ export interface CardDto {
   /** How many slots of one hand, as typed; blank = the Card template's (or 1). */
   inOneHand?: string;
   /** Whether several hands may hold it: the card's own, or absent to follow
-   *  the Card template (a card from before acrossHands that says copies > 1
-   *  reads as "any"). */
+   *  the Card template. */
   acrossHands?: "one" | "any";
   /** Redraw comes from the Card template (or "always"), the card setting none. */
   redrawInherited?: true;
@@ -390,8 +389,8 @@ export interface CardEdit {
   weight?: string;
   /** In one hand as typed; blank follows the Card template. */
   inOneHand?: string;
-  /** Across hands; null follows the Card template. Writing it retires a
-   *  card's old `copies`. */
+  /** Across hands; null follows the Card template. Writing it clears the old
+   *  `copies` a shard from before 1.0.0 may still hold. */
   acrossHands?: "one" | "any" | null;
   /** Scarce across flows; null clears the override back to the deck's flag. */
   shared?: boolean | null;

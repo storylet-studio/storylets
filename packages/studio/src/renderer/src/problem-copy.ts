@@ -5,8 +5,8 @@
 // "Diagnostics name what the author can see" (design-language.md): a problem
 // names the thing it is about by its title, says what is wrong in a plain
 // sentence, and gives the next step when there is one. The problems bar used
-// to show the compiler's own string, which is written for the shard ("copies
-// must be an integer >= 1 (got "x")") and labelled it with a storage path
+// to show the compiler's own string, which is written for the shard ("redraw
+// must be "always", "never" or a whole number of turns (got "soon")") and labelled it with a storage path
 // (ui-review-2026-09, finding 17).
 //
 // The translator is the shell's `describeProblem` and the shared codes are its
@@ -62,7 +62,6 @@ const SHAPES: [RegExp, string][] = [
   [/^schema tag .* is not "/, "wrong-schema"],
   [/^a project has exactly one \*\.storyletproj at its root; found /, "project-count"],
   [/^box folder has no box\.storyletbox$/, "box-without-shard"],
-  [/^the map lives in map\.storyletmap now|^this project's map lives in the view shard/, "stale-view-map"],
   [/^unexpected file in decks\/|^unrecognised file in a box folder/, "stray-file"],
   // the project map (design/project-map-contract.md 4.1, E2 and W3): a project
   // from before it, which the problems bar's "Upgrade the project" moves
@@ -120,9 +119,8 @@ const SHAPES: [RegExp, string][] = [
   [/^quality field "[^"]*" on the (?:card template|outcome fields) defaults to .*, which is not one of its stages$/, "quality-field-bad-default"],
   [/^redraw is the string .*, so its cooldown never fires: write it as the number /, "redraw-string"],
   [/^redraw must be "always", "never" or a whole number of turns/, "redraw-invalid"],
-  [/^copies must be an integer >= 1/, "copies"],
+  [/^copies is replaced by acrossHands/, "copies"],
   [/^sharedCopies must be an integer >= 1/, "shared-copies"],
-  [/^sharedCopies \(\d+\) is below copies \(/, "shared-copies-below"],
   [/^sharedCopies is set but the card is not shared/, "shared-copies-unused"],
   [/^durable, but its redraw is /, "durable-redraw"],
   // outcomes: changes
@@ -245,9 +243,6 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     text: `The folder ${fileName(p)} has no box file in it.`,
     next: "Add a box.storyletbox, or remove the folder.",
   }),
-  "stale-view-map": (p) => (p.message.includes("still carries a copy")
-    ? { text: "An old copy of the map is still in the view file; it’s ignored.", next: "Run storyletengine format to remove it." }
-    : { text: "This project’s map is still stored the old way.", next: "Open the map once in Storyletter, or run storyletengine format, to move it." }),
   "map-in-box": (p) => ({
     text: `This project was made before maps belonged to the project, so the map ${quoted(pick(p, /^tag group "([^"]*)"/))} in ${quoted(pick(p, /in box "([^"]*)"/))} isn’t drawn or played.`,
     next: "Upgrade the project to move it onto the project map.",
@@ -460,15 +455,15 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   "redraw-invalid": (p) => ({
     text: `${owner(p)} redraw must be always, never, or a whole number of turns.`,
   }),
+  // A shard from before Across hands (1.0.0 refuses it). Across hands on the
+  // Dealing tab clears the old field (main mutate/cards.ts), which is the way
+  // out inside the app; the CLI's format is the other.
   "copies": (p) => ({
-    text: `${owner(p)} copies must be a whole number, at least 1.`,
+    text: `${problemName(p)} still has the old Copies setting, which Across hands has replaced.`,
+    next: "Choose Across hands on its Dealing tab to clear it.",
   }),
   "shared-copies": (p) => ({
     text: `${owner(p)} shared copies must be a whole number, at least 1.`,
-  }),
-  "shared-copies-below": (p) => ({
-    text: `${problemName(p)} allows ${pick(p, /^sharedCopies \((\d+)\)/)} shared copies but ${pick(p, /below copies \((\d+)\)/)} per participant; the world can’t hold fewer than one participant may.`,
-    next: "Raise shared copies, or lower copies.",
   }),
   "shared-copies-unused": (p) => ({
     text: `${problemName(p)} sets shared copies, but it isn’t shared, so that does nothing.`,

@@ -100,9 +100,7 @@ export function compileMaps(source: SourceProject): ProjectMap["geometry"] | und
  * Where a box's placed hands stand, as the bundle carries them
  * (design/engine-server.md 4.3).
  *
- * Read from the box's MAP SHARD (and, for one release, from the view shard that
- * used to hold it: `boxMapOf` is the single reader that knows both addresses),
- * and translated to gameIds on the way out like everything else in this block.
+ * Read from the box's MAP SHARD (`boxMapOf`), and translated to gameIds on the way out like everything else in this block.
  * Only for a box on the project map: a box that is not has nothing to stand on,
  * and the compiler says so rather than ship them.
  *

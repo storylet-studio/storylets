@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **The 13 deprecated names.** `UStoryletSave`'s `SaveStateToJson`, `LoadStateFromJson`, `LoadStateFromJsonWithReport`
+  and `PreviewLoadFromJson`; `UStoryletEngine`'s `GetBoundWorld`, `OpenFlowFromJson`, `PreviewFlowRestoreJson`,
+  `LoadDurableFromJson`, `OpenFlowWithDurableJson`, `OpenFlowWithDurableJsonSeeded` and `ApplyLiveBundleWithReport`;
+  and `FStoryletLiveLink::ApplyLiveBundle`'s overload that handed the report back as JSON text. Use `SerializeState`,
+  `DeserializeState`, `DeserializeStateWithReport`, `PreviewLoad`, `GetHostScope("world")`, `OpenFlowRestoring`,
+  `PreviewFlowRestore`, `LoadDurable`, `OpenFlowWithDurable`, `OpenFlowWithDurableSeeded`,
+  `ApplyLiveBundleWithLoadReport` and the `FStoryletLoadReport` overload, which hand the report back as a struct.
+
+### Changed
+
+- The plugin's `CreatedByURL` and `DocsURL` point at storylets.dev.
+
 ## [0.17.0] - 2026-11-06
 
 ### Changed

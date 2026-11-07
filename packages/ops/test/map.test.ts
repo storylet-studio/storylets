@@ -5,8 +5,8 @@
 // What the split promises, and what is pinned here:
 //
 //   - a site lands in `map.storyletmap`, never in the view shard again
-//   - a project written before the split is READ where its map actually is,
-//     and moves the first time anybody touches it
+//   - a map left in the view shard by a project from before the split is not
+//     read since 1.0.0
 //   - everything the old sidecar promised a site still holds: sparse, whole
 //     numbers, position and nothing else, no husks, and quiet when nothing moved
 //   - the bundle does not change, because the block it compiles from did not
@@ -22,7 +22,7 @@ import type { MapShard, ProjectMapShard, TagGroup, ViewPoint, ViewShard } from "
 import type { PlannedWrite } from "../src/write.js";
 import { canvasFurniture, planCanvasFurniture } from "../src/view.js";
 import {
-  mapPath, mapSites, planForgetSites, planMapMigration, planMapSites, projectMapPath,
+  mapPath, mapSites, planForgetSites, planMapSites, projectMapPath,
 } from "../src/map.js";
 
 const box = (shards: { view?: ViewShard; map?: MapShard } = {}): SourceBox => ({
@@ -182,65 +182,26 @@ describe("the map's furniture", () => {
   });
 });
 
-// --- the compatibility window ------------------------------------------------
+// --- the old address ----------------------------------------------------------
 //
-// Every project written before 2026-09-06 keeps its map under `map` in the view
-// shard. It is read from there for one release and never written back, and the
-// first touch moves it. What must never happen is a map written to BOTH places,
-// where the two would go on to disagree.
+// A project written before 2026-09-06 kept its map under `map` in the view
+// shard. Since 1.0.0 that address is not read: the parser drops it, and a site
+// edit neither reads it nor writes the view shard.
 
-describe("a map that still lives in the view shard", () => {
-  const legacy: ViewShard = {
+describe("a map left in the view shard", () => {
+  const legacy = {
     schema: VIEW_SCHEMA,
     canvases: { k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } },
     map: { sites: { h_all: { x: 5, y: 6 } } },
-  };
+  } as ViewShard;
 
-  it("is read where it is", () => {
-    expect(mapSites(box({ view: legacy }))).toEqual({ h_all: { x: 5, y: 6 } });
+  it("is not read", () => {
+    expect(mapSites(box({ view: legacy }))).toEqual({});
   });
 
-  it("moves out in the same plan as the edit that touched it", () => {
+  it("is not touched by a site edit, which writes only the map shard", () => {
     const writes = planMapSites("/p", box({ view: legacy }), [{ id: "h_other", x: 7, y: 8 }]);
-    expect(mapOf(writes).map.sites).toEqual({ h_all: { x: 5, y: 6 }, h_other: { x: 7, y: 8 } });
-    const view = viewOf(writes)!;
-    expect(view.map).toBeUndefined();
-    // The canvases are the author's and stay exactly where they were.
-    expect(view.canvases).toEqual({ k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } });
-  });
-
-  it("moves out when a hand comes OFF the map too", () => {
-    const view = viewOf(planForgetSites("/p", box({ view: legacy }), ["h_all"]))!;
-    expect(view.map).toBeUndefined();
-  });
-
-  it("stays put when the map's furniture is drawn, which is the project's business now", () => {
-    // Furniture lands in the project map shard and touches no box, so it is not
-    // the edit that moves a box's sites; the next site edit, or format, is.
-    const b = box({ view: legacy });
-    const writes = planCanvasFurniture("/p", b, { kind: "map" },
-      { frames: [{ id: "r_1", x: 0, y: 0, w: 10, h: 10 }] }, project(b, zoned()));
-    expect(writes.map((w) => w.path)).toEqual([projectMapPath("/p")]);
+    expect(mapOf(writes).map.sites).toEqual({ h_other: { x: 7, y: 8 } });
     expect(viewOf(writes)).toBeUndefined();
-  });
-
-  it("migrates on its own, which is what `storyletengine format` runs", () => {
-    const writes = planMapMigration("/p", box({ view: legacy }));
-    expect(mapOf(writes)).toEqual({ schema: MAP_SCHEMA, map: { sites: { h_all: { x: 5, y: 6 } } } });
-    expect(viewOf(writes)!.map).toBeUndefined();
-  });
-
-  it("plans nothing for a project that has already moved", () => {
-    expect(planMapMigration("/p", box({ map: placed({ h_all: { x: 1, y: 2 } }) }))).toEqual([]);
-  });
-
-  it("lets the map shard win when a box somehow has both, and drops the copy", () => {
-    const both = box({ view: legacy, map: placed({ h_all: { x: 99, y: 99 } }) });
-    expect(mapSites(both)).toEqual({ h_all: { x: 99, y: 99 } });
-    const writes = planMapMigration("/p", both);
-    // Only the removal: the shard that wins is already correct, so nothing of the
-    // ignored copy is allowed to reach it.
-    expect(writes.map((w) => w.path.endsWith(".storyletview"))).toEqual([true]);
-    expect(viewOf(writes)!.map).toBeUndefined();
   });
 });

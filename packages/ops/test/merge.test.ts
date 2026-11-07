@@ -41,11 +41,11 @@ const view = (cards: Obj): Obj => ({
   schema: "storylets/view@0",
   canvases: { k_1: { cards } },
 });
-/** An arrangement sidecar holding a box's MAP. `sites`, not `pins`: the key was
- *  renamed on 2026-08-10 and the merge spec was not, so this builder is the
- *  thing that would have caught it. */
+/** A box's MAP shard. `sites`, not `pins`: the key was renamed on 2026-08-10
+ *  and the merge spec was not, so this builder is the thing that would have
+ *  caught it. */
 const boxMap = (sites: Obj): Obj => ({
-  schema: "storylets/view@0",
+  schema: "storylets/map@0",
   map: { sites },
 });
 /** The comment sidecar: what a reviewer sends back. */

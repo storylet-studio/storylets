@@ -2,6 +2,16 @@
   "name": "@storylet-studio/runtime",
   "version": "0.17.0",
   "description": "Storylet Engine JS reference runtime: the session (peek / deal / play / outcomes / board / save), held to the conformance corpus.",
+  "homepage": "https://storylets.dev/play/javascript/",
+  "keywords": [
+    "storylets",
+    "storylet-studio",
+    "quality-based-narrative",
+    "narrative",
+    "interactive-fiction",
+    "game-engine",
+    "runtime"
+  ],
   "type": "module",
   "license": "MIT",
   "repository": {

@@ -123,10 +123,6 @@ public:
 	 *  run. A default report when the bundle is refused. */
 	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FStoryletLoadReport& OutReport);
 
-	/** The same, with the report as JSON text (empty when the bundle is refused). */
-	UE_DEPRECATED(5.7, "Pass an FStoryletLoadReport for the report instead of an FString.")
-	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FString& OutReportJson);
-
 private:
 	friend struct FStoryletLiveLinkTestAccess;   // the automation test drives the socket's events itself
 

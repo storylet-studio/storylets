@@ -62,8 +62,7 @@ flow already open under that name left live. The card and deck fixtures gained
 ## PRNG
 
 Seeded cases pin **mulberry32** (schema doc 3.3): default seed 0,
-`random(a, b)` inclusive, Fisher-Yates descending. Anchor values a port can
-verify first are tabled in the design notes, section 3.
+`random(a, b)` inclusive, Fisher-Yates descending.
 
 ## Working on it
 
@@ -71,10 +70,8 @@ verify first are tabled in the design notes, section 3.
   with **hand-authored** expectations - the expectations are the contract,
   never derived from an engine (PRNG-dependent ones are computed from the
   pinned algorithm and marked `PRNG-computed`). `src/cases.ts` is the live
-  contract - 205 cases (10 expressions, 8 specificity, 34 peek, 147 scripted,
-  6 load);
-  the design notes' sections 1-5 specify the shapes, and its section 6 listing
-  is the round-1 draft, awaiting re-transcription.
+  contract: 231 cases (10 expressions, 8 specificity, 34 peek, 171 scripted,
+  8 load), beside 23 version-range checks.
 - `buildCorpus` (in [`src/build.ts`](./src/build.ts)) compiles fixtures to
   `corpus.json`. The test builds the corpus, sanity-checks its internal
   references, and file-snapshots the artifact. After changing fixtures,

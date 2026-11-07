@@ -56,23 +56,4 @@ public:
 	 *  with the string boundary it prices. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
 	static bool PreviewLoad(UStoryletEngine* Engine, const FString& Json, FStoryletLoadReport& OutReport);
-
-	// --- the names before Patterplay's (deprecated) ----------------------------
-
-	/** The name before SerializeState. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use SerializeState, the name Patterplay uses."))
-	static FString SaveStateToJson(UStoryletEngine* Engine);
-
-	/** The name before DeserializeState. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use DeserializeState, the name Patterplay uses."))
-	static bool LoadStateFromJson(UStoryletEngine* Engine, const FString& Json);
-
-	/** DeserializeStateWithReport with the report as JSON text (empty on a
-	 *  refusal). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use DeserializeStateWithReport, which hands the report back as an FStoryletLoadReport."))
-	static bool LoadStateFromJsonWithReport(UStoryletEngine* Engine, const FString& Json, FString& OutReportJson);
-
-	/** PreviewLoad with the report as JSON text (empty on a refusal). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use PreviewLoad, which hands the report back as an FStoryletLoadReport."))
-	static FString PreviewLoadFromJson(UStoryletEngine* Engine, const FString& Json);
 };

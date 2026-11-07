@@ -17,7 +17,7 @@ static var _regex: RegEx = null
 
 ## Whether `version` is at least `min` and below `max_exclusive`, by semantic-version precedence (build metadata
 ## after `+` is ignored, and a prerelease comes before its release). False when any of the three isn't a version.
-## Something built for the Storylet Engine 0.15 checks
+## Something built for the Storylet Engine 1.x checks
 ## `StoryletEngineVersion.in_range(StoryletEngineVersion.CURRENT, "0.15.0", "0.16.0")`.
 static func in_range(version: String, min: String, max_exclusive: String) -> bool:
 	var v := _parse(version)

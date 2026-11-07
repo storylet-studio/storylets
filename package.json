@@ -2,7 +2,7 @@
   "name": "storylets-monorepo",
   "private": true,
   "type": "module",
-  "description": "Storylet Studio / Storylet Engine workshop monorepo (@storylet-studio/*). Interim home; assembles into the public github.com/storylet-studio/storylets.",
+  "description": "Storylets: the storylet format, the Storylet Engine runtimes, the storyletengine CLI and Storyletter (@storylet-studio/*).",
   "license": "MIT",
   "author": "Ian Thomas",
   "workspaces": [

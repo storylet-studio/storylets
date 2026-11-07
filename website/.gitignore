@@ -9,3 +9,5 @@ node_modules/
 public/village/
 # The playable Hamlet, likewise (scripts/build-hamlet.mjs): two engines, one build, never committed.
 public/hamlet/
+# The What's new page, written from the changelogs by scripts/whats-new.mjs before each build.
+src/content/docs/whats-new.md

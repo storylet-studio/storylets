@@ -2,6 +2,15 @@
   "name": "@storylet-studio/dialect",
   "version": "0.3.2",
   "description": "The storylets expression dialect for @wildwinter/expr: five scopes (@story default), the function set (random, flags, play history). One dialect drives runtime eval and publish-time validation.",
+  "homepage": "https://storylets.dev/format/overview/",
+  "keywords": [
+    "storylets",
+    "storylet-studio",
+    "quality-based-narrative",
+    "narrative",
+    "interactive-fiction",
+    "expressions"
+  ],
   "type": "module",
   "license": "MIT",
   "repository": {

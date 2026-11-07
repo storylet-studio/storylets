@@ -2,15 +2,14 @@
 // 2026-10-28). Runs via
 //   -ExecCmds="Automation RunTests StoryletEngine.PatterplayNames"
 //
-// Three things the Storylets plugin took from Patterplay before 1.0, each with
-// the name it had before kept working as a deprecated alias:
+// Three things the Storylets plugin took from Patterplay before 1.0:
 //   - UStoryletSave::SerializeState and DeserializeState, UPatterSave's pair;
 //   - UStoryletEngine::OnTrace, every flow's trace as a Blueprint event, as
 //     UPatterEngine::OnTrace hands over each decision;
-//   - FStoryletLoadReport, the LoadReport as a struct, where the JSON text
-//     used to be the only form a Blueprint could hold.
-// The struct is checked against the JSON for the same load field for field:
-// the test writes the struct out in reportToJson's exact format and compares
+//   - FStoryletLoadReport, the LoadReport as a struct.
+// The forms that should agree are checked against each other field for field
+// (a preview against its load, the Live Link's swap against the engine's):
+// the test writes each struct out in reportToJson's exact format and compares
 // the text, on a load with real drift (an evicted card, a dropped property, a
 // defaulted one, a new version and hash).
 
@@ -211,60 +210,14 @@ bool FStoryletPatterplayNamesTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("with a default report"), Refused.Project.IsEmpty());
 	}
 
-	// --- the names before Patterplay's still work ---------------------------------------
-	{
-		TestEqual(TEXT("SaveStateToJson writes what SerializeState writes"), UStoryletSave::SaveStateToJson(Engine), Saved);
-		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle, {});
-		if (!TestNotNull(TEXT("a fresh engine"), Fresh)) return false;
-		TestTrue(TEXT("LoadStateFromJson loads it"), UStoryletSave::LoadStateFromJson(Fresh, Saved));
-		TestEqual(TEXT("to the same state"), UStoryletSave::SerializeState(Fresh), Saved);
-		AddExpectedError(TEXT("LoadStateFromJson - not a storylets save"), EAutomationExpectedErrorFlags::Contains, 1);
-		TestFalse(TEXT("and still refuses, under its own name"), UStoryletSave::LoadStateFromJson(Fresh, TEXT("{}")));
-
-		FString Json;
-		TestTrue(TEXT("LoadStateFromJsonWithReport loads it"), UStoryletSave::LoadStateFromJsonWithReport(Fresh, Saved, Json));
-		TestTrue(TEXT("with a JSON report"), Json.Contains(TEXT("\"exact\": true")));
-		TestTrue(TEXT("PreviewLoadFromJson answers"), UStoryletSave::PreviewLoadFromJson(Fresh, Saved).Contains(TEXT("\"exact\": true")));
-
-		const FString Parked = Engine->SaveFlowToJson(TEXT("main"));
-		TestTrue(TEXT("PreviewFlowRestoreJson answers"), Fresh->PreviewFlowRestoreJson(TEXT("visit"), Parked).Contains(TEXT("\"flows\": [\"visit\"]")));
-		FString Restored;
-		TestNotNull(TEXT("OpenFlowFromJson opens"), Fresh->OpenFlowFromJson(TEXT("visit"), Parked, Restored));
-		TestTrue(TEXT("with a JSON report"), Restored.Contains(TEXT("\"flows\": [\"visit\"]")));
-
-		FString Durable;
-		TestTrue(TEXT("LoadDurableFromJson loads"), Fresh->LoadDurableFromJson(Engine->SaveDurableToJson(), Durable));
-		TestTrue(TEXT("with a JSON report"), Durable.Contains(TEXT("\"exact\"")));
-		const FString Pocket = Engine->GetFlow(TEXT("main"))->SaveDurableToJson();
-		FString PocketJson;
-		TestNotNull(TEXT("OpenFlowWithDurableJson opens"), Fresh->OpenFlowWithDurableJson(TEXT("pocket"), Pocket, PocketJson));
-		TestTrue(TEXT("with a JSON report"), PocketJson.Contains(TEXT("\"flows\": [\"pocket\"]")));
-		FString SeededJson;
-		TestNotNull(TEXT("OpenFlowWithDurableJsonSeeded opens"), Fresh->OpenFlowWithDurableJsonSeeded(TEXT("seeded"), Pocket, 7, SeededJson));
-		TestTrue(TEXT("with a JSON report"), SeededJson.Contains(TEXT("\"flows\": [\"seeded\"]")));
-
-		FString SwapError, SwapJson;
-		TestTrue(TEXT("ApplyLiveBundleWithReport swaps"), Fresh->ApplyLiveBundleWithReport(Bundle, SwapError, SwapJson));
-		TestTrue(TEXT("with a JSON report"), SwapJson.Contains(TEXT("\"project\": \"proj_names\"")));
-		FString LinkError, LinkJson;
-		PRAGMA_DISABLE_DEPRECATION_WARNINGS
-		const bool bLinked = FStoryletLiveLink::ApplyLiveBundle(Fresh, NamesBundleJson, LinkError, LinkJson);
-		PRAGMA_ENABLE_DEPRECATION_WARNINGS
-		TestTrue(TEXT("the Live Link's JSON-report ApplyLiveBundle swaps"), bLinked);
-		TestTrue(TEXT("with a JSON report"), LinkJson.Contains(TEXT("\"project\": \"proj_names\"")));
-	}
-
-	// --- FStoryletLoadReport is the JSON report, field for field ---------------------------
+	// --- FStoryletLoadReport: every form hands back the same report -----------------------
 	{
 		// A drifted load: the edit evicts main's held heist, drops each flow's
 		// steps and defaults their mood, under a new version and hash.
-		UStoryletEngine* ByJson = UStoryletEngine::Create(Edited, {});
 		UStoryletEngine* ByStruct = UStoryletEngine::Create(Edited, {});
-		if (!TestNotNull(TEXT("edited engines"), ByJson) || !TestNotNull(TEXT("edited engine"), ByStruct)) return false;
-		FString Json;
+		if (!TestNotNull(TEXT("edited engine"), ByStruct)) return false;
 		FStoryletLoadReport Report;
-		TestTrue(TEXT("the drifted save loads (JSON)"), UStoryletSave::LoadStateFromJsonWithReport(ByJson, Saved, Json));
-		TestTrue(TEXT("the drifted save loads (struct)"), UStoryletSave::DeserializeStateWithReport(ByStruct, Saved, Report));
+		TestTrue(TEXT("the drifted save loads"), UStoryletSave::DeserializeStateWithReport(ByStruct, Saved, Report));
 		TestFalse(TEXT("the report is not exact"), Report.bExact);
 		TestEqual(TEXT("it evicts the held heist"), Report.Evicted.Num(), 1);
 		if (Report.Evicted.Num() == 1)
@@ -278,57 +231,44 @@ bool FStoryletPatterplayNamesTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("it defaults mood"), Report.DefaultedProperties.Num() > 0);
 		TestEqual(TEXT("the version drift"), Report.Version.Saved + TEXT(">") + Report.Version.Bundle, FString(TEXT("1.0.0>1.0.1")));
 		TestEqual(TEXT("the hash drift"), Report.Hash.Saved + TEXT(">") + Report.Hash.Bundle, FString(TEXT("nameshash>nameshash2")));
-		TestEqual(TEXT("the load's struct is its JSON, field for field"), AsReportJson(Report), Json);
 
 		UStoryletEngine* Previewing = UStoryletEngine::Create(Edited, {});
 		FStoryletLoadReport Preview;
 		TestTrue(TEXT("PreviewLoad answers"), UStoryletSave::PreviewLoad(Previewing, Saved, Preview));
-		TestEqual(TEXT("the preview's struct is its JSON"), AsReportJson(Preview), UStoryletSave::PreviewLoadFromJson(Previewing, Saved));
-		TestEqual(TEXT("and the preview is the load's report"), AsReportJson(Preview), Json);
+		TestEqual(TEXT("and the preview is the load's report, field for field"), AsReportJson(Preview), AsReportJson(Report));
 
 		// One flow restored into the edit.
 		const FString Parked = Engine->SaveFlowToJson(TEXT("main"));
 		FStoryletLoadReport FlowPreview;
 		TestTrue(TEXT("PreviewFlowRestore answers"), Previewing->PreviewFlowRestore(TEXT("main"), Parked, FlowPreview));
-		TestEqual(TEXT("its struct is its JSON"), AsReportJson(FlowPreview), Previewing->PreviewFlowRestoreJson(TEXT("main"), Parked));
-		UStoryletEngine* RestoreJson = UStoryletEngine::Create(Edited, {});
 		UStoryletEngine* RestoreStruct = UStoryletEngine::Create(Edited, {});
-		FString FlowJson;
 		FStoryletLoadReport FlowReport;
-		TestNotNull(TEXT("OpenFlowFromJson restores"), RestoreJson->OpenFlowFromJson(TEXT("main"), Parked, FlowJson));
 		TestNotNull(TEXT("OpenFlowRestoring restores"), RestoreStruct->OpenFlowRestoring(TEXT("main"), Parked, FlowReport));
-		TestEqual(TEXT("the restore's struct is its JSON"), AsReportJson(FlowReport), FlowJson);
+		TestEqual(TEXT("the restore is its preview, field for field"), AsReportJson(FlowReport), AsReportJson(FlowPreview));
 		TestEqual(TEXT("the restore evicts the heist"), FlowReport.Evicted.Num(), 1);
 
 		// The durable halves.
 		const FString Memory = Engine->SaveDurableToJson();
 		const FString Pocket = Engine->GetFlow(TEXT("main"))->SaveDurableToJson();
-		FString MemoryJson, PocketJson, SeededJson;
 		FStoryletLoadReport MemoryReport, PocketReport, SeededReport;
-		TestTrue(TEXT("LoadDurableFromJson"), RestoreJson->LoadDurableFromJson(Memory, MemoryJson));
 		TestTrue(TEXT("LoadDurable"), RestoreStruct->LoadDurable(Memory, MemoryReport));
-		TestEqual(TEXT("the durable load's struct is its JSON"), AsReportJson(MemoryReport), MemoryJson);
-		RestoreJson->OpenFlowWithDurableJson(TEXT("p"), Pocket, PocketJson);
-		RestoreStruct->OpenFlowWithDurable(TEXT("p"), Pocket, PocketReport);
-		TestEqual(TEXT("the pocket's struct is its JSON"), AsReportJson(PocketReport), PocketJson);
-		RestoreJson->OpenFlowWithDurableJsonSeeded(TEXT("s"), Pocket, 3, SeededJson);
-		RestoreStruct->OpenFlowWithDurableSeeded(TEXT("s"), Pocket, 3, SeededReport);
-		TestEqual(TEXT("the seeded pocket's struct is its JSON"), AsReportJson(SeededReport), SeededJson);
+		TestEqual(TEXT("the durable load names its project"), MemoryReport.Project, FString(TEXT("proj_names")));
+		TestNotNull(TEXT("OpenFlowWithDurable"), RestoreStruct->OpenFlowWithDurable(TEXT("p"), Pocket, PocketReport));
+		TestEqual(TEXT("the pocket's report names its flow"), FString::Join(PocketReport.Flows, TEXT(",")), FString(TEXT("p")));
+		TestNotNull(TEXT("OpenFlowWithDurableSeeded"), RestoreStruct->OpenFlowWithDurableSeeded(TEXT("s"), Pocket, 3, SeededReport));
+		TestEqual(TEXT("the seeded pocket's report names its flow"), FString::Join(SeededReport.Flows, TEXT(",")), FString(TEXT("s")));
 
 		// A live swap onto the edit.
-		UStoryletEngine* SwapJsonEngine = Played();
 		UStoryletEngine* SwapStructEngine = Played();
-		FString SwapError, SwapJson;
+		FString SwapError;
 		FStoryletLoadReport SwapReport;
-		TestTrue(TEXT("ApplyLiveBundleWithReport"), SwapJsonEngine->ApplyLiveBundleWithReport(Edited, SwapError, SwapJson));
 		TestTrue(TEXT("ApplyLiveBundleWithLoadReport"), SwapStructEngine->ApplyLiveBundleWithLoadReport(Edited, SwapError, SwapReport));
-		TestEqual(TEXT("the swap's struct is its JSON"), AsReportJson(SwapReport), SwapJson);
 		TestEqual(TEXT("the swap evicts the heist"), SwapReport.Evicted.Num(), 1);
 		UStoryletEngine* LinkEngine = Played();
 		FStoryletLoadReport LinkReport;
 		TestTrue(TEXT("the Live Link's ApplyLiveBundle takes the struct"),
 			FStoryletLiveLink::ApplyLiveBundle(LinkEngine, EditedBundleJson(), SwapError, LinkReport));
-		TestEqual(TEXT("and fills it as the engine's does"), AsReportJson(LinkReport), SwapJson);
+		TestEqual(TEXT("and fills it as the engine's does"), AsReportJson(LinkReport), AsReportJson(SwapReport));
 	}
 
 	// --- OnTrace: every flow's trace as a Blueprint event -----------------------------------

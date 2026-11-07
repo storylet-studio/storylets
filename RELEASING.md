@@ -126,23 +126,18 @@ Two jobs: macOS builds and signs the two Darwin binaries, Ubuntu cross-compiles 
 Windows ones, and both upload to the release for that tag. The CLI bundle inlines the
 expression engine's source, so both jobs check out `@wildwinter/expr` alongside.
 
-## The npm packages: not set up yet, and here is the plan
+## The npm packages: Changesets
 
-Seven packages are publishable and **none is published**. The scope is unclaimed.
-
-| Publishable | Private, never published |
-|---|---|
-| `model`, `dialect`, `compiler`, `runtime`, `ops`, `cli`, `play-helpers` | `conformance`, `studio`, `village-client` |
-
-That split already matches Patter's (its eight, minus a `core` layer we do not have as a
-separate package). Only the machinery is missing: no `.changeset` directory, no
-`@changesets/cli`, no `release.yml`.
+Five packages are published to npm under `@storylet-studio`: `model`, `dialect`, `runtime`,
+`play-helpers` and `with-patter`. Everything else is `private: true` and in the Changesets
+`ignore` list: `compiler`, `ops` and `cli` (the CLI ships as binaries only), `conformance`,
+`studio`, `hamlet-client` and `village-client`.
 
 **The npm libraries are the one deliverable NOT driven by a tag.** Everything above ships
 because you pushed a tag; the packages ship because Changesets noticed a change. Keeping that
 distinction is the point of the arrangement rather than an accident of it.
 
-### How it works, once it is set up
+### How it works
 
 `release.yml` runs on **every push to main** and hands to `changesets/action`, which does one
 of two things:
@@ -159,7 +154,11 @@ npm run changeset      # describe the change and which packages it affects
 ```
 
 **A change to a published package that ships without a changeset publishes nothing at all.**
-That is the failure mode to watch for, and it is silent.
+That is the failure mode to watch for, and it is silent. So is its opposite: an EMPTY changeset
+(`---` `---` and a note) makes the action log "All changesets are empty" and skip the publish
+step as well, so a `bump:play` version already ahead of npm sits unpublished with every run
+green. A `bump:play` release needs no changeset at all. After any release that should reach npm,
+check it with `npm view <package> version`.
 
 ### Authentication: no npm token, anywhere
 
@@ -210,35 +209,17 @@ caret splits the copies on every additive registry release.
   badge is what electron-updater reads, so a package release becoming "Latest" leaves Check for
   Updates fetching a release with no `latest.yml`, which 404s. This is the same hazard the tag
   families section describes, arriving by a different route. Patterpad broke this way.
-- **An `ignore` list** covering `@storylet-studio/studio` and `@storylet-studio/village-client`.
-  They are `private: true` so they will never publish, but `ignore` also stops Changesets
-  bumping their versions, and both are versioned by their own tag families instead.
+- **An `ignore` list** covering every private package. They are `private: true` so they will
+  never publish, but `ignore` also stops Changesets bumping their versions, and the app, the
+  CLI and the Hamlet are versioned by their own tag families instead.
 
-A starting `.changeset/config.json`, from Patter's with our names:
+The live settings are in `.changeset/config.json`.
 
-```json
-{
-  "changelog": "@changesets/cli/changelog",
-  "commit": false,
-  "access": "public",
-  "baseBranch": "main",
-  "updateInternalDependencies": "patch",
-  "ignore": ["@storylet-studio/studio", "@storylet-studio/village-client"]
-}
-```
+### A new public package needs hand-work on the registry
 
-### The first publish needs hand-work on the registry
-
-This is the part that is not "copy the workflow across", and it is worth knowing before
-committing to the approach.
-
-**Trusted publishing must be registered per package on npmjs.com before that package's first
-publish**, or its publish step fails to authenticate. With seven unpublished packages that is
-seven registrations, done by hand, and none of them can happen until the public repo exists to
-point them at. So this lands **after** the split, not before it.
-
-Until then the scope is unclaimed, which is worth a thought of its own: the first publish is
-what claims `@storylet-studio` on the registry.
+**Trusted publishing must be registered for each package on npmjs.com before its first
+publish**, or its publish step fails to authenticate. So a new package starts `private: true`
+and in the `ignore` list, and goes public only once its registration is in place.
 
 ## Not built yet
 

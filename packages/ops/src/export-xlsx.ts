@@ -235,7 +235,7 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
           redraw: String(card.redraw ?? defaults?.redraw ?? "always"),
           weight: card.weight ?? defaults?.weight ?? 1,
           inOneHand: card.inOneHand ?? defaults?.inOneHand ?? 1,
-          acrossHands: (card.acrossHands ?? defaults?.acrossHands ?? (card.copies !== undefined && card.copies > 1 ? "any" : "one")) === "any" ? "any hand" : "one hand",
+          acrossHands: (card.acrossHands ?? defaults?.acrossHands ?? "one") === "any" ? "any hand" : "one hand",
           shared: card.shared === undefined
             ? (deck.shard.deck.shared === true ? "deck (shared)" : "deck")
             : (card.shared ? "yes" : "no"),

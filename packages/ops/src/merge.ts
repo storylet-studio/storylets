@@ -199,9 +199,6 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
         frames: keyed("id", object({})),
       }),
     },
-    // The map's OLD address, kept for the compatibility window so a pre-split
-    // project still merges where its map actually is. It goes when the field does.
-    map: object({ sites: RECORD, frames: keyed("id", object({})) }),
   }),
   // The map shard: the same strategy the view's map half had, word for word,
   // which is the whole benefit of moving the block rather than reshaping it. A

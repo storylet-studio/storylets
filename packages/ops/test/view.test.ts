@@ -113,7 +113,7 @@ describe("recording a move", () => {
     });
   });
 
-  it("keeps other decks, the map and anything else the file holds", () => {
+  it("keeps other decks and anything else the file holds", () => {
     // A save by this version must not amputate what another view, or a NEWER
     // version of the app, put in the same file.
     const view = {
@@ -121,12 +121,10 @@ describe("recording a move", () => {
       canvases: {
         k_other: { cards: { c_z: { x: 1, y: 2 } }, notes: [{ id: "n_1", x: 0, y: 0, w: 10, h: 10, text: "hi" }] },
       },
-      map: { sites: { h_all: { x: 5, y: 6, zone: "v_docks" } } },
       somethingNewer: { keep: true },
     } as unknown as ViewShard;
     const shard = written(planCardPositions("/p", box(view), "k_arrival", [{ id: "c_gate", x: 0, y: 0 }]));
     expect(shard.canvases?.["k_other"]).toEqual(view.canvases!["k_other"]);
-    expect(shard.map).toEqual({ sites: { h_all: { x: 5, y: 6, zone: "v_docks" } } });
     expect((shard as unknown as { somethingNewer: unknown }).somethingNewer).toEqual({ keep: true });
   });
 
@@ -208,18 +206,15 @@ describe("the sidecar never reaches the bundle", () => {
     expect(JSON.stringify(arranged.bundle)).toBe(JSON.stringify(plain.bundle));
   });
 
-  it("ships no site without `export.map`, but hashes it, because sites are shape", () => {
-    // The old view-shard address of a box's map, read because the box has no
-    // map shard. Sites are what a venue provisions kiosks against
-    // (design/engine-server.md 4.3), so moving one makes a committed bundle
-    // stale whether or not this export carries the geometry, as a zone polygon
-    // does. The hash is the only byte that moves.
-    const view: ViewShard = { schema: VIEW_SCHEMA, map: { sites: { h_all: { x: 5, y: 6 } } } };
+  it("reads nothing from a map left in the view shard, not even for the hash", () => {
+    // The old view-shard address of a box's map, not read since 1.0.0: the map
+    // shard is the only one, so a copy left here neither ships nor moves the
+    // hash.
+    const view = { schema: VIEW_SCHEMA, map: { sites: { h_all: { x: 5, y: 6 } } } } as ViewShard;
     const plain = compileProject(onMap(box()));
     const placed = compileProject(onMap(box(view)));
     expect(placed.issues).toEqual(plain.issues);
-    expect(placed.bundle!.content.hash).not.toBe(plain.bundle!.content.hash);
-    expect(JSON.stringify({ ...placed.bundle, content: plain.bundle!.content })).toBe(JSON.stringify(plain.bundle));
+    expect(JSON.stringify(placed.bundle)).toBe(JSON.stringify(plain.bundle));
   });
 
   it("never ships the box's colour, even when the map's geometry does", () => {

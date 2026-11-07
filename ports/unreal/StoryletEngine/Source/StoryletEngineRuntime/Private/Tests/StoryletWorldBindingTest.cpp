@@ -94,7 +94,6 @@ bool FStoryletWorldBindingTest::RunTest(const FString& Parameters)
 	if (!TestNotNull(TEXT("engine with world"), Engine)) return false;
 	TestEqual(TEXT("GetHostScope(\"world\")"), Engine->GetHostScope(TEXT("world")), World);
 	TestNull(TEXT("a token is case-sensitive"), Engine->GetHostScope(TEXT("World")));
-	TestEqual(TEXT("GetBoundWorld, the deprecated name, still answers"), Engine->GetBoundWorld(), World);
 
 	UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
 	if (!TestNotNull(TEXT("flow opens"), Flow)) return false;

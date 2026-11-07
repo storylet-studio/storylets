@@ -97,8 +97,8 @@ them. See [The project map](#the-project-map) below.
 Before October 2026 a map belonged to one box, held in its tags shard with the pictures in
 the box's own `assets/` folder, and boxes that shared a map each kept a copy. Such a project
 doesn't compile until it's moved on. Earlier still, before September 2026, the positions lived
-inside `view.storyletview`; that still compiles, with a warning, for one more release.
-Storyletter offers the upgrade when you open either kind, and `storyletengine format` does the
+inside `view.storyletview`; those are no longer read, and `storyletengine format` drops them.
+Storyletter offers the upgrade when you open a project with per-box maps, and `storyletengine format` does the
 same from the command line (see
 [Projects made before the project map](/storyletter/maps/#projects-made-before-the-project-map)).
 
@@ -637,8 +637,8 @@ Reading a card top to bottom:
 - **`weight`** (absent here, so 1) is how often the card comes up beside cards of equal rank.
 - **`inOneHand`** (absent here, so 1) is how many slots of one hand it may fill at once.
 - **`acrossHands`** (absent here, so `"one"`) says whether several hands may hold it at
-  once, counted within one playthrough: `"one"` or `"any"`. It replaces `copies`, which
-  `storyletengine format` rewrites as `acrossHands`. Each of these three, absent, takes the
+  once, counted within one playthrough: `"one"` or `"any"`. It replaces `copies`, which the
+  compiler refuses, and `storyletengine format` rewrites as `acrossHands`. Each of these three, absent, takes the
   box's Card template default too.
 - **`shared`** makes the card scarce across [flows](/play/world-state/#shared-or-per-flow),
   one goblin in the whole world rather than one each. Absent, it takes its deck's flag, so the

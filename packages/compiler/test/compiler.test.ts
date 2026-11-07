@@ -208,10 +208,9 @@ describe("the map's geometry carries where the hands stand", () => {
    *  so that sorting by id and sorting by gameId disagree: "well" is h_1 and
    *  "forge" is h_2.
    *
-   *  `where` is the compatibility window (design/engine-server.md 9.1 point 5):
-   *  "map" is the shard the positions live in now, "view" the one every project
-   *  written before 2026-09-06 keeps them in, and the block compiles the same
-   *  from either. */
+   *  `where` is "map", the shard the positions live in, or "view", the old
+   *  address a project written before 2026-09-06 kept them at, which is not
+   *  read since 1.0.0 (design/engine-server.md 9.1 point 5). */
   const drawn = (
     sites?: Record<string, { x: number; y: number }>, where: "map" | "view" = "map",
   ): SourceProject => parseNoErrors([
@@ -269,12 +268,9 @@ describe("the map's geometry carries where the hands stand", () => {
     expect(compileMaps(drawn({}))!.sites).toBeUndefined();
   });
 
-  it("compiles the same block from a map still living in the view shard", () => {
-    // The whole point of the split (design/engine-server.md 9.1 point 5): the
-    // bundle did not change, so no port moved and no corpus case did either.
+  it("ships no site from a map left in the view shard", () => {
     const placed = { h_1: { x: 7, y: 8 }, h_2: { x: 5, y: 6 } };
-    expect(JSON.stringify(compileMaps(drawn(placed, "view"))))
-      .toBe(JSON.stringify(compileMaps(drawn(placed, "map"))));
+    expect(compileMaps(drawn(placed, "view"))!.sites).toBeUndefined();
   });
 
   it("leaves out a hand nobody has placed", () => {
@@ -297,11 +293,11 @@ describe("the map's geometry carries where the hands stand", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The map's old address, read for one release (design/engine-server.md 9.1
-// point 5). A reader may not repair a project, so it says where the map is and
-// what will move it, once per box, and gets on with compiling.
+// The map's old address (design/engine-server.md 9.1 point 5), not read since
+// 1.0.0: a map left in a view shard is dropped as the shard is read, without a
+// word, and the map shard is the only address.
 // ---------------------------------------------------------------------------
-describe("a map still living in the view shard", () => {
+describe("a map left in the view shard", () => {
   const file = (path: string, value: unknown): SourceFile => ({ path, text: canonicalStringify(value) });
   const boxFiles = (extra: SourceFile[]): SourceFile[] => [
     file("p.storyletproj", {
@@ -326,22 +322,16 @@ describe("a map still living in the view shard", () => {
     schema: "storylets/map@0", map: { sites: { h_1: { x: 3, y: 4 } } },
   });
 
-  it("warns, naming the command that moves it, and keeps reading it", () => {
+  it("is ignored: dropped from the view shard as it is read, and nothing said", () => {
     const { project, issues } = parseProjectFiles(boxFiles([view]));
-    expect(errors(issues)).toEqual([]);
-    expect(warnings(issues)).toEqual([
-      "this project's map lives in the view shard; open it in Storyletter or run `storyletengine format` to move it; the view shard's map is ignored after the next release",
-    ]);
-    expect(issues[0]!.path).toBe("b/view.storyletview");
-    expect(project!.boxes[0]!.view!.map!.sites).toEqual({ h_1: { x: 1, y: 2 } });
+    expect(issues).toEqual([]);
+    expect("map" in project!.boxes[0]!.view!).toBe(false);
+    expect(boxMapOf(project!.boxes[0]!)).toBeUndefined();
   });
 
-  it("says the copy is IGNORED when the box has both, and the map shard wins", () => {
+  it("leaves the map shard the one address when the box has both", () => {
     const { project, issues } = parseProjectFiles(boxFiles([view, map]));
-    expect(errors(issues)).toEqual([]);
-    expect(warnings(issues)).toEqual([
-      "the map lives in map.storyletmap now, and the view shard still carries a copy; the map shard is used and this copy is ignored; run `storyletengine format` to remove it",
-    ]);
+    expect(issues).toEqual([]);
     expect(boxMapOf(project!.boxes[0]!)!.sites).toEqual({ h_1: { x: 3, y: 4 } });
   });
 
@@ -580,6 +570,21 @@ describe("publish-gate validation", () => {
     expect("weight" in two!).toBe(false);
   });
 
+  // `copies` left the source model in 1.0.0. A shard that still says it is
+  // refused, naming the command that rewrites it, and never reaches a bundle:
+  // only a runtime reading an old bundle still knows the word.
+  it("refuses a card that still says copies, and ships none", () => {
+    const result = compileFiles(minimal([
+      { id: "c_1", gameId: "c1", copies: 3, outcomes: [] },
+      { id: "c_2", gameId: "c2", copies: 1, acrossHands: "one", outcomes: [] },
+    ] as never));
+    const refused = result.issues.filter((i) => i.field === "copies");
+    expect(refused.map((i) => [i.severity, i.where, i.message])).toEqual([
+      ["error", "c1", "copies is replaced by acrossHands: run `storyletengine format` to rewrite it"],
+      ["error", "c2", "copies is replaced by acrossHands: run `storyletengine format` to rewrite it"],
+    ]);
+  });
+
   it("refuses a dealing rule that isn't one", () => {
     const result = compileFiles(minimal([
       { id: "c_1", gameId: "c1", weight: 0, inOneHand: 1.5, acrossHands: "two", outcomes: [] },
@@ -803,9 +808,9 @@ describe("publish-gate validation", () => {
     expect(fieldOf(cond, "nope")).toBe("condition");
 
     const copies = compileFiles(minimal([
-      { id: "c_1", gameId: "c1", copies: 0, outcomes: [] },
-    ])).issues;
-    expect(fieldOf(copies, "copies must be an integer")).toBe("copies");
+      { id: "c_1", gameId: "c1", copies: 2, outcomes: [] },
+    ] as never)).issues;
+    expect(fieldOf(copies, "copies is replaced by acrossHands")).toBe("copies");
 
     const fields = compileFiles(minimal([
       { id: "c_1", gameId: "c1", fields: { nosuch: "x" }, outcomes: [] },

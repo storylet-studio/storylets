@@ -20,7 +20,7 @@ the format reference.
 
 | Area | What it is |
 |------|------------|
-| [`packages/`](packages) | The `@storylet-studio/*` npm workspaces (see below): model, compiler, runtime, ops, CLI, and the Storyletter app. |
+| [`packages/`](packages) | The `@storylet-studio/*` npm workspaces (see below): the libraries, the compiler, the JS runtime, the CLI, the Storyletter app and the playable demos. |
 | [`ports/`](ports) | The native Storylet Engine runtimes: Unity (C#), Unreal (C++), Godot (GDScript), each with a demo and held to the shared corpus. |
 | [`website/`](website) | The [storylets.dev](https://storylets.dev) documentation site (Astro + Starlight). |
 | [`examples/`](examples) | Worked example projects, from a 16-card slice to the full 86-card Village. |
@@ -28,18 +28,23 @@ the format reference.
 
 ## Packages (`@storylet-studio/*`)
 
-An npm-workspaces monorepo under `packages/`, layered bottom-up:
+An npm-workspaces monorepo under `packages/`, layered bottom-up. Five are published to npm:
+`model`, `dialect`, `runtime`, `play-helpers` and `with-patter`; the rest are private, and the
+CLI ships as standalone binaries.
 
 | Package | Role |
 |---------|------|
 | **`model`** | The data-model types: source shards (project / box / tags / hands / decks), the compiled bundle, the save envelope. The shape source-of-truth. |
-| **`dialect`** | The storylets expression dialect for the expression engine: the five scopes (`@world`, `@story`, `@box`, `@deck`, `@hand`) and the built-in functions. |
+| **`dialect`** | The storylets expression dialect for the expression engine: the engine's scopes (`@story`, `@box`, `@deck`, `@hand`), the game's own host scopes (such as `@world`), and the built-in functions. |
 | **`compiler`** | `.storylets` shards in, a validated `.storyletsc` bundle out. Canonical serialisation, the publish gate, and the staleness gate. |
 | **`runtime`** | The JS reference runtime: an engine over the bundle and shared state, and a flow per playthrough (peek, deal, board, outcomes, play). Held to the corpus. |
 | **`ops`** | The shared operations layer. Every project operation (init, export, validate, format, deal, merge, pack, coverage) as a pure function. The CLI and the editor are thin front-ends over it. |
 | **`cli`** | The **`storyletengine`** command. |
 | **`studio`** | **Storyletter**, the desktop editor (Electron). |
 | **`play-helpers`** | Browser-side helpers for the JS runtime: the state logger, save-file plumbing. |
+| **`with-patter`** | Storylets with Patter: performs a dealt card as the Patter scene named after it and takes the outcome the scene reaches. |
+| **`hamlet-client`** | The Hamlet, a playable browser game: the Storylet Engine choosing the beat and Patter performing it. |
+| **`village-client`** | The Village, a playable browser game and a worked example of the engine API. |
 | **`conformance`** | A language-agnostic JSON corpus every runtime must pass. The cross-language parity contract. |
 
 The expression engine and version-control awareness live in sibling repos and are
@@ -54,7 +59,7 @@ A project is a **folder**, not a file, so that a team can merge it.
 | Extension | Role | Source of truth? |
 |-----------|------|------------------|
 | `.storylets` | The **project**: a folder of shards (a package on macOS, a plain folder elsewhere) | yes (it *is* the source tree) |
-| `.storyletproj` | Project settings, `@world` and `@story` declarations, export config | yes |
+| `.storyletproj` | Project settings, the `@story` declarations, the game's host scopes (`scopeRegistry`), export config | yes |
 | `.storyletbox` | One box: the card template, `@box` properties, the ranking toggle | yes |
 | `.storylettags` | Tag groups, their tags and each tag's properties, and map outlines | yes |
 | `.storylethands` | Hand templates and hands | yes |

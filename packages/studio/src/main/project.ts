@@ -136,9 +136,7 @@ const cardDto = (box: SourceBox, card: Card<string>, patter?: PatterScenes): Car
     tags: chipValues(box, card.tags),
     weight: card.weight === undefined ? "" : String(card.weight),
     inOneHand: card.inOneHand === undefined ? "" : String(card.inOneHand),
-    // A card from before acrossHands, saying copies above one, reads as "any".
-    ...(card.acrossHands !== undefined ? { acrossHands: card.acrossHands }
-      : card.copies !== undefined ? { acrossHands: card.copies > 1 ? "any" as const : "one" as const } : {}),
+    ...(card.acrossHands !== undefined ? { acrossHands: card.acrossHands } : {}),
     ...(card.shared !== undefined ? { shared: card.shared } : {}),
     sharedCopies: card.sharedCopies === undefined ? "" : String(card.sharedCopies),
     ...(card.durable !== undefined ? { durable: card.durable } : {}),

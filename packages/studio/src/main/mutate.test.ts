@@ -1865,7 +1865,7 @@ describe("canvas furniture", () => {
       { frames: [onMap] }, "Draw a frame");
     const view = parseSource(readFileSync(sidecar(session), "utf8")) as ViewShard;
     expect(view.canvases![docks]!.frames).toEqual([frame]);
-    expect(view.map).toBeUndefined();
+    expect("map" in view).toBe(false);
     const map = parseSource(readFileSync(mapShard(session), "utf8")) as ProjectMapShard;
     expect(map.frames).toEqual([onMap]);
   });
@@ -1920,12 +1920,12 @@ describe("canvas furniture", () => {
     expect(readFileSync(mapShard(session), "utf8")).toBe(before);
   });
 
-  // --- the migration, from the app's side ------------------------------------
+  // --- the old address, from the app's side ------------------------------------
   //
-  // A project written before the split keeps its map under `map` in the view
-  // shard. Storyletter never writes it back there: the first map edit of a box
-  // moves the block, in the same commit and therefore the same undo step.
-  it("moves a map out of an old view shard on the first map edit", async () => {
+  // A project written before the split kept its map under `map` in the view
+  // shard. Since 1.0.0 nothing reads it: a map edit starts from the map shard
+  // alone and leaves the view shard's bytes as they were.
+  it("ignores a map left in an old view shard", async () => {
     const session = scratchProject();
     const hands = session.loaded.source!.boxes.find((b) => b.box.box.id === encBox)!.hands.hands;
     const hand = hands[0]!.id;
@@ -1937,24 +1937,16 @@ describe("canvas furniture", () => {
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     const live = reopened.session;
-    // The box's map shard holds its SITES now (the frames are the project
-    // map's), so the edit that moves the block is a site edit.
     const boxMapShard = join(live.loaded.dir, "encounters", "map.storyletmap");
+    const viewBefore = readFileSync(sidecar(live), "utf8");
+    const other = hands[1]?.id ?? hand;
 
-    await moveSitesOnMap(live, encBox, "d_zone", [{ id: hand, x: 7, y: 8 }]);
+    await moveSitesOnMap(live, encBox, "d_zone", [{ id: other, x: 7, y: 8 }]);
 
+    // Only the new site: the old copy's is not carried over.
     const map = parseSource(readFileSync(boxMapShard, "utf8")) as MapShard;
-    expect(map.map.sites).toEqual({ [hand]: { x: 7, y: 8 } });
-    const view = parseSource(readFileSync(sidecar(live), "utf8")) as ViewShard;
-    expect(view.map).toBeUndefined();
-    // The author's canvas is left exactly where it was.
-    expect(view.canvases![docks]!.cards).toEqual({ c_1: { x: 1, y: 2 } });
-
-    // One gesture, one undo: the move rides the edit that triggered it.
-    await undo(live);
-    const back = parseSource(readFileSync(sidecar(live), "utf8")) as ViewShard;
-    expect(back.map!.sites).toEqual({ [hand]: { x: 5, y: 6 } });
-    expect(existsSync(boxMapShard)).toBe(false);
+    expect(map.map.sites).toEqual({ [other]: { x: 7, y: 8 } });
+    expect(readFileSync(sidecar(live), "utf8")).toBe(viewBefore);
   });
 
 });

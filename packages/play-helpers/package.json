@@ -2,6 +2,16 @@
   "name": "@storylet-studio/play-helpers",
   "version": "0.17.0",
   "description": "Storylet Engine JS dev-experience layer: the state logger, save-file plumbing, and the in-page property examiner/editor. The runtime stays pure (no DOM, no I/O); everything that touches the host environment lives here.",
+  "homepage": "https://storylets.dev/play/javascript/",
+  "keywords": [
+    "storylets",
+    "storylet-studio",
+    "quality-based-narrative",
+    "narrative",
+    "interactive-fiction",
+    "live-link",
+    "save-files"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

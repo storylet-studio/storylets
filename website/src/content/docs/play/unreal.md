@@ -343,9 +343,9 @@ integration, and [Running it with Patter](/play/with-patter/) explains the hando
 `storylets::StoryletEngineVersion` (Blueprint: `Get Storylet Engine Version`) is this runtime's
 version, as in its `.uplugin`. A game, a tool or an extension that ships apart from the Storylet
 Engine checks at start-up that the one it finds is one it was built for:
-`storylets::versionInRange(storylets::StoryletEngineVersion, "0.15.0", "0.16.0")` (Blueprint:
+`storylets::versionInRange(storylets::StoryletEngineVersion, "1.0.0", "2.0.0")` (Blueprint:
 `Storylet Engine Version In Range`, `UStoryletVersion::StoryletEngineVersionInRange`) is true
-from 0.15.0 up to, but not including, 0.16.0. It's false when any of the three isn't a version.
+from 1.0.0 up to, but not including, 2.0.0. It's false when any of the three isn't a version.
 Both are in `Storylets/Version.h`.
 
 ## How it's built
@@ -356,12 +356,6 @@ reference runtime. Everything else is the Unreal wrapper: `UStoryletBundle`, `US
 `UStoryletFlow`, `UStoryletWorld`, `UStoryletSave`, `FStoryletLiveLink`, `FStoryletDebug`, the
 Blueprint structs, the factory, the bundle's Details panel, and the Runtime State panel. Exceptions from the core are caught
 at that boundary and surfaced as error strings and logs, so Blueprint never sees one.
-
-The names these calls had before 1.0 (`SaveStateToJson`, `LoadStateFromJson`,
-`LoadStateFromJsonWithReport`, `PreviewLoadFromJson`, `OpenFlowFromJson`,
-`PreviewFlowRestoreJson`, `LoadDurableFromJson`, `OpenFlowWithDurableJson` and its seeded form,
-and `ApplyLiveBundleWithReport`, the last six handing the report back as JSON text) still work,
-and are marked deprecated.
 
 Some things stay C++ only: `SubscribeTrace` (Blueprint binds `OnTrace` instead), a generic value
 on the flow and engine property calls (Blueprint uses the typed accessors above), the registry

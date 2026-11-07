@@ -207,18 +207,11 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
     if ((tagsFile && !tagsParsed) || (handsFile && !handsParsed) || (viewFile && !viewParsed)
       || (mapFile && !mapParsed) || (notesFile && !notesParsed)) continue;
 
-    // The map's old address, read for one release. Warned about rather than
-    // repaired here, because a reader may not write: `storyletengine format` and
-    // Storyletter's own map writes are what actually move it.
-    const staleViewMap = (viewParsed?.value as { map?: unknown } | undefined)?.map !== undefined;
-    if (staleViewMap && viewFile) {
-      issues.push({
-        severity: "warning", path: viewFile.path, field: "map",
-        message: mapParsed
-          ? `the map lives in map${SHARD_EXTENSIONS.map} now, and the view shard still carries a copy; the map shard is used and this copy is ignored; run \`storyletengine format\` to remove it`
-          : "this project's map lives in the view shard; open it in Storyletter or run `storyletengine format` to move it; the view shard's map is ignored after the next release",
-      });
-    }
+    // The map's old address, in a view shard from before 2026-09-06, is not
+    // read since 1.0.0 and is dropped here, quietly, so nothing that writes the
+    // view shard back carries it on. `storyletengine format` takes it out of
+    // the file.
+    if (viewParsed) delete (viewParsed.value as { map?: unknown }).map;
 
     const decks = [];
     let decksOk = true;

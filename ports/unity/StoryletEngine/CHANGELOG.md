@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Needs Unity 6.** The package declares `"unity": "6000.0"` (it said 2021.3, which was never tested; the engine is
+  tested on 6000.4). Beside Patterplay it needs Patterplay 0.28.0 or newer, as the compile check already said.
+
 ## [0.17.0] - 2026-11-06
 
 ### Changed

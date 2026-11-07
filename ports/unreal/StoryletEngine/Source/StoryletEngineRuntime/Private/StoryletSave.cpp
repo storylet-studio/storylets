@@ -13,11 +13,6 @@
 
 namespace
 {
-	FString ReportJson(const storylets::LoadReport& Report)
-	{
-		return FString(UTF8_TO_TCHAR(storylets::reportToJson(Report).c_str()));
-	}
-
 	/** The engine's core, or null having noted why (on the engine when there
 	 *  is one, else only in the log). */
 	storylets::Engine* CoreFor(UStoryletEngine* Engine, const TCHAR* Verb)
@@ -176,31 +171,4 @@ bool UStoryletSave::PreviewLoad(UStoryletEngine* Engine, const FString& Json, FS
 	if (!Preview(Engine, Json, Report, TEXT("PreviewLoad"))) return false;
 	OutReport = StoryletLoadReportToUe(Report);
 	return true;
-}
-
-// --- the names before Patterplay's (deprecated) ------------------------------------
-
-FString UStoryletSave::SaveStateToJson(UStoryletEngine* Engine)
-{
-	return SaveState(Engine, TEXT("SaveStateToJson"));
-}
-
-bool UStoryletSave::LoadStateFromJson(UStoryletEngine* Engine, const FString& Json)
-{
-	return LoadState(Engine, Json, nullptr, TEXT("LoadStateFromJson"));
-}
-
-bool UStoryletSave::LoadStateFromJsonWithReport(UStoryletEngine* Engine, const FString& Json, FString& OutReportJson)
-{
-	OutReportJson.Reset();
-	storylets::LoadReport Report;
-	if (!LoadState(Engine, Json, &Report, TEXT("LoadStateFromJson"))) return false;
-	OutReportJson = ReportJson(Report);
-	return true;
-}
-
-FString UStoryletSave::PreviewLoadFromJson(UStoryletEngine* Engine, const FString& Json)
-{
-	storylets::LoadReport Report;
-	return Preview(Engine, Json, Report, TEXT("PreviewLoadFromJson")) ? ReportJson(Report) : FString();
 }

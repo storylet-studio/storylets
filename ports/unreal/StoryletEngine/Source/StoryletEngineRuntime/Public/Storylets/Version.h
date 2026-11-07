@@ -4,8 +4,8 @@
 // it was built for. Unreal's .uplugin can't declare a version range for a plugin it depends on, so the check runs
 // in code: StoryletEngineVersion says what this runtime is, and versionInRange tests it. The same pair as
 // Patterplay's (patter::PatterplayVersion, patter::versionInRange), held to the same corpus cases.
-// Something built for the Storylet Engine 0.15 checks
-// `storylets::versionInRange(storylets::StoryletEngineVersion, "0.15.0", "0.16.0")`.
+// Something built for the Storylet Engine 1.x checks
+// `storylets::versionInRange(storylets::StoryletEngineVersion, "1.0.0", "2.0.0")`.
 #pragma once
 
 #include <cstddef>

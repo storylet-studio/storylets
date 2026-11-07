@@ -46,10 +46,10 @@ pass, so this is something you can check, not something you hope for.
 
 A compiled [bundle](/format/bundle/) declares a **schema version** (`storylets/bundle@N`). A
 runtime plays any bundle whose schema it supports and refuses any other by name. The current
-runtimes read `storylets/bundle@1`, the bundle that can carry the project map, and the earlier
-`@0`. That version is the one thing that cuts
-across everything, because bumping it is the one change that moves every runtime together.
-Each runtime, the editor, and the CLI otherwise version on their own.
+runtimes read `storylets/bundle@2`, the bundle whose game scopes are `scopeRegistry`, and the
+earlier `@1` and `@0`. That version is the one thing that cuts across everything, because
+bumping it is the one change that moves every runtime together. How the rest is numbered is
+below, in [Versions and compatibility](#versions-and-compatibility).
 
 | Runtime | Ships as | Get it |
 |---|---|---|
@@ -58,6 +58,46 @@ Each runtime, the editor, and the CLI otherwise version on their own.
 | **Storylet Engine Unreal** | Release zip: the plugin folder and a demo project | [Download](/download/) |
 | **Storylet Engine Godot** | Release zip: the addon folder | [Download](/download/) |
 | **`storyletengine` CLI** | Standalone binaries, one per platform | [Download](/download/) |
+
+## Versions and compatibility
+
+The Storylet Engine is at 1.0: its shape has settled. From here every public package, runtime,
+app and tool follows semantic versioning, with one meaning of "breaking" for all of them: a
+change that means your game, your project or your build has to change before it works again.
+
+- **A patch (1.0.x)** is fixes. Nothing that plays changes unless it was wrong.
+- **A minor (1.x.0)** adds: new API, new format fields with defaults, new features. Everything
+  that worked keeps working, unchanged.
+- **A major (2.0.0)** removes something or changes what it means, all gathered into one
+  release, with a migration guide and tooling. There's one when a break is worth it, not on a
+  calendar.
+
+What a minor may not break:
+
+- **Bundles.** A bundle compiled by any 1.x Storyletter or CLI plays on the same or any later
+  1.x runtime. The other way round isn't promised: a minor may add to the format, so compile
+  with a Storyletter or CLI no newer than the runtime you ship. The [Download](/download/) page
+  keeps them together.
+- **Saves.** A save written by any 1.x runtime loads in any later 1.x runtime.
+- **Projects.** A 1.x project opens in any later 1.x Storyletter, upgraded in place where a
+  field has changed.
+- **The public API** of all four runtimes: the JavaScript exports, Unity's public members,
+  Unreal's Blueprint nodes and public C++, and Godot's methods and signals. A removal or a
+  change of meaning waits for a major. A rename adds the new name and marks the old one
+  deprecated in each runtime's own way, and the old name stays until the next major.
+- **The expression kernel**, which the Storylet Engine shares with Patter: a kernel change is a
+  major on every runtime that carries it.
+
+Who shares a number:
+
+- **The four Storylet Engine runtimes share one version** and move together, with
+  `@storylet-studio/play-helpers` beside them. A feature lands in all four in one release, or
+  in none. This is the version your game sees, and the one a tool checks with `versionInRange`.
+- **The libraries** (`@storylet-studio/model`, `dialect` and `with-patter` on npm) have their
+  own versions. **Storyletter, the CLI and the Hamlet** have theirs, and release whenever a
+  library they carry moves, so a download never holds an older library than npm does.
+
+Deprecated API in force: none at 1.0.0. [What's new](/whats-new/) lists each release.
 
 ## The shared test suite
 

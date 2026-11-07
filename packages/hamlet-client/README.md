@@ -55,8 +55,7 @@ pinned. Each fails the build with a message naming it.
 Every claim here has a test in `test/plays.test.ts`: the loop closes, the joint
 save restores both engines and a scene paused mid-choice, a scene reads
 `@world`, a scene writes `@world` and a storylet card is dealt because of it.
-What building it turned up is in the workshop repo's `joint-demo-findings.md`;
-the short version is that both engines did what the design said, and every
-surprise was in the host.
+Building it, both engines did what the design said, and every surprise was in
+the host.
 
-The sixteen scenes are stubs: real plumbing, placeholder words.
+The seventeen scenes are stubs: real plumbing, placeholder words.

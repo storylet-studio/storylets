@@ -45,16 +45,15 @@ import { join } from "node:path";
 import { boxMapOf, canonicalStringify, describeDeclarations, sameDeclaration } from "@storylet-studio/compiler";
 import type { Issue, SourceBox, SourceProject } from "@storylet-studio/compiler";
 import {
-  MAP_SCHEMA, NOTES_SCHEMA, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS, VIEW_SCHEMA,
+  MAP_SCHEMA, NOTES_SCHEMA, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS,
   backgroundsOf, commentsOf, contractPropertyPath, effectiveGameId, isHoleRef, isSpatial, polygonOf,
 } from "@storylet-studio/model";
 import type {
-  Comment, ContractProperty, Frame, MapShard, NotesShard, ProjectMapShard, PropertyDecl, TagGroup, ViewShard,
+  Comment, ContractProperty, Frame, MapShard, NotesShard, ProjectMapShard, PropertyDecl, TagGroup,
 } from "@storylet-studio/model";
 import { ASSETS_DIR, assetPath, isSafeAssetName } from "./assets.js";
 import { notesPath } from "./comments.js";
 import { mapPath, projectMapPath } from "./map.js";
-import { viewPath } from "./view.js";
 
 /** A file the migration moves rather than rewrites: a picture, which no
  *  `PlannedWrite` can carry (its content is text). Absolute paths. */
@@ -67,7 +66,7 @@ export interface ProjectMapMigration {
   /** Absolute path -> the shard's new canonical content. */
   writes: Map<string, string>;
   /** Shards the move leaves with nothing in them (a box map shard that held
-   *  only frames, a view shard that held only a map). Absolute paths. */
+   *  only frames). Absolute paths. */
   removed: string[];
   moved: PlannedMove[];
   /** Refusals (errors: nothing is planned) and warnings (planned anyway). */
@@ -147,8 +146,8 @@ function remapRecord(record: Record<string, string> | undefined, ids: Map<string
   return out;
 }
 
-/** The view shard's legacy map and a map shard's frames, both typed out of the
- *  model now: read here, once, to be moved. */
+/** A box map shard's frames, typed out of the model now: read here, once, to
+ *  be moved. */
 const framesIn = (map: unknown): Frame[] => {
   const frames = (map as { frames?: unknown } | undefined)?.frames;
   return Array.isArray(frames) ? frames as Frame[] : [];
@@ -385,24 +384,17 @@ export function planProjectMapMigration(dir: string, original: SourceProject): P
       result.report.push(`box "${boxName}" is on the project map`);
     }
 
-    // Step 7: frames up to the project map, sites stay. A map still in its view
-    // shard (the first migration's case) is moved in the same breath.
+    // Step 7: frames up to the project map, sites stay.
     const boxFrames = framesIn(map);
     frames.push(...boxFrames);
-    if (map !== undefined && (boxFrames.length > 0 || box.view?.map !== undefined)) {
+    if (map !== undefined && boxFrames.length > 0) {
       const sites = map.sites;
       const mapShardPath = mapPath(dir, box);
       if (sites !== undefined && Object.keys(sites).length > 0) {
         const shard: MapShard = { schema: MAP_SCHEMA, map: { sites } };
         write(mapShardPath, shard);
-      } else if (box.map !== undefined) {
+      } else {
         result.removed.push(mapShardPath);
-      }
-      if (box.view?.map !== undefined) {
-        const view: ViewShard = { ...box.view, schema: VIEW_SCHEMA };
-        delete view.map;
-        const path = viewPath(dir, box);
-        if (Object.keys(view).length === 1) result.removed.push(path); else write(path, view);
       }
     }
 

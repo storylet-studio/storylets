@@ -1,6 +1,6 @@
 ---
 title: Designing cards
-description: Design cards in Storyletter, from the deck's three views to a card's condition, priority, redraw, copies, sharing, tags, fields, and outcomes.
+description: Design cards in Storyletter, from the deck's three views to a card's condition, priority, redraw, how many hands may hold it, sharing, tags, fields, and outcomes.
 sidebar:
   label: Designing cards
 ---
@@ -60,7 +60,7 @@ is yours, not the project's.
 
 A card carries no player-facing text. Its purpose is its story as far as your team is
 concerned, and reading a deck top to bottom reads the story's beats. Priority, redraw, and
-copies aren't on the face; they're one click away, inside the card.
+how many hands may hold it aren't on the face; they're one click away, inside the card.
 
 Getting around and editing works like this.
 

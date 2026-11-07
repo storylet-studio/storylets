@@ -1523,7 +1523,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             const std::string name = op.strOr("flow");
             // Through the STRING boundary, because that is the only door
             // Blueprint has (UStoryletEngine::SaveFlowToJson /
-            // OpenFlowFromJson) and nothing else would ever exercise it: a
+            // OpenFlowRestoring) and nothing else would ever exercise it: a
             // writer nothing runs is a writer that breaks. The blob that lands
             // in `parked` is the one that survived the round trip, so a
             // divergence shows up as a failing case rather than a UE-only bug.
@@ -1581,7 +1581,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         {
             // Through the STRING boundary, as parkFlow keeps its blob: it is
             // the only door Blueprint has (SaveDurableToJson /
-            // LoadDurableFromJson / OpenFlowWithDurableJson), and the half that
+            // LoadDurable / OpenFlowWithDurable), and the half that
             // lands here is the one that survived the round trip.
             std::optional<DurableSave> kept;
             try

@@ -167,8 +167,8 @@ it, the same upgrade Storyletter offers when it opens one. The map kept in a box
 root `map.storyletmap`, every box that held a copy or placed a hand is put on the map, the
 other boxes' references are rewritten to the kept map's zones, frames and map comments move
 to the project, and the pictures move to the project's `assets/` folder. It prints what it
-did. It also moves hand positions still kept in an old `view.storyletview` into the box's
-`map.storyletmap`.
+did. Hand positions still kept in an old `view.storyletview`, from before map files, are no
+longer read, and it drops them. It also rewrites a card's old `copies` as `acrossHands`.
 
 It refuses, writing nothing, when the copies of a map disagree (a zone one has and another
 hasn't, a zone drawn differently, different zone properties or starting values, or a map
@@ -244,7 +244,7 @@ wrote The Hamlet.xlsx: 17 card(s) on 5 deck sheet(s), 25 outcome(s), 3 hand(s), 
 
 The workbook opens on an **Overview** sheet (the project's name, version, and content hash,
 when it was generated, counts, and an index of the deck sheets), then **one sheet per deck**,
-named after the deck. Each row is a card: Title, gameId, When, Priority, Redraw, Copies, a
+named after the deck. Each row is a card: Title, gameId, When, Priority, Redraw, Weight, In one hand, Across hands, a
 column per tag group, a column per card field, Purpose, and the card's outcomes with their
 changes. After the decks come **Outcomes** (one row per outcome, for filtering), **Hands**
 (hand, template, When, tags, slots, purpose), and **Tag groups** (every tag with its

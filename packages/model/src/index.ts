@@ -514,7 +514,7 @@ export interface CardDefaults {
   acrossHands?: "one" | "any";
 }
 
-export interface Card<E> {
+export interface CardFields<E> {
   /** Bundle only: this node's extension values, by extension id, raw as
    *  authored (editor-only fields stripped). Source keeps them in extension
    *  shards, never here. Absent when the node has none. */
@@ -551,13 +551,10 @@ export interface Card<E> {
   inOneHand?: number;
   /** Whether several hands may hold this card at once, within a flow:
    *  "one" (the default, a one-off can't be offered in two places) or "any"
-   *  (interchangeable filler). Replaces `copies`. */
+   *  (interchangeable filler). Replaces `copies`, which a shard from before it
+   *  may still hold: the compiler refuses it, and `storyletengine format`
+   *  rewrites it as this (1 is "one", more is "any"). */
   acrossHands?: "one" | "any";
-  /** @deprecated Read when `acrossHands` is absent, for a bundle from before
-   *  it: how many hands may hold this card at once (schema 3.5), integer >= 1,
-   *  default 1. `storyletengine format` writes `acrossHands` in its place
-   *  (1 is "one", more is "any"). */
-  copies?: number;
   /** Scarcity across flows (design/shared-scarcity.md). Absent takes the
    *  deck's flag; set here it overrides the deck, so a single unique card can
    *  stay in the content it belongs to. A shared card's claims count every
@@ -571,8 +568,8 @@ export interface Card<E> {
   shared?: boolean;
   /** The world cap: how many hands ACROSS EVERY FLOW may hold this at once.
    *  Read only when the card is shared, and defaults to the per-flow limit
-   *  (one hand, or `copies`), so "five in the world, one to a customer" is
-   *  `sharedCopies: 5`. */
+   *  (one hand, or no limit under `acrossHands: "any"`), so "five in the
+   *  world, one to a customer" is `sharedCopies: 5`. */
   sharedCopies?: number;
   /** Does this card's `redraw: "never"` spend survive the run
    *  (design/engine-server.md 4.2)? Absent takes the deck's flag, set here it
@@ -592,6 +589,21 @@ export interface Card<E> {
   fields?: Record<string, ScalarValue>;
   outcomes: Outcome<E>[];
 }
+
+/** A bundle card from before `acrossHands`: the one field a runtime still
+ *  reads for it. How many hands of a flow may hold the card at once (schema
+ *  3.5), integer >= 1, default 1, read only when `acrossHands` is absent. Never
+ *  written any more, and not part of the source model: a shard that still says
+ *  `copies` is refused by the compiler and rewritten by `storyletengine format`. */
+export interface LegacyBundleCard {
+  /** @deprecated Read from an old bundle only; see `LegacyBundleCard`. */
+  copies?: number;
+}
+
+/** A card. Source cards hold their expressions as strings (`Card<string>`);
+ *  bundle cards as `{ src, ast }` envelopes (`Card<Expression>`), which alone
+ *  may carry an old bundle's `copies`. */
+export type Card<E> = CardFields<E> & (E extends string ? unknown : LegacyBundleCard);
 
 export interface Deck<E> {
   /** Bundle only: this node's extension values, by extension id, raw as
@@ -1687,8 +1699,8 @@ export interface DeckCanvas extends CanvasFurniture {
 }
 
 /** The box's map: where its hands stand on the PROJECT map, and nothing else.
- *  Carried by the MAP shard since 2026-09-06; `ViewShard.map` is the old
- *  address, read for one release and never written.
+ *  Carried by the MAP shard since 2026-09-06. The view shard's old `map` is
+ *  not read since 1.0.0.
  *
  *  No furniture since the project map (design/project-map-contract.md 1.3): the
  *  frames belong to the one map, in `ProjectMapShard`. A box map shard that
@@ -1737,11 +1749,6 @@ export interface ViewShard {
    *  another. Arrangement like everything else here, so it never reaches the
    *  bundle. */
   colour?: number;
-  /** @deprecated The box map's old address, kept for one release and READ ONLY.
-   *  A reader that meets it uses it when the box has no `MapShard`, and the
-   *  formatter moves it; nothing writes it any more. Removed after the next
-   *  release, at which point a map left here is simply lost. */
-  map?: BoxMap;
 }
 
 /** The DESIGNER's map for one box: where its hands stand on the project map.
@@ -1755,9 +1762,10 @@ export interface ViewShard {
  *
  *  The map is NESTED under `map` rather than flattened to the top level, and
  *  deliberately: the block's bytes are then exactly what the view shard held, so
- *  the migration is a move of a value rather than a reshaping of it, the merge
- *  strategy carries over word for word, and a reader that has to look in both
- *  places is one expression (`box.map?.map ?? box.view?.map`).
+ *  the migration was a move of a value rather than a reshaping of it, and the
+ *  merge strategy carried over word for word. The view shard's old `map` is no
+ *  longer read (1.0.0): a map left there is ignored, and `storyletengine
+ *  format` drops it.
  *
  *  Source-only in the sense the view shard is not: `compileMaps` reads the
  *  positions for the bundle's `map.geometry`, under `export.map`, for a box that

@@ -421,10 +421,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	UStoryletWorld* GetHostScope(const FString& Token) const;
 
-	/** The name before host scopes: GetHostScope("world"). */
-	UFUNCTION(BlueprintPure, Category = "Storylet Engine", meta = (DeprecatedFunction, DeprecationMessage = "Use GetHostScope(\"world\"), the name every runtime uses."))
-	UStoryletWorld* GetBoundWorld() const { return GetHostScope(TEXT("world")); }
-
 	/** Fired when OpenFlow (or OpenFlowRestoring) replaces a flow that still
 	 *  had cards dealt, with its id and how many, before the old flow goes
 	 *  inert. Behaviour is unchanged; this makes visible the host that opens
@@ -536,14 +532,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Save")
 	bool PreviewFlowRestore(const FString& Id, const FString& Json, FStoryletLoadReport& OutReport) const;
 
-	/** OpenFlowRestoring with the report as JSON text (empty on a refusal). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use OpenFlowRestoring, which hands the report back as an FStoryletLoadReport."))
-	UStoryletFlow* OpenFlowFromJson(const FString& Id, const FString& Json, FString& OutReportJson);
-
-	/** PreviewFlowRestore with the report as JSON text (empty on a refusal). */
-	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use PreviewFlowRestore, which hands the report back as an FStoryletLoadReport."))
-	FString PreviewFlowRestoreJson(const FString& Id, const FString& Json) const;
-
 	// --- durable state (ruling H) ------------------------------------------------
 	//
 	// What outlives a run: a `durable` property's value and a `durable` card's
@@ -592,18 +580,6 @@ public:
 	 *  to OpenFlow. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
 	UStoryletFlow* OpenFlowWithDurableSeeded(const FString& Id, const FString& Json, int32 Seed, FStoryletLoadReport& OutReport);
-
-	/** LoadDurable with the report as JSON text (empty on a refusal). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use LoadDurable, which hands the report back as an FStoryletLoadReport."))
-	bool LoadDurableFromJson(const FString& Json, FString& OutReportJson);
-
-	/** OpenFlowWithDurable with the report as JSON text (empty on a refusal). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use OpenFlowWithDurable, which hands the report back as an FStoryletLoadReport."))
-	UStoryletFlow* OpenFlowWithDurableJson(const FString& Id, const FString& Json, FString& OutReportJson);
-
-	/** OpenFlowWithDurableSeeded with the report as JSON text (empty on a refusal). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save", meta = (DeprecatedFunction, DeprecationMessage = "Use OpenFlowWithDurableSeeded, which hands the report back as an FStoryletLoadReport."))
-	UStoryletFlow* OpenFlowWithDurableJsonSeeded(const FString& Id, const FString& Json, int32 Seed, FString& OutReportJson);
 
 	/** Close every flow and reseed the shared state to its defaults. Values
 	 *  loaded into the registry for this engine and not yet claimed are
@@ -683,11 +659,6 @@ public:
 	 *  retyped. A default report when the swap is refused. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Live Link")
 	bool ApplyLiveBundleWithLoadReport(UStoryletBundle* NewBundle, FString& OutError, FStoryletLoadReport& OutReport);
-
-	/** ApplyLiveBundleWithLoadReport with the report as JSON text (empty when
-	 *  the swap is refused). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Live Link", meta = (DeprecatedFunction, DeprecationMessage = "Use ApplyLiveBundleWithLoadReport, which hands the report back as an FStoryletLoadReport."))
-	bool ApplyLiveBundleWithReport(UStoryletBundle* NewBundle, FString& OutError, FString& OutReportJson);
 
 	// --- persistence (schema 4) -------------------------------------------------
 	//
@@ -772,18 +743,18 @@ private:
 	 *  core refuses. */
 	UStoryletFlow* OpenFlowWith(const FString& Id, const storylets::OpenFlowOptions& Options, const TCHAR* Verb);
 
-	/** Where a restore's or a load's LoadReport goes: the struct or the JSON
-	 *  text, as the public form asked. */
+	/** Where a restore's or a load's LoadReport goes: into the public form's
+	 *  struct, or nowhere when the form hands none back. */
 	using FReportSink = TFunction<void(const storylets::LoadReport&)>;
 
-	/** OpenFlowRestoring and OpenFlowFromJson: the flow parsed from Json and
-	 *  restored, the report into Sink. */
+	/** OpenFlowRestoring: the flow parsed from Json and restored, the report
+	 *  into Sink. */
 	UStoryletFlow* OpenFlowRestoringWith(const FString& Id, const FString& Json, const FReportSink& Sink, const TCHAR* Verb);
 
-	/** PreviewFlowRestore and PreviewFlowRestoreJson. */
+	/** PreviewFlowRestore. */
 	bool PreviewFlowRestoreWith(const FString& Id, const FString& Json, const FReportSink& Sink, const TCHAR* Verb) const;
 
-	/** LoadDurable and LoadDurableFromJson. */
+	/** LoadDurable. */
 	bool LoadDurableWith(const FString& Json, const FReportSink& Sink, const TCHAR* Verb);
 
 	/** The durable opens: the pocket parsed from Json, the seed when given,
@@ -791,7 +762,7 @@ private:
 	UStoryletFlow* OpenFlowDurableWith(const FString& Id, const FString& Json, TOptional<int32> Seed,
 		const FReportSink& Sink, const TCHAR* Verb);
 
-	/** ApplyLiveBundleWithLoadReport and ApplyLiveBundleWithReport. */
+	/** ApplyLiveBundle and ApplyLiveBundleWithLoadReport. */
 	bool ApplyLiveBundleWith(UStoryletBundle* NewBundle, FString& OutError, const FReportSink& Sink);
 
 	UPROPERTY()

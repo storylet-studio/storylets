@@ -10,6 +10,14 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Removed
+
+- **The old Copies setting.** A card from before Across hands is no longer read as Across hands: it shows a problem
+  saying Across hands has replaced Copies, and choosing Across hands on its Dealing tab clears it. Upgrading the
+  project from the command line (`storyletengine format`) rewrites every such card at once.
+- **Map positions in a box's view file.** Hand positions left in `view.storyletview` from before map files (September
+  2026) are no longer read, and the editor no longer moves them on the first map edit.
+
 ## [0.28.1] - 2026-11-06
 
 ### Fixed

@@ -5,8 +5,10 @@
   "type": "module",
   "description": "The Storylet Studio landing + docs site: a static Astro + Starlight build for storylets.dev.",
   "scripts": {
+    "predev": "node scripts/whats-new.mjs",
     "dev": "astro dev",
-    "prebuild": "node scripts/build-village.mjs && node scripts/build-hamlet.mjs",
+    "prebuild": "node scripts/whats-new.mjs && node scripts/build-village.mjs && node scripts/build-hamlet.mjs",
+    "whats-new": "node scripts/whats-new.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "postbuild": "node scripts/check-docs.mjs",
