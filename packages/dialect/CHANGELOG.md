@@ -1,5 +1,11 @@
 # @storylet-studio/dialect
 
+## 1.0.0
+
+### Major Changes
+
+- 1f035ef: The first stable release: from 1.0.0 the dialect follows semver (see Versions and compatibility on storylets.dev). Nothing in its API changes; it now depends on `@wildwinter/expr` ^1.0.0.
+
 ## 0.3.2
 
 ### Patch Changes
