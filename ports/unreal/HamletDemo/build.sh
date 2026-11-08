@@ -9,7 +9,7 @@ PATTER_UNREAL_VERSION="1.0.0"
 zip="patterplay-unreal-${PATTER_UNREAL_VERSION}.zip"
 url="https://github.com/patterkit/patter/releases/download/play-unreal-v${PATTER_UNREAL_VERSION}/${zip}"
 tmp="$(mktemp -d)"
-curl -fsSL -o "$tmp/$zip" "$url" || { echo "build: could not fetch Patter's Unreal plugin $PATTER_UNREAL_VERSION from $url"; exit 1; }
+curl -fsSL --retry 12 --retry-all-errors --retry-delay 20 -o "$tmp/$zip" "$url" || { echo "build: could not fetch Patter's Unreal plugin $PATTER_UNREAL_VERSION from $url"; exit 1; }
 unzip -q "$tmp/$zip" -d "$tmp/unz"
 [ -f "$tmp/unz/Patterplay/Patterplay.uplugin" ] || { echo "build: $zip did not contain Patterplay/Patterplay.uplugin"; exit 1; }
 rm -rf "$here/../Patterplay"; cp -R "$tmp/unz/Patterplay" "$here/../Patterplay"

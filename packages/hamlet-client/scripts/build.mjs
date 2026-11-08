@@ -61,7 +61,13 @@ export function loadPublished() {
 export async function ensurePatterMin() {
   if (existsSync(patterMin)) return patterMin;
   mkdirSync(dirname(patterMin), { recursive: true });
-  const res = await fetch(patterMinUrl);
+  // GitHub's release downloads answer 5xx now and then, for minutes at a time: try again before giving up.
+  let res;
+  for (let attempt = 1; attempt <= 12; attempt++) {
+    res = await fetch(patterMinUrl).catch((e) => ({ ok: false, status: String(e) }));
+    if (res.ok || (typeof res.status === "number" && res.status < 500)) break;
+    if (attempt < 12) await new Promise((r) => setTimeout(r, 20_000));
+  }
   if (!res.ok) die(`could not fetch Patter's browser file ${PATTER_JS_VERSION} (${res.status}) from ${patterMinUrl}`);
   writeFileSync(patterMin, Buffer.from(await res.arrayBuffer()));
   return patterMin;
