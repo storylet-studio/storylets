@@ -11,7 +11,7 @@ PATTER_UNITY_VERSION="1.0.0"
 zip="patterplay-unity-${PATTER_UNITY_VERSION}.zip"
 url="https://github.com/patterkit/patter/releases/download/play-unity-v${PATTER_UNITY_VERSION}/${zip}"
 tmp="$(mktemp -d)"
-curl -fsSL --retry 12 --retry-all-errors --retry-delay 20 -o "$tmp/$zip" "$url" || { echo "build: could not fetch Patter's Unity package $PATTER_UNITY_VERSION from $url"; exit 1; }
+curl -fsSL -o "$tmp/$zip" "$url" || { echo "build: could not fetch Patter's Unity package $PATTER_UNITY_VERSION from $url"; exit 1; }
 unzip -q "$tmp/$zip" -d "$tmp/unz"
 [ -f "$tmp/unz/Patterplay/package.json" ] || { echo "build: $zip did not contain Patterplay/package.json"; exit 1; }
 rm -rf "$here/Packages/Patterplay"; cp -R "$tmp/unz/Patterplay" "$here/Packages/Patterplay"

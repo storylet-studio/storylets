@@ -16,7 +16,7 @@ cp -R "$root/ports/godot/addons/storyletengine" "$here/addons/storyletengine"
 zip="patterplay-godot-${PATTER_GODOT_VERSION}.zip"
 url="https://github.com/patterkit/patter/releases/download/play-godot-v${PATTER_GODOT_VERSION}/${zip}"
 tmp="$(mktemp -d)"
-curl -fsSL --retry 12 --retry-all-errors --retry-delay 20 -o "$tmp/$zip" "$url" || { echo "build: could not fetch Patter's Godot addon $PATTER_GODOT_VERSION from $url"; exit 1; }
+curl -fsSL -o "$tmp/$zip" "$url" || { echo "build: could not fetch Patter's Godot addon $PATTER_GODOT_VERSION from $url"; exit 1; }
 unzip -q "$tmp/$zip" -d "$tmp/unz"
 [ -f "$tmp/unz/patterplay/plugin.cfg" ] || { echo "build: $zip did not contain patterplay/plugin.cfg"; exit 1; }
 cp -R "$tmp/unz/patterplay" "$here/addons/patterplay"
