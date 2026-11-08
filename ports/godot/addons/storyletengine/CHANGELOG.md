@@ -10,10 +10,11 @@ the same version number always means the same runtime behaviour.
 
 ### Changed
 
-- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
-  never breaks a bundle, a save, a project or this runtime's public API. See
+- **Every 1.x plays the bundles and loads the saves you have today.** From 1.0.0 a patch fixes, a minor
+  adds, and only a major may change behaviour your game relies on, with its notes saying what and why. Every 1.x
+  reads `storylets/bundle@2`, `@1` and `@0` bundles. See
   [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
-- Nothing else of its own: released in lockstep with the other three.
+
 
 ## [0.17.0] - 2026-11-06
 

@@ -10,228 +10,250 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **What's New tells you more about each change.** Each entry now shows its headline and the sentences that explain
+  it, breaking changes come first and are marked, fixes are listed by what they fixed instead of counted, and a
+  release that only carries a new Patterplay takes one line. The same list is on storylets.dev's What's new page.
+
+
 ## [1.0.0] - 2026-11-08
+
+### Announcement
+
+- **Storylets 1.0.** Storyletter, the four Storylet Engine runtimes and the CLI are 1.0 today. That's a promise about
+  stability: your projects keep opening, your published bundles keep playing, and when a change would affect your
+  work, the version number will say so before it reaches you. [What's new](https://storylets.dev/whats-new/)
+
+### Highlights
+
+- **Your work is safe across updates**: a project from an earlier Storyletter opens in 1.0, and a bundle you publish
+  today will play in every Storylet Engine 1.x to come.
+- **Version numbers now tell you what an update does**: 1.0.1 and 1.0.2 are fixes, 1.1 and 1.2 add things without
+  taking anything away, and only a 2.0 may change how something you rely on works. When one does, its notes will say
+  what and why.
+- **Two old settings are gone**: a card's Copies, which Across hands replaced, and map positions kept in a box's view
+  file. A card that still has Copies shows a problem saying how to clear it.
 
 ### Changed
 
-- **Storyletter 1.0.** The first stable release. Projects, bundles and saves made by any 1.x open, play and load in
-  every later 1.x, and a game on this or any later 1.x Storylet Engine plays what this version publishes. See
-  [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
-- **Patter scenes play on Patter 1.0.** The Board and an exported playable page play a card's Patter scene with
-  Patterplay 1.0.0, in place of 0.46.0. Nothing changes how a scene plays.
+- **Patterplay 1.0.0 inside**, playing a card's Patter scene on the Board and in an exported playable page, in place
+  of 0.46.0. Nothing changes how a scene plays.
 
 ### Removed
 
-- **The old Copies setting.** A card from before Across hands is no longer read as Across hands: it shows a problem
-  saying Across hands has replaced Copies, and choosing Across hands on its Dealing tab clears it. Upgrading the
-  project from the command line (`storyletengine format`) rewrites every such card at once.
-- **Map positions in a box's view file.** Hand positions left in `view.storyletview` from before map files (September
-  2026) are no longer read, and the editor no longer moves them on the first map edit.
+- **The old Copies setting is gone**, replaced by Across hands. A card that still has it shows a problem saying so,
+  and choosing Across hands on its Dealing tab clears it. Upgrading the project from the command line
+  (`storyletengine format`) rewrites every such card at once.
+- **Map positions in a box's view file are no longer read.** Hand positions left in `view.storyletview` from before
+  map files (September 2026) are ignored, and the editor no longer moves them on the first map edit.
+
 
 ## [0.28.1] - 2026-11-06
 
 ### Fixed
 
-- **What's New's Full release notes link opens the release page.** It did nothing: Storyletter only let its About
-  links open in the browser. A link in a changelog announcement to storylets.dev or storylet.studio opens too.
+- **The Full release notes link in What's New works**: it opens the release page in your browser. It did nothing before,
+  because Storyletter only let its About links open in the browser. A link in a changelog announcement to storylets.dev
+  or storylet.studio opens too.
 
 ## [0.28.0] - 2026-11-06
 
 ### Changed
 
-- **A game catches up when it connects.** A game that says hello over Live Link on an older build (one started from
-  an older bundle, or back after edits) is sent the current bundle straight away, rather than at the next save.
-- **Unpublished edits.** While the connected game runs edits Live Link pushed that you haven't published, the Live
-  Link icon says **Unpublished edits**, as Patterpad's does. It clears once you publish the bundle.
-- **Patter scenes play on Patter 0.46.0.** The Board and an exported playable page play a card's Patter scene with
-  Patterplay 0.46.0, in place of 0.45.0. Nothing changes how a scene plays.
-- **Show Scene in Patterpad finds Patterpad as Patterpad finds Storyletter.** It looks where you last pointed it, then
-  the usual places, and only then searches the Mac, so Storyletter no longer stalls when Patterpad isn't installed.
-  When it can't find Patterpad it asks in Storyletter's own window, then remembers your answer. The questions an
-  extension's views ask appear in the window too, rather than in a system dialog.
-- **Games reconnect.** Every engine's Live Link client tries again when Storyletter restarts or turns its link on
-  after the game started (1 second, doubling to 10). A second game that connects takes the link, and the first stops
-  trying.
+- **A game catches up when it connects**: a game that says hello over Live Link on an older build (one started from an
+  older bundle, or back after edits) is sent the current bundle straight away, rather than at the next save.
+- **Live Link now shows when the game runs unpublished edits.** While the connected game runs edits Live Link pushed
+  that you haven't published, the Live Link icon says **Unpublished edits**, as Patterpad's does. It clears once you
+  publish the bundle.
+- **Patterplay 0.46.0 inside**, playing a card's Patter scene on the Board and in an exported playable page, in place of
+  0.45.0. Nothing changes how a scene plays.
+- **Show Scene in Patterpad finds Patterpad without stalling.** It looks where you last pointed it, then the usual
+  places, and only then searches the Mac, as Patterpad finds Storyletter, so Storyletter no longer stalls when Patterpad
+  isn't installed. When it can't find Patterpad it asks in Storyletter's own window, then remembers your answer. The
+  questions an extension's views ask appear in the window too, rather than in a system dialog.
+- **A game reconnects by itself when Storyletter comes back.** Every engine's Live Link client tries again when
+  Storyletter restarts or turns its link on after the game started (1 second, doubling to 10). A second game that
+  connects takes the link, and the first stops trying.
 
 ### Fixed
 
-- **A project paired with Patter no longer shows every game as a different build.** Live Link compared the game's
-  build with a stamp that also carried the Patter bundle's time, so the icon stayed red however in sync the game was.
+- **Live Link recognises an in-sync game when the project uses Patter.** A project paired with Patter used to show every
+  game as a different build, so the icon stayed red however in sync the game was. Live Link compared the game's build
+  with a stamp that also carried the Patter bundle's time.
 
 ## [0.27.4] - 2026-11-05
 
 ### Changed
 
-- **Patter scenes play on Patter 0.45.0.** The Board and an exported playable page play a card's Patter scene with
-  Patterplay 0.45.0, in place of 0.38.0. Nothing changes how a scene plays: the Board and the page show a scene as a
-  transcript the reader steps through, so Patter's quicker unvoiced lines (its 0.43.0) change no timing here.
+- **Patterplay 0.45.0 inside**, playing a card's Patter scene on the Board and in an exported playable page, in place of
+  0.38.0. Nothing changes how a scene plays: the Board and the page show a scene as a transcript the reader steps
+  through, so Patter's quicker unvoiced lines (its 0.43.0) change no timing here.
 
 ## [0.27.3] - 2026-10-30
 
 ### Changed
 
-- **Patter scenes play on Patter 0.38.0.** The Board and an exported playable page play a card's Patter scene with
-  Patterplay 0.38.0. Nothing changes how a scene plays.
+- **Patterplay 0.38.0 inside**, playing a card's Patter scene on the Board and in an exported playable page. Nothing
+  changes how a scene plays.
 
 ## [0.27.2] - 2026-10-30
 
 ### Changed
 
-- **Patter scenes play on Patter 0.37.0.** The Board and an exported playable page play a card's Patter scene with
-  Patterplay 0.37.0. Nothing changes how a scene plays.
-- **The About box in the brand's colours**, with "ter" in amber as the wordmark has it.
+- **Patterplay 0.37.0 inside**, playing a card's Patter scene on the Board and in an exported playable page. Nothing
+  changes how a scene plays.
+- **The About box now wears the brand's colours**, with "ter" in amber as the wordmark has it.
 
 ### Fixed
 
-- **A hand's cards sit in a row on the Board.** Picking a place on the map, or a hand in the list, now shows its
-  cards side by side, up to three to a row. They used to stack in a column with a blank space beside them as wide as
-  the cards.
+- **A hand's cards sit in a row on the Board.** Picking a place on the map, or a hand in the list, now shows its cards
+  side by side, up to three to a row. They used to stack in a column with a blank space beside them as wide as the
+  cards.
 
 ## [0.27.1] - 2026-10-29
 
 ### Fixed
 
 - **Renaming a box renames its folder.** When a box's Game ID changes with its name, its folder in the project now
-  follows, in the same Undo step, as a deck's file always has. A box whose Game ID is kept (after Publish Bundle)
-  keeps its folder. The folder stays put if the new name is already taken, or if the box still holds its own
-  pictures from before the project map.
-- **Exports land beside the project on Linux.** Export as Storyletpack, Publish Spreadsheet, Publish Playable HTML
-  and the Board's session export now open the save dialog next to the project folder on every system, add the
-  file's extension when a name is typed without one, and say the full path of what was saved.
+  follows, in the same Undo step, as a deck's file always has. A box whose Game ID is kept (after Publish Bundle) keeps
+  its folder. The folder stays put if the new name is already taken, or if the box still holds its own pictures from
+  before the project map.
+- **Exports land beside the project on Linux.** Every export's save dialog now opens next to the project folder, on
+  every system: Export as Storyletpack, Publish Spreadsheet, Publish Playable HTML and the Board's session export. Each
+  also adds the file's extension when a name is typed without one, and says the full path of what was saved.
 
 ## [0.27.0] - 2026-10-29
 
 ### Added
 
-- **Resolve clashes in the app.** When a returned Storyletpack or a pull from a server leaves clashes, a bar across
-  the top of the window says how many, and **Resolve…** (or File ▸ Resolve Clashes…) goes through them: each says
-  where it is ("Card 'Tavern Brawl' in Opening deck: priority") and shows both sides. Keep mine, Take theirs, or
-  Edit to go there and fix it by hand, then Mark resolved. Every decision is one Undo, and a file's
+- **Resolve clashes in the app, without editing files.** A bar across the top of the window says how many clashes a
+  returned Storyletpack or a pull from a server left, and **Resolve…** (or File ▸ Resolve Clashes…) goes through them.
+  Each says where it is ("Card 'Tavern Brawl' in Opening deck: priority") and shows both sides. Keep mine, Take theirs,
+  or Edit to go there and fix it by hand, then Mark resolved. Every decision is one Undo, and a file's
   `.storyletconflict` record goes with its last clash. Settling them used to mean editing the files.
-- **Make a property from Changes.** In an outcome's Changes, "+ set property" takes a name no property has yet and
-  offers + New property "gold" in story. Choosing it asks what kind of value it holds, as Patterpad does: Number
-  (the default), Text, or True or false. It then declares the Story property as that kind, with one Undo, and goes
-  straight on to its value, so you don't have to leave the card for the Story page first. Cancel adds nothing;
+- **Make a new property without leaving the card.** In an outcome's Changes, "+ set property" takes a name no property
+  has yet and offers + New property "gold" in story. Choosing it asks what kind of value it holds, as Patterpad does:
+  Number (the default), Text, or True or false. It then declares the Story property as that kind, with one Undo, and
+  goes straight on to its value, so you don't have to leave the card for the Story page first. Cancel adds nothing;
   lists, flags, and qualities are made on the Story page.
-- **Change by.** Setting a number property in an outcome's Changes now offers ＋ add or － take away and a
-  "by" field, so adding 1 to reputation is a few clicks instead of building `reputation + 1` term by term. The
-  Set it to row still sets a plain number, and says why when it's given something else.
-- **Pick a card for count_played.** A condition that asks how often a card was played (`count_played`,
-  `turns_since_played`) picks the card from a searchable list of the project's cards by title, and the
-  condition shows the title. It used to want the card's Game ID typed from memory.
-- **Weight, In one hand, and Across hands, in place of Copies.** A card's Dealing tab sets how often it comes up
-  beside cards of equal rank, how many slots of one hand it can fill (a pickup that comes up three times), and
-  whether several hands can offer it at once. `storyletengine format` moves an old Copies across.
-- **The Card template sets the dealing rules.** The box's Card template tab has a Dealing section: Redraw, Weight,
-  In one hand and Across hands for every card that doesn't set its own. A new card starts on them, so a deck of
-  things found once no longer gets Redraw "always", and changing one changes every card still following it.
-- **A box whose clock your game moves.** A box's Turns setting is now each play, the game (a calendar your game
-  ticks a day at a time), or every N seconds. Plays advance nothing in the last two.
+- **Add to a number or take from it in a few clicks.** Setting a number property in an outcome's Changes now offers ＋
+  add or － take away and a "by" field. Adding 1 to reputation is a few clicks instead of building `reputation + 1` term
+  by term. The Set it to row still sets a plain number, and says why when it's given something else.
+- **Conditions on a played card pick it by title.** A condition that asks how often a card was played (`count_played`,
+  `turns_since_played`) picks the card from a searchable list of the project's cards by title, and the condition shows
+  the title. It used to want the card's Game ID typed from memory.
+- **Weight, In one hand and Across hands replace Copies**, on a card's Dealing tab: they set how often it comes up
+  beside cards of equal rank, how many slots of one hand it can fill (a pickup that comes up three times), and whether
+  several hands can offer it at once. `storyletengine format` moves an old Copies across.
+- **Set the dealing rules once for a whole box.** The box's Card template tab has a Dealing section: Redraw, Weight, In
+  one hand and Across hands for every card that doesn't set its own. A new card starts on them, so a deck of things
+  found once no longer gets Redraw "always", and changing one changes every card still following it.
+- **Your game can move a box's clock.** A box's Turns setting is now each play, the game (a calendar your game ticks a
+  day at a time), or every N seconds. Plays advance nothing in the last two.
 
-- **Renaming a property renames it everywhere.** Rename a property on the Story page, a box, deck, hand or tag
-  group, or in the World settings, and every condition, priority and change that reads or writes it follows, with
-  a tag group's binding, a hand's holes and a coverage driver: one step, so one Undo puts it all back. It used to
-  rename the declaration alone, and every card that used the property broke.
-- **Move a card to another deck.** A card's menu lists the other decks in its box: Move to Docks, Move to Market.
-  The card keeps its Game ID, so everything that names it still does, and it lands at the end of its new deck.
-- **What's new, after an update.** The first time Storyletter opens after an update, it shows what's new in that
-  version, or in every version since you last ran it. Help ▸ What's New shows the latest at any time, and a
-  tickbox turns the after-update window off.
-- **The command palette.** View ▸ Command Palette… (Cmd+K) lists every menu command by name, with its shortcut,
-  and finds the project's boxes, decks, and cards too: type a few letters, press Return, and you're there.
-- **Updates wait for you.** An update that downloads on its own puts a "Restart to update" button in the top
-  bar and says so once, instead of opening a window over your work. Click it to restart and install (you're
+- **Renaming a property renames it everywhere.** Every condition, priority and change that reads or writes it follows,
+  in one step that one Undo puts back. That's wherever you rename it (the Story page, a box, deck, hand or tag group, or
+  the World settings), and a tag group's binding, a hand's holes and a coverage driver follow too. It used to rename the
+  declaration alone, and every card that used the property broke.
+- **Move a card to another deck in its box.** A card's menu lists the other decks in its box: Move to Docks, Move to
+  Market. The card keeps its Game ID, so everything that names it still does, and it lands at the end of its new deck.
+- **See what's new after each update.** The first time Storyletter opens after an update, it shows what's new in that
+  version, or in every version since you last ran it. Help ▸ What's New shows the latest at any time, and a tickbox
+  turns the after-update window off.
+- **Find any command, box, deck or card with Cmd+K.** View ▸ Command Palette… (Cmd+K) lists every menu command by name,
+  with its shortcut, and finds the project's boxes, decks, and cards too. Type a few letters, press Return, and you're
+  there.
+- **Updates wait until you're ready to restart.** An update that downloads on its own puts a "Restart to update" button
+  in the top bar and says so once, instead of opening a window over your work. Click it to restart and install (you're
   asked about anything unsaved first), or carry on: it installs when you quit.
 
 ### Changed
 
-- **Undo and Redo name their step.** Edit ▸ Undo and Redo say what they'll take back or put back ("Undo Rename
-  deck"), as Patterpad's do, and read plain Undo and Redo when there's nothing to take.
-- **Cmd+P reads Play on the Board.** The Play menu's item says what it does; the window it opens is still the Board.
-- **Game scopes sits under Story data.** In Project Settings, its group is called Story data, as in Patterpad.
+- **Undo and Redo name their step.** Edit ▸ Undo and Redo say what they'll take back or put back ("Undo Rename deck"),
+  as Patterpad's do, and read plain Undo and Redo when there's nothing to take.
+- **Cmd+P's menu item now reads Play on the Board**, saying what it does; the window it opens is still the Board.
+- **Game scopes now sits under Story data**: in Project Settings, its group is called Story data, as in Patterpad.
 - **A deck keeps its colour when renamed.** A deck's stripe on the node canvas and its chip on a card face used to
-  change colour with its title. Now the first rename keeps the colour the deck had, saved with the deck's layout
-  (never in the bundle), and undoing the rename undoes that too. Tags and zones are still coloured by their names.
-- **Cmd+1 moves into the navigator.** On an open navigator, Cmd+1 (View ▸ Show Navigator) now puts the keyboard on
-  its current row, and closes it only when you're already in it, handing the keyboard back to where it was. The
-  toggle button in the top bar still just opens and closes it.
-- **Comments say Resolve.** A comment's action reads Resolve (it said Mark complete), and a resolved thread says
-  Resolved in words as well as fading.
-- **The Board deals hands that are right.** Every deal now ranks everything eligible, so a better card that has
-  just become eligible takes the place of a worse one in the hand, and the Journal says the other was outranked.
-  A discard shows in the Journal too. Coverage no longer moves a clock only plays move, so a game that would stall
-  with every card cooling down now shows as stuck.
+  change colour with its title. Now the first rename keeps the colour the deck had, saved with the deck's layout (never
+  in the bundle), and undoing the rename undoes that too. Tags and zones are still coloured by their names.
+- **Cmd+1 now takes the keyboard into the navigator.** On an open navigator, Cmd+1 (View ▸ Show Navigator) puts the
+  keyboard on its current row. It closes the navigator only when you're already in it, handing the keyboard back to
+  where it was. The toggle button in the top bar still just opens and closes it.
+- **A comment's action now reads Resolve**, where it said Mark complete, and a resolved thread says Resolved in words as
+  well as fading.
+- **The Board now deals the best cards into each hand.** A better card that has just become eligible takes the place of
+  a worse one in the hand, and the Journal says the other was outranked. Every deal now ranks everything eligible. A
+  discard shows in the Journal too. Coverage no longer moves a clock only plays move, so a game that would stall with
+  every card cooling down now shows as stuck.
 
-- **Hover is calmer.** Drag handles, "Open" links, hints, and the canvas's controls fade in after a moment and
-  fade out gently, instead of blinking, and a highlight eases rather than snapping. A disabled canvas button
+- **Hover effects fade in and out gently.** Drag handles, "Open" links, hints, and the canvas's controls fade in after a
+  moment and fade out gently, instead of blinking, and a highlight eases rather than snapping. A disabled canvas button
   now stays faint when you point at the canvas. Reduce Motion turns all of it off.
-- **Deletes don't ask first; they tell you what went, with Undo.** Deleting a card, a deck, a box, a hand, or a
-  hand template happens straight away, and a message names it and says what went with it (a box's decks and
-  cards, a hand's pin on the map). Its Undo button puts it all back, as long as nothing's been changed since;
-  Edit ▸ Undo works as it always has. Replace all in Find, taking a box off the project map, and Upgrade the
-  project in the problems bar work the same way. Merging a returned pack still asks first when the pack seems
-  to come from another project, or when it changes the World properties in the game's shared file; otherwise it
-  merges and offers Undo.
-- **You can delete a deck that still has cards.** Its cards go with it, and Undo brings the deck and every card
-  back.
+- **Deletes don't ask first; they tell you what went, with Undo.** Deleting a card, a deck, a box, a hand, or a hand
+  template happens straight away, and a message names what went. It says what went with it (a box's decks and cards, a
+  hand's pin on the map), and its Undo button puts it all back, as long as nothing's been changed since; Edit ▸ Undo
+  works as it always has. Replace all in Find, taking a box off the project map, and Upgrade the project in the problems
+  bar work the same way. Merging a returned pack still asks first when the pack seems to come from another project, or
+  when it changes the World properties in the game's shared file; otherwise it merges and offers Undo.
+- **You can delete a deck that still has cards.** Its cards go with it, and Undo brings the deck and every card back.
 - **A box or card somebody else holds is easier to read.** Its locked fields and buttons keep their text at full
-  strength, so you can read every value; they show they're locked with a dashed edge and a no-entry cursor,
-  and the notice above the document still says who holds it.
-- **A cleaner, crisper look, shared with Patterpad.** The two apps now have the same colour themes: Light and
-  Dark, which follow your system until you pick one, and Parchment, a warm option for long writing sessions. Blue
-  is the one accent colour, and every text colour meets the usual contrast guideline in every theme. If you'd
-  picked Chambray or Linen you're now on Light, and Indigo or Baize are now Dark. Deck and tag colours come from
-  the family's shared set, so some shift a little. The interface uses your system's own typeface, with quieter
-  corners and shadows, and menus that open straight away; cards on the canvas sit flat, with no shadow.
-- **A tidier document page.** The title sits straight under the back button, with its comment and More buttons
-  at the end of its row; the purpose is one line that grows as you type; and the card, table, and canvas
+  strength, so you can read every value. They show they're locked with a dashed edge and a no-entry cursor, and the
+  notice above the document still says who holds it.
+- **A cleaner, crisper look, shared with Patterpad.** The two apps now have the same colour themes: Light and Dark,
+  which follow your system until you pick one, and Parchment, a warm option for long writing sessions. Blue is the one
+  accent colour, and every text colour meets the usual contrast guideline in every theme. If you'd picked Chambray or
+  Linen you're now on Light, and Indigo or Baize are now Dark. Deck and tag colours come from the family's shared set,
+  so some shift a little. The interface uses your system's own typeface, with quieter corners and shadows, and menus
+  that open straight away; cards on the canvas sit flat, with no shadow.
+- **The document page is laid out more tidily**: the title sits straight under the back button, with its comment and
+  More buttons at the end of its row; the purpose is one line that grows as you type; and the card, table, and canvas
   switch sits beside the Cards tab it changes.
-- **The canvas is the page.** A deck's canvas fills the pane with no frame, shows only a faint grid until you
-  drag a card, and no longer prints the deck's name on every card.
-- **The canvas's tools are with its zoom.** Frame, Comment, and Arrange are buttons in the canvas's control
-  group, beside fit and zoom, and what the canvas has to say (how its cards link, the coverage legend, the key
-  to its arrows) is in a status line at the foot of the window, beside Live Link.
-- **A quieter navigator and title.** Rows are listed at an even weight, the open one marked by a soft fill,
+- **A deck's canvas now fills the pane**, with no frame: it shows only a faint grid until you drag a card, and no longer
+  prints the deck's name on every card.
+- **The canvas's tools now sit beside its zoom.** Frame, Comment, and Arrange are buttons in the canvas's control group,
+  beside fit and zoom. What the canvas has to say (how its cards link, the coverage legend, the key to its arrows) is in
+  a status line at the foot of the window, beside Live Link.
+- **The navigator and title bar are quieter**: rows are listed at an even weight, the open one marked by a soft fill,
   and the top bar shows just the project's name.
-- **Patter scenes play on Patter 0.36.0.** The Board and an exported playable page play a card's Patter scene with
-  Patterplay 0.36.0.
+- **Patterplay 0.36.0 inside**, playing a card's Patter scene on the Board and in an exported playable page.
 
 ### Fixed
 
-- **Fields fit a narrow inspector.** Every control stays inside its row, a stage ladder and a long stage name wrap,
-  and a map's key field no longer holds its width when the inspector is narrow.
-- **The map no longer runs under its Layers panel.** On a project map, the canvas reached past its column and
-  covered the side panel's edge. It now stops where the panel starts.
-- **The clash banner shows when you open a project.** Opened from the welcome screen, a project with clashes
-  from a merge didn't show its banner until the resolver had been opened. It now shows at once, under the title
-  bar as in Patterpad, and the Problems bar points to File ▸ Resolve Clashes… rather than saying to delete the file.
-- **Your name is filled in at first launch.** The name box that signs your comments offers the `user.name` git has
-  for you. It used to ask before any project was open, so it came back empty.
+- **Fields fit a narrow inspector.** Every control stays inside its row, a stage ladder and a long stage name wrap, and
+  a map's key field no longer holds its width when the inspector is narrow.
+- **The map no longer runs under its Layers panel.** On a project map, the canvas reached past its column and covered
+  the side panel's edge. It now stops where the panel starts.
+- **The clash banner shows when you open a project.** Opened from the welcome screen, a project with clashes from a
+  merge didn't show its banner until the resolver had been opened. It now shows at once, under the title bar as in
+  Patterpad, and the Problems bar points to File ▸ Resolve Clashes… rather than saying to delete the file.
+- **Your name is filled in at first launch.** The name box that signs your comments offers the `user.name` git has for
+  you. It used to ask before any project was open, so it came back empty.
 - **The keyboard doesn't get lost after a dialog.** Closing a dialog whose button was redrawn while it was open (a
-  refusal, a Board confirm) gives the keyboard back to that button, and when there's nothing to go back to it goes
-  to the page you're working on, never to the top of the window. A closed navigator no longer takes Tab presses
-  through controls you can't see.
-- **A new Card template field waits for its name.** "+ Field" no longer puts "A card field on This has no name"
-  in the problem bar before you can type one: the field is saved once it has a name. A box-level problem names
-  the box instead of "This", and Go to issue opens the Card template for a field's problem.
+  refusal, a Board confirm) gives the keyboard back to that button. When there's nothing to go back to, it goes to the
+  page you're working on, never to the top of the window. A closed navigator no longer takes Tab presses through
+  controls you can't see.
+- **A new Card template field waits for its name.** "+ Field" no longer puts "A card field on This has no name" in the
+  problem bar before you can type one: the field is saved once it has a name. A box-level problem names the box instead
+  of "This", and Go to issue opens the Card template for a field's problem.
 - **An edit never overwrites a file changed outside Storyletter.** A deck, box or settings file changed on disk since
-  Storyletter read it (a synced folder, a pull, another window) used to be written over from memory, losing the
-  other change. Storyletter now checks first: it leaves the file alone, shows it as it now is, and says so.
-- **Delete only deletes cards when you're on the cards.** Delete or Backspace with a button focused (+ New card, a
-  tab) deleted the selected cards, and so did Delete, Enter or an arrow key with a dialog or menu open. Those keys
-  now act on the selection only from the cards themselves, the table, or the canvas, and never past a dialog.
+  Storyletter read it (a synced folder, a pull, another window) used to be written over from memory, losing the other
+  change. Storyletter now checks first: it leaves the file alone, shows it as it now is, and says so.
+- **Delete only deletes cards when you're on the cards.** Delete or Backspace with a button focused (+ New card, a tab)
+  deleted the selected cards, and so did Delete, Enter or an arrow key with a dialog or menu open. Those keys now act on
+  the selection only from the cards themselves, the table, or the canvas, and never past a dialog.
 - **A copy is "Ambush 2", not "Ambush (copy)".** Duplicate gives the copy the next free title and lets its Game ID
-  follow that title, as a new card's does. It used to pin "ambush-copy", so copies of copies spread
-  "-copy-copy-copy" through warnings, coverage and conditions.
-- **The Board says a once-only card was already played.** Why not? said "on cooldown" for a card whose Redraw is
-  never, as if it would come back; it now says it was already played, and comes up once.
-- **Coverage doesn't warn about drivers a project can't use.** A project with no @world has nothing a coverage
-  driver could feed, so the note about drivers no longer shows for one.
-- **Saves from earlier versions open.** A save file written before saves named cards by Game ID opens on the Board
-  as before.
-- **A comment appears as soon as you post it.** A reply posted with the Reply button didn't show until the comment
-  panel was closed and opened again, a second post on a new comment started a second thread, and Reopen showed the
-  thread as it was before. The panel now shows each thread as it stands after every change.
+  follow that title, as a new card's does. It used to pin "ambush-copy", so copies of copies spread "-copy-copy-copy"
+  through warnings, coverage and conditions.
+- **The Board says a once-only card was already played.** Why not? said "on cooldown" for a card whose Redraw is never,
+  as if it would come back; it now says it was already played, and comes up once.
+- **Coverage doesn't warn about drivers a project can't use.** A project with no @world has nothing a coverage driver
+  could feed, so the note about drivers no longer shows for one.
+- **Saves from earlier versions open on the Board.** A save file written before saves named cards by Game ID opens on
+  the Board as before.
+- **A comment appears as soon as you post it.** The comment panel now shows each thread as it stands after every change.
+  A reply posted with the Reply button didn't show until the panel was closed and opened again, a second post on a new
+  comment started a second thread, and Reopen showed the thread as it was before.
 
 ## [0.26.0] - 2026-10-22
 

@@ -12,188 +12,190 @@ section for it.
 
 ### Changed
 
-- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
-  never breaks a bundle, a save, a project or this runtime's public API. See
+- **Every 1.x plays the bundles and loads the saves you have today.** From 1.0.0 a patch fixes, a minor
+  adds, and only a major may change behaviour your game relies on, with its notes saying what and why. Every 1.x
+  reads `storylets/bundle@2`, `@1` and `@0` bundles. See
   [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
-- Runs on the shared libraries' 1.0: `@wildwinter/expr` and `@wildwinter/expr-specificity` `^1.0.0`, and the
-  `@wildwinter/scoperegistry` peer is now `>=1.0.0 <2.0.0`, the same range as Patter 1.0's, so a game with both
-  still holds one registry. The play helpers move with it, and also take `@wildwinter/app-shell` 1.x.
+- **Runs on the same shared libraries as Patter 1.0**, so a game with both still holds one expression registry.
+  `@wildwinter/expr` and `@wildwinter/expr-specificity` are `^1.0.0`, and the `@wildwinter/scoperegistry` peer is
+  `>=1.0.0 <2.0.0`, the same range as Patter 1.0's. The play helpers move with it, and also take
+  `@wildwinter/app-shell` 1.x.
+
 
 ## [0.17.0] - 2026-11-06
 
 ### Changed
 
-- **The Live Link reconnects** (`@storylet-studio/play-helpers`' `createLiveLink`, on every runtime alike). While the
-  game has it open, a socket that closes or never opens is tried again after 1 s, doubling to 10 s, and back to 1 s
-  once a hello goes; each new socket says hello again with the build and the open flows, then every flow's board.
-  One line is logged when an open link is lost and one when it's back, and a link that never opened logs nothing.
-  Frames queue only while the first attempt connects. A link Storyletter closes with code 4000 (another game
-  connected) stops, so two games don't take turns. `state` reads `connecting` while it retries. Restart Storyletter,
-  or turn its Live Link on after the game has started, and the Board and live edits come back by themselves. The
-  same rule as Patterplay 0.46.0's debug link. The engine itself is unchanged.
+- **A game's Live Link reconnects by itself, on every runtime.** Restart Storyletter, or turn its Live Link on after the
+  game has started, and the Board and live edits come back by themselves. In JS it's `@storylet-studio/play-helpers`'
+  `createLiveLink`. While the game has it open, a socket that closes or never opens is tried again after 1 s, doubling
+  to 10 s, and back to 1 s once a hello goes; each new socket says hello again with the build and the open flows, then
+  every flow's board. One line is logged when an open link is lost and one when it's back, and a link that never opened
+  logs nothing. Frames queue only while the first attempt connects. A link Storyletter closes with code 4000 (another
+  game connected) stops, so two games don't take turns. `state` reads `connecting` while it retries. The same rule as
+  Patterplay 0.46.0's debug link. The engine itself is unchanged.
 
 ## [0.16.0] - 2026-11-05
 
 ### Added
 
-- **Which Storylet Engine this is.** `STORYLET_ENGINE_VERSION` is the runtime's version, as in its `package.json`,
-  and `versionInRange(version, min, maxExclusive)` says whether a version is at least `min` and below `maxExclusive`,
-  by semantic-version order (a prerelease before its release, build metadata ignored, and anything that isn't a
-  version out of range). A game, a tool or an extension that ships apart from the engine checks the one it's
-  running on at start-up: `versionInRange(STORYLET_ENGINE_VERSION, "0.15.0", "0.16.0")`. Unity, Unreal and Godot
-  have the same pair, and Patterplay has its own, built the same way. `npm run bump:play` writes the version, and a
-  check fails if it drifts from the manifests. The conformance corpus is version 26, with the section `versions`.
+- **Your code can read which Storylet Engine version it runs on**, so a game, a tool or an extension that ships
+  apart from the engine can check it at start-up. `STORYLET_ENGINE_VERSION` is the runtime's version, as in its `package.json`, and
+  `versionInRange(version, min, maxExclusive)` says whether a version is at least `min` and below `maxExclusive`, by
+  semantic-version order (a prerelease before its release, build metadata ignored, and anything that isn't a version out
+  of range): `versionInRange(STORYLET_ENGINE_VERSION, "0.15.0", "0.16.0")`. Unity, Unreal and Godot have the same pair,
+  and Patterplay has its own, built the same way. `npm run bump:play` writes the version, and a check fails if it drifts
+  from the manifests. The conformance corpus is version 26, with the section `versions`.
 
 ## [0.15.0] - 2026-10-29
 
 ### Added
 
-- **`onRefit`: the game hears what a refitting load put back.** A game that loads its own registry with
+- **Your game hears what a refitting load put back.** `EngineOptions.onRefit(misfits)` hears each saved value a
+  refitting load puts back to its default, so a drifted save is never silent. A game that loads its own registry with
   `{ refit: true }` has a saved value that no longer fits its declaration (a stage, an enum value or a flag deleted
-  since the save, or a value of another type) put back to its default. `EngineOptions.onRefit(misfits)` hears this
-  engine's share of those, each a `LoadMisfit` (`scope`, `name`, and the `value` the save held, the type now exported
-  from the package), as the engine's bags claim them: as the engine is made, as a flow opens, and after `loadGame`.
-  Only this engine's keys (`story`, `storylets/...` and the host scopes it backs itself): another engine on the same
-  registry takes its own. With no handler, a console warning per value, so a drifted save is never silent.
-  Patterplay's `onRefit`, the same shape.
-- **Property paths in Patter's form too.** `getProperty` and `setProperty`, on the engine and on a flow take a leading `@`, as Patter's do: `@story.gold` is
-  `story.gold`, `@world.clock` is `world.clock`, and a bare `@gold` is the story's, as it is in an expression. The
-  plain form is unchanged. Corpus 25 pins it in every runtime.
-- **Any game scope, not only `@world`.** A project can declare its own scopes beside `@world` (`@player`, say),
-  in Patter's shape: a token, a scope-level `writable`, and declarations, or none for an opaque scope that takes any
-  name. The bundle carries them as `scopeRegistry`, and an engine on its own backs each one from its defaults,
+  since the save, or a value of another type) put back to its default. The handler hears this engine's share of those,
+  each a `LoadMisfit` (`scope`, `name`, and the `value` the save held, the type now exported from the package), as the
+  engine's bags claim them: as the engine is made, as a flow opens, and after `loadGame`. Only this engine's keys
+  (`story`, `storylets/...` and the host scopes it backs itself): another engine on the same registry takes its own.
+  With no handler, a console warning per value. Patterplay's `onRefit`, the same shape.
+- **Property paths can be written in Patter's form too.** `getProperty` and `setProperty`, on the engine and on a flow,
+  take a leading `@`, as Patter's do. `@story.gold` is `story.gold`, `@world.clock` is `world.clock`, and a bare `@gold`
+  is the story's, as it is in an expression. The plain form is unchanged. Corpus 25 pins it in every runtime.
+- **Declare game scopes of your own, not only world.** A project can declare its own scopes beside `@world` (`@player`,
+  say), in Patter's shape: a token, a scope-level `writable`, and declarations, or none for an opaque scope that takes
+  any name. The bundle carries them as `scopeRegistry`, and an engine on its own backs each one from its defaults,
   stores it, saves it and reseeds it on a reset, as it did `@world`. Every `@world` path works for any of them:
-  `getProperty` and `setProperty` on `player.hp`, `listProperties` rows, the host-write check, a story write
-  refused on a read-only name, and coverage drivers on `@player.hp`. `describeBundle` lists each (`scope: "host"`,
-  the token as `owner`). The conformance corpus (version 23) checks it in every runtime.
-- **`PlayError.kind` "setup".** `onError` hears how the engine was set up as the constructor ends: a host scope the
-  bundle doesn't declare (naming the declared spelling when only the case differs, since a token is case-sensitive)
-  and an option it doesn't take. Patterplay's report, word for word.
+  `getProperty` and `setProperty` on `player.hp`, `listProperties` rows, the host-write check, a story write refused on
+  a read-only name, and coverage drivers on `@player.hp`. `describeBundle` lists each (`scope: "host"`, the token as
+  `owner`). The conformance corpus (version 23) checks it in every runtime.
+- **The engine reports a mistake in how it was set up.** As the constructor ends, `onError` hears a `PlayError` of
+  `kind` "setup" for a host scope the bundle doesn't declare or an option it doesn't take. When only the case differs,
+  it names the declared spelling, since a token is case-sensitive. Patterplay's report, word for word.
 
-- **`discard(card, hand)`.** Takes a card out of a hand without playing it, when the player turns it down or the
-  game wants the room: no outcome, no move of the clock, nothing in the play log. Its Redraw starts as a play's
-  would, so the next deal doesn't hand it straight back. A `discard` trace event says so.
-- **Weights, In one hand, and Across hands, in place of copies.** A card's `weight` (default 1) orders a run of
-  cards of equal rank: weight 2 comes up ahead twice as often as weight 1, and a run whose weights are all equal
-  shuffles exactly as before. `inOneHand: N` lets a card fill up to N slots of one hand. `acrossHands: "any"` lets
-  any number of hands hold it at once; the default `"one"` keeps a one-off in one place. A bundle that still says
-  `copies` deals as it did.
-- **A box whose clock the game moves.** A box with `turn` and no `seconds` advances nothing on a play, as a timed
-  box doesn't: a calendar, ticked by the game.
+- **Discard a card from a hand without playing it.** `discard(card, hand)` takes it out when the player turns it down or
+  the game wants the room. There's no outcome, no move of the clock, and nothing in the play log. Its Redraw starts as a
+  play's would, so the next deal doesn't hand it straight back. A `discard` trace event says so.
+- **Weight, In one hand and Across hands replace copies**, for finer control over how a card is dealt. A card's `weight`
+  (default 1) orders a run of cards of equal rank: weight 2 comes up ahead twice as often as weight 1, and a run whose
+  weights are all equal shuffles exactly as before. `inOneHand: N` lets a card fill up to N slots of one hand.
+  `acrossHands: "any"` lets any number of hands hold it at once; the default `"one"` keeps a one-off in one place. A
+  bundle that still says `copies` deals as it did.
+- **Your game can move a box's clock.** A box with `turn` and no `seconds` advances nothing on a play, as a timed box
+  doesn't: a calendar, ticked by the game.
 
-- **`onError`: the game hears about a condition that failed.** A condition the engine can't evaluate (a division by
-  zero, a value of the wrong type from a resolver) still counts as false, and now also reaches `EngineOptions.onError`
-  as a `PlayError` (`flow`, `kind`, `node`, `source`, `message`), whether or not anything is tracing. With no handler
-  it's a console warning. It used to reach only a trace, so with tracing off a typo looked like a card that never
-  came up. The same option and shape as Patterplay's.
-- **`Bundle`, `SaveEnvelope` and `LoadReport` are exported**, so a game can type what it hands the engine and what a
-  load hands back without depending on the model package.
+- **Your game hears about a condition that failed.** A condition the engine can't evaluate still counts as false, and
+  now also reaches `EngineOptions.onError`, whether or not anything is tracing. It arrives as a `PlayError` (`flow`,
+  `kind`, `node`, `source`, `message`), for a division by zero, say, or a value of the wrong type from a resolver. With
+  no handler it's a console warning. It used to reach only a trace, so with tracing off a typo looked like a card that
+  never came up. The same option and shape as Patterplay's.
+- **The bundle, save and load report types are exported**, so a game can type what it hands the engine and what a load
+  hands back without depending on the model package. They are `Bundle`, `SaveEnvelope` and `LoadReport`.
 
 ### Changed
 
-- **The `world` option has gone: bind your game's scopes through `hostScopes`.** One map of token to resolver,
-  `new Engine(bundle, { hostScopes: { world: { get, set } } })`, binds `@world` and any other scope the bundle
-  declares, named and shaped as Patterplay's option (`HostScope` is the resolver's type). A scope you leave out is
-  backed by the engine as before. Passing `world` is reported (`the engine option "world" has gone: bind the scope
-  as hostScopes: { world }`) and binds nothing.
-- **Bundles are `storylets/bundle@2`.** The game's scopes are `scopeRegistry`, and the `world` block is gone. `@1`
-  and `@0` bundles still load, their `world.properties` read as the scope `world`; an older runtime refuses an `@2`
-  bundle by its schema rather than misreading it.
+- **One engine option now binds every game scope.** The `world` option has gone: bind `@world` and any other scope the
+  bundle declares through `hostScopes`, one map of token to resolver. It's
+  `new Engine(bundle, { hostScopes: { world: { get, set } } })`, named and shaped as Patterplay's option (`HostScope` is
+  the resolver's type). A scope you leave out is backed by the engine as before. Passing `world` is reported
+  (`the engine option "world" has gone: bind the scope as hostScopes: { world }`) and binds nothing.
+- **Bundles move to a new format version, and older ones still load.** Bundles are `storylets/bundle@2`: the game's
+  scopes are `scopeRegistry`, and the `world` block is gone. `@1` and `@0` bundles still load, their `world.properties`
+  read as the scope `world`; an older runtime refuses an `@2` bundle by its schema rather than misreading it.
 
-- **A deal makes the hand right.** A deal ranks everything eligible, including what the hand holds, and the hand
-  becomes the top of that ranking, full or not. A better card that has become eligible takes the place of a worse
-  one, which goes back to the stock (`evict`, reason `outranked`); a held card wins a tie, so an equal card never
-  swaps in. A hand used to keep every card it held while it stayed eligible, so a newly eligible better card waited
-  for a free slot.
-- **A load drops a held card that no longer qualifies.** A save made before a content edit could put back a card
-  whose condition the edit made false, and nothing said so. A load now checks every held card as a deal would, with
-  the values the save carries, and drops what no longer qualifies, listed in the report's `evicted` with the deal's
-  reason (`condition`, `deck-gate` and so on); `previewLoad` says the same. When the game loads its own registry,
-  the values aren't there yet, and the next deal does it.
-- **Saves name cards by Game ID.** A save (now `storylets/save@3`) keys a flow's board, cooldowns and box clocks, and
-  the spent shared cards, by Game ID, as its play log always did. A card deleted and made again under the same Game
-  ID keeps its place, its cooldown and its play count, where it used to keep only the count. Older saves still load,
-  and a load report names a card the build no longer has by the key the save carries.
+- **A deal now puts the best eligible cards in the hand.** A deal ranks everything eligible, including what the hand
+  holds, and the hand becomes the top of that ranking, full or not. A better card that has become eligible takes the
+  place of a worse one, which goes back to the stock (`evict`, reason `outranked`); a held card wins a tie, so an equal
+  card never swaps in. A hand used to keep every card it held while it stayed eligible, so a newly eligible better card
+  waited for a free slot.
+- **A load drops a held card that no longer qualifies.** A save made before a content edit could put back a card whose
+  condition the edit made false, and nothing said so. A load now checks every held card as a deal would, with the values
+  the save carries, and drops what no longer qualifies, listed in the report's `evicted` with the deal's reason
+  (`condition`, `deck-gate` and so on); `previewLoad` says the same. When the game loads its own registry, the values
+  aren't there yet, and the next deal does it.
+- **A card made again keeps its place in a save.** Saves now name cards by Game ID, so a card deleted and made again
+  under the same Game ID keeps its place, its cooldown and its play count. It used to keep only the count. A save (now
+  `storylets/save@3`) keys a flow's board, cooldowns and box clocks, and the spent shared cards, by Game ID, as its play
+  log always did. Older saves still load, and a load report names a card the build no longer has by the key the save
+  carries.
 
 ### Fixed
 
-- **A load checks the hand against the saved world, not the old one.** `loadState` and `deserializeState` take
-  `{ world }`, the host's @world container (`createWorldContainer`, or anything with `values` and `load`), and put
-  the file's @world values into it before the engine loads, so a held card gated on @world isn't dropped for a
-  world the save no longer has. A refused load leaves the container as it was. Without the option the values are
-  only returned, as before, and a game should apply them before loading.
-- **A refitting load keeps "none chosen".** When a game loads the shared registry itself with refit on
-  (`registry.load(blob, { refit: true })`), as a game that also runs Patterplay may, a saved `""` on an enum whose own
-  default is `""` (none chosen) now comes back as saved, instead of being reported as a misfit that never happened.
-  It's the rule a host write already follows. That covers every Storylet Engine declaration in the registry: `@world`
-  and any other game scope, `@story`, and each box's, deck's, hand's and value's own properties. Any other enum still
-  refits `""`. The engine's own loads don't refit, so a game on the Storylet Engine alone sees no change. The registry
-  corpus checks it in every runtime. On `@wildwinter/scoperegistry` 0.9.1.
+- **A load checks the hand against the saved world**, not the old one, so a held card gated on @world isn't dropped for
+  a world the save no longer has. `loadState` and `deserializeState` take `{ world }`, the host's @world container
+  (`createWorldContainer`, or anything with `values` and `load`), and put the file's @world values into it before the
+  engine loads. A refused load leaves the container as it was. Without the option the values are only returned, as
+  before, and a game should apply them before loading.
+- **A refitting load keeps "none chosen".** A saved `""` on an enum whose own default is `""` (none chosen) now comes
+  back as saved, instead of being reported as a misfit that never happened. That's when a game loads the shared registry
+  itself with refit on (`registry.load(blob, { refit: true })`), as a game that also runs Patterplay may. It's the rule
+  a host write already follows. That covers every Storylet Engine declaration in the registry: `@world` and any other
+  game scope, `@story`, and each box's, deck's, hand's and value's own properties. Any other enum still refits `""`. The
+  engine's own loads don't refit, so a game on the Storylet Engine alone sees no change. The registry corpus checks it
+  in every runtime. On `@wildwinter/scoperegistry` 0.9.1.
 
-- **A host write must fit what the content declared.** `setProperty` refuses a string for a number, a value an enum
-  or a quality doesn't list, a flag a flags property doesn't, and a `@world` name the content never declared, saying
-  what the property takes. It's the rule a load already checks a save with. An enum whose own default is "" (none
-  chosen) takes "" back, so a game can put its default back.
-- **A broken bundle or save is refused by what's wrong with it.** `new Engine(null)`, a bundle missing its boxes, or
-  a save with the wrong schema used to fail as a raw TypeError; each now says what it got and what's missing.
+- **A host write must fit what the content declared.** `setProperty` refuses a value the property doesn't take, and says
+  what it takes. That's a string for a number, a value an enum or a quality doesn't list, a flag a flags property
+  doesn't, and a `@world` name the content never declared. It's the rule a load already checks a save with. An enum
+  whose own default is "" (none chosen) takes "" back, so a game can put its default back.
+- **A broken bundle or save says what's wrong with it.** `new Engine(null)`, a bundle missing its boxes, or a save with
+  the wrong schema used to fail as a raw TypeError; each now says what it got and what's missing.
 
-- **What a game is handed is its own.** A dealt card's fields, an outcome's, and a field's structured default are
-  copies: a game that changed one used to change it in the bundle for every later deal, in every engine on that
-  bundle. Extension values are the exception, as in Patter: they're the extension's own data, handed out uncopied and
-  read-only by contract, because they can be large and a copy per deal would cost every game. The conformance
-  corpus checks it in every runtime.
+- **Changing a dealt card no longer changes the bundle.** A dealt card's fields, an outcome's, and a field's structured
+  default are copies now. A game that changed one used to change it in the bundle for every later deal, in every engine
+  on that bundle. Extension values are the exception, as in Patter: they're the extension's own data, handed out
+  uncopied and read-only by contract, because they can be large and a copy per deal would cost every game. The
+  conformance corpus checks it in every runtime.
 
 ## [0.14.0] - 2026-10-21
 
 ### Removed
 
-- **Storylet extension settings.** `extensionSettings(bundle, extension)` goes, with the bundle's `extensions[id].settings`: extensions no
-  longer have settings, which only named the host field a claim presented, and claims are gone too. A bundle
-  that still carries settings loads as before and they're ignored. An extension that wants a value on a card or
+- **Storylet extensions no longer have settings**: `extensionSettings(bundle, extension)` goes, with the bundle's
+  `extensions[id].settings`, since settings only named the host field a claim presented, and claims are gone too. A
+  bundle that still carries settings loads as before and they're ignored. An extension that wants a value on a card or
   an outcome declares a field of its own.
 
 ## [0.13.0] - 2026-10-18
 
 ### Added
 
-- **Storylet extension values**: a bundle can carry the values a Storylet extension gives each node, and every
-  runtime hands them over where it hands over fields: `extensions` on a dealt card, an outcome and a box from
-  `listBoxes()`, by extension id, raw as the bundle wrote them (any JSON: records, maps and lists as well as
-  the seven field types). `extensionDecls(bundle, extension, kind)` gives an extension's declarations for a
-  node kind, every default resolved, so `effectiveFields(extensionDecls(...), card.extensions?.[id])` fills in
-  what a node leaves out. `extensionsOf(bundle, kind, address)` reads the values of a node no view carries:
-  the project, a deck, a hand, a hand template, a tag group or a tag. `extensionSettings(bundle, extension)`
-  reads an extension's settings as the project resolved them (which host field each claim presents). The same
-  on all four runtimes, with Blueprint taking structured values as JSON text. Bundles without extensions are
-  unchanged.
+- **Your game can read the values a Storylet extension adds**: a bundle can carry the values a Storylet extension gives
+  each node, and every runtime hands them over where it hands over fields. They're `extensions` on a dealt card, an
+  outcome and a box from `listBoxes()`, by extension id, raw as the bundle wrote them (any JSON: records, maps and lists
+  as well as the seven field types). `extensionDecls(bundle, extension, kind)` gives an extension's declarations for a
+  node kind, every default resolved, so `effectiveFields(extensionDecls(...), card.extensions?.[id])` fills in what a
+  node leaves out. `extensionsOf(bundle, kind, address)` reads the values of a node no view carries: the project, a
+  deck, a hand, a hand template, a tag group or a tag. `extensionSettings(bundle, extension)` reads an extension's
+  settings as the project resolved them (which host field each claim presents). The same on all four runtimes, with
+  Blueprint taking structured values as JSON text. Bundles without extensions are unchanged.
 
 ## [0.12.0] - 2026-10-18
 
 ### Added
 
-- **Field read helpers**: `fieldDecls(bundle, box)` and `outcomeFieldDecls(bundle, box)` find a
-  box's declarations, `fieldValue(decls, values, name)` reads one field, and
-  `effectiveFields(decls, values)` fills in every declared default a card or outcome leaves out.
-  A card's `fields` stay exactly as the bundle wrote them. The same four on every runtime, as
-  Patter's game-data helpers.
-- **`compareStages`, `stageIndex` and `nextStage`**, the shared kernel's ladder helpers,
-  re-exported: they order a quality field's stages (or a property's) outside a condition, from
-  a ladder or the declaration carrying one.
+- **Read a card's fields with their defaults filled in**, with the same four helpers on every runtime, as Patter's
+  game-data helpers. `fieldDecls(bundle, box)` and `outcomeFieldDecls(bundle, box)` find a box's declarations,
+  `fieldValue(decls, values, name)` reads one field, and `effectiveFields(decls, values)` fills in every declared
+  default a card or outcome leaves out. A card's `fields` stay exactly as the bundle wrote them.
+- **Order a quality's stages outside a condition**, with the shared kernel's ladder helpers, `compareStages`,
+  `stageIndex` and `nextStage`, now re-exported. They order a quality field's stages (or a property's) from a ladder or
+  the declaration carrying one.
 
 ### Changed
 
-- **A saved value the build no longer takes is put back by the kernel's one check.** A stage or a
-  flag deleted since the save (as an enum value already was) is reported as retyped and takes its
-  default, by the shared kernel's value check, which Patterplay's loads use too.
-- **Every declaration in a bundle carries its default**, which the compiler now writes in when the
-  source leaves it out. The engine reads one through the kernel's `defaultFor` either way, so a
-  bundle from an older compiler plays as it did.
+- **A saved stage or flag the build dropped takes its default.** A stage or a flag deleted since the save is reported as
+  retyped, as an enum value already was. It's put back by the shared kernel's one value check, which Patterplay's loads
+  use too.
+- **Every declaration in a bundle carries its default**, which the compiler now writes in when the source leaves it out.
+  The engine reads one through the kernel's `defaultFor` either way, so a bundle from an older compiler plays as it did.
 
 ## [0.11.2] - 2026-10-10
 
 ### Changed
 
-- **No change in this runtime.** 0.11.2 is the Unreal plugin's fix for building on Unreal 5.8, released in lockstep, as every runtime version is.
+- **Nothing changed in the runtime**, which is released alongside the Unreal plugin's fix for building on Unreal 5.8, in
+  lockstep, as every runtime version is.
 
 ## [0.11.1] - 2026-10-06
 

@@ -32,6 +32,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION_CONSTANTS, writeVersionConstant } from "./lib/storylet-engine-version-constants.mjs";
+import { changelogProblems } from "@wildwinter/app-shell/changelog";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const version = process.argv[2];
@@ -44,6 +45,31 @@ if (!/^\d+\.\d+\.\d+$/.test(version ?? "")) {
 const at = (p) => resolve(ROOT, p);
 const read = (p) => readFileSync(at(p), "utf8");
 const write = (p, s) => { writeFileSync(at(p), s); console.log("  wrote", p); };
+
+const CHANGELOGS = [
+  "packages/runtime/CHANGELOG.md",
+  "ports/unity/StoryletEngine/CHANGELOG.md",
+  "ports/unreal/StoryletEngine/CHANGELOG.md",
+  "ports/godot/addons/storyletengine/CHANGELOG.md",
+];
+
+// --- 0. the notes read as written for a game developer ------------------------
+
+// The site's What's new page shows each entry's bold lede and the start of its first paragraph, so the
+// section being released needs a short lede and a sentence saying what it means. Checked before anything is
+// written, so a refusal leaves the tree as it was.
+{
+  const refused = [];
+  for (const p of CHANGELOGS) {
+    const s = read(p);
+    if (s.includes(`## [${version}]`)) continue; // already bumped: a re-run
+    for (const { entry, problem } of changelogProblems(s, "Unreleased")) refused.push(`  ${p}\n  - ${entry.text.slice(0, 80)}\n      ${problem}`);
+  }
+  if (refused.length) {
+    console.error(`What's new can't show ${refused.length === 1 ? "an entry" : `${refused.length} entries`} as written:\n${refused.join("\n")}`);
+    process.exit(1);
+  }
+}
 
 // --- 1. the manifests ------------------------------------------------------
 
@@ -156,13 +182,6 @@ for (const c of VERSION_CONSTANTS) {
 // Date in the repo's timezone, not UTC: the heading is read by people, and a
 // release cut in the evening should not be dated tomorrow.
 const today = new Date().toLocaleDateString("en-CA");   // YYYY-MM-DD
-
-const CHANGELOGS = [
-  "packages/runtime/CHANGELOG.md",
-  "ports/unity/StoryletEngine/CHANGELOG.md",
-  "ports/unreal/StoryletEngine/CHANGELOG.md",
-  "ports/godot/addons/storyletengine/CHANGELOG.md",
-];
 
 for (const p of CHANGELOGS) {
   const s = read(p);

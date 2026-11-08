@@ -6,17 +6,20 @@
 
 ### Changed
 
-- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
-  never breaks a bundle, a save, a project or this runtime's public API. See
+- **Every 1.x plays the bundles and loads the saves you have today.** From 1.0.0 a patch fixes, a minor
+  adds, and only a major may change behaviour your game relies on, with its notes saying what and why. Every 1.x
+  reads `storylets/bundle@2`, `@1` and `@0` bundles. See
   [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
-- The plugin's `CreatedByURL` and `DocsURL` point at storylets.dev.
+- **The plugin's links point at storylets.dev**: `CreatedByURL` and `DocsURL` were empty.
 
 ### Removed
 
-- **The 13 deprecated names.** `UStoryletSave`'s `SaveStateToJson`, `LoadStateFromJson`, `LoadStateFromJsonWithReport`
-  and `PreviewLoadFromJson`; `UStoryletEngine`'s `GetBoundWorld`, `OpenFlowFromJson`, `PreviewFlowRestoreJson`,
-  `LoadDurableFromJson`, `OpenFlowWithDurableJson`, `OpenFlowWithDurableJsonSeeded` and `ApplyLiveBundleWithReport`;
-  and `FStoryletLiveLink::ApplyLiveBundle`'s overload that handed the report back as JSON text. Use `SerializeState`,
+- **Thirteen old Blueprint and C++ names are gone**, each with a replacement named as Patterplay's is. A game
+  still calling one stops compiling until it moves to the new name. The old names are `UStoryletSave`'s
+  `SaveStateToJson`, `LoadStateFromJson`, `LoadStateFromJsonWithReport` and `PreviewLoadFromJson`;
+  `UStoryletEngine`'s `GetBoundWorld`, `OpenFlowFromJson`, `PreviewFlowRestoreJson`, `LoadDurableFromJson`,
+  `OpenFlowWithDurableJson`, `OpenFlowWithDurableJsonSeeded` and `ApplyLiveBundleWithReport`; and
+  `FStoryletLiveLink::ApplyLiveBundle`'s overload that handed the report back as JSON text. Use `SerializeState`,
   `DeserializeState`, `DeserializeStateWithReport`, `PreviewLoad`, `GetHostScope("world")`, `OpenFlowRestoring`,
   `PreviewFlowRestore`, `LoadDurable`, `OpenFlowWithDurable`, `OpenFlowWithDurableSeeded`,
   `ApplyLiveBundleWithLoadReport` and the `FStoryletLoadReport` overload, which hand the report back as a struct.

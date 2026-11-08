@@ -32,6 +32,9 @@ on:
       - "website/**"
       - "packages/village-client/**"
       - "examples/the-village.storylets/**"
+      # The What's new page is generated from these two.
+      - "packages/studio/CHANGELOG.md"
+      - "packages/runtime/CHANGELOG.md"
       - ".github/workflows/website.yml"
   pull_request:
     paths: *site

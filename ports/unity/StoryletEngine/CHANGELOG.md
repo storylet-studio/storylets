@@ -6,11 +6,13 @@
 
 ### Changed
 
-- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
-  never breaks a bundle, a save, a project or this runtime's public API. See
+- **Every 1.x plays the bundles and loads the saves you have today.** From 1.0.0 a patch fixes, a minor
+  adds, and only a major may change behaviour your game relies on, with its notes saying what and why. Every 1.x
+  reads `storylets/bundle@2`, `@1` and `@0` bundles. See
   [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
-- **Needs Unity 6.** The package declares `"unity": "6000.0"` (it said 2021.3, which was never tested; the engine is
-  tested on 6000.4). Beside Patterplay it needs Patterplay 0.28.0 or newer, as the compile check already said.
+- **Now needs Unity 6**, the editor it's tested on (6000.4). The package declares `"unity": "6000.0"`; it said 2021.3,
+  which was never tested. Beside Patterplay it needs Patterplay 0.28.0 or newer, as the compile check already said.
+
 
 ## [0.17.0] - 2026-11-06
 
