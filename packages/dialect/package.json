@@ -41,6 +41,6 @@
     "build": "tsup src/index.ts --format esm,cjs --dts --clean"
   },
   "dependencies": {
-    "@wildwinter/expr": "^0.6.0"
+    "@wildwinter/expr": "^1.0.0"
   }
 }

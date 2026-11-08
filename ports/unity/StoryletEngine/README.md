@@ -70,7 +70,7 @@ whole run.
 
 `StoryletEngineVersion.Current` is this runtime's version, as in its `package.json`. A game or an extension that ships
 apart from the engine checks it at start-up with
-`StoryletEngineVersion.InRange(StoryletEngineVersion.Current, "0.15.0", "0.16.0")` (at least the first version, below
+`StoryletEngineVersion.InRange(StoryletEngineVersion.Current, "1.0.0", "2.0.0")` (at least the first version, below
 the second).
 
 ## The state window

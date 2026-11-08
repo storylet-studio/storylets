@@ -20,6 +20,22 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
+### Changed
+
+- **The first stable release.** From 1.0.0 the CLI follows semver: see
+  [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
+- **Exported playable pages play Patter scenes on Patterplay 1.0.0.**
+
+### Removed
+
+- **`copies` is refused.** A card that still says `copies` is an error naming Across hands, and `storyletengine format`
+  rewrites it (1 is one hand, more is any). Compiled bundles no longer carry `copies`.
+- **A box's old view map is gone.** Map positions left in `view.storyletview` from before map files are no longer
+  read, and `format` drops them rather than moving them. The workbook's dealing columns are Weight, In one hand and
+  Across hands.
+
 ## [0.20.6] - 2026-11-06
 
 ### Changed

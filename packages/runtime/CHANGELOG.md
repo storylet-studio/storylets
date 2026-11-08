@@ -8,6 +8,17 @@ section for it.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
+### Changed
+
+- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
+  never breaks a bundle, a save, a project or this runtime's public API. See
+  [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
+- Runs on the shared libraries' 1.0: `@wildwinter/expr` and `@wildwinter/expr-specificity` `^1.0.0`, and the
+  `@wildwinter/scoperegistry` peer is now `>=1.0.0 <2.0.0`, the same range as Patter 1.0's, so a game with both
+  still holds one registry. The play helpers move with it, and also take `@wildwinter/app-shell` 1.x.
+
 ## [0.17.0] - 2026-11-06
 
 ### Changed

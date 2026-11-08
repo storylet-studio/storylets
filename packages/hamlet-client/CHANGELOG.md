@@ -7,6 +7,13 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
+### Changed
+
+- **The Hamlet 1.0, on the Storylet Engine 1.0.0 and Patter 1.0.0 on every host**, in place of 0.17.0 and 0.46.0, and
+  the cross-host saves, regenerated on them, come out unchanged. Nothing changes how the Hamlet plays.
+
 ## [0.11.0] - 2026-11-06
 
 ### Changed

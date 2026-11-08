@@ -10,6 +10,16 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
+### Changed
+
+- **Storyletter 1.0.** The first stable release. Projects, bundles and saves made by any 1.x open, play and load in
+  every later 1.x, and a game on this or any later 1.x Storylet Engine plays what this version publishes. See
+  [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
+- **Patter scenes play on Patter 1.0.** The Board and an exported playable page play a card's Patter scene with
+  Patterplay 1.0.0, in place of 0.46.0. Nothing changes how a scene plays.
+
 ### Removed
 
 - **The old Copies setting.** A card from before Across hands is no longer read as Across hands: it shows a problem

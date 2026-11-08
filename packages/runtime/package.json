@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/runtime",
-  "version": "0.17.0",
+  "version": "1.0.0",
   "description": "Storylet Engine JS reference runtime: the session (peek / deal / play / outcomes / board / save), held to the conformance corpus.",
   "homepage": "https://storylets.dev/play/javascript/",
   "keywords": [
@@ -42,15 +42,15 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@storylet-studio/dialect": ">=0.1.0 <1.0.0",
-    "@storylet-studio/model": ">=0.1.0 <1.0.0",
-    "@wildwinter/expr": "^0.6.0",
-    "@wildwinter/expr-specificity": "^0.1.0"
+    "@storylet-studio/dialect": ">=0.1.0 <2.0.0",
+    "@storylet-studio/model": ">=0.1.0 <2.0.0",
+    "@wildwinter/expr": "^1.0.0",
+    "@wildwinter/expr-specificity": "^1.0.0"
   },
   "peerDependencies": {
-    "@wildwinter/scoperegistry": ">=0.9.0 <1.0.0"
+    "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0"
   },
   "devDependencies": {
-    "@wildwinter/scoperegistry": ">=0.9.0 <1.0.0"
+    "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0"
   }
 }

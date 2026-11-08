@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
 ### Changed
 
+- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
+  never breaks a bundle, a save, a project or this runtime's public API. See
+  [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
 - **Needs Unity 6.** The package declares `"unity": "6000.0"` (it said 2021.3, which was never tested; the engine is
   tested on 6000.4). Beside Patterplay it needs Patterplay 0.28.0 or newer, as the compile check already said.
 

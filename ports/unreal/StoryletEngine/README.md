@@ -133,8 +133,8 @@ transliteration in C#; the three stay in lockstep.
 in `Storylets/Version.h` and `StoryletVersion.h`) is this runtime's version, as in its
 `.uplugin`. Something that ships apart from the Storylet Engine checks at start-up that the one
 it finds is one it was built for: `storylets::versionInRange(storylets::StoryletEngineVersion,
-"0.15.0", "0.16.0")` (Blueprint: `StoryletEngineVersionInRange`) is true from 0.15.0 up to, but
-not including, 0.16.0.
+"1.0.0", "2.0.0")` (Blueprint: `StoryletEngineVersionInRange`) is true from 1.0.0 up to, but
+not including, 2.0.0.
 
 The sample project beside the plugin
 (`../StoryletEngineDemo/StoryletEngineDemo.uproject`) opens ready to play;

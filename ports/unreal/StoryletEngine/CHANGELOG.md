@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
+### Changed
+
+- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
+  never breaks a bundle, a save, a project or this runtime's public API. See
+  [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
+- The plugin's `CreatedByURL` and `DocsURL` point at storylets.dev.
+
 ### Removed
 
 - **The 13 deprecated names.** `UStoryletSave`'s `SaveStateToJson`, `LoadStateFromJson`, `LoadStateFromJsonWithReport`
@@ -11,10 +20,6 @@
   `DeserializeState`, `DeserializeStateWithReport`, `PreviewLoad`, `GetHostScope("world")`, `OpenFlowRestoring`,
   `PreviewFlowRestore`, `LoadDurable`, `OpenFlowWithDurable`, `OpenFlowWithDurableSeeded`,
   `ApplyLiveBundleWithLoadReport` and the `FStoryletLoadReport` overload, which hand the report back as a struct.
-
-### Changed
-
-- The plugin's `CreatedByURL` and `DocsURL` point at storylets.dev.
 
 ## [0.17.0] - 2026-11-06
 

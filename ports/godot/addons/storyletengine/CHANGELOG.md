@@ -6,6 +6,15 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
+### Changed
+
+- **The first stable release.** From 1.0.0 the four runtimes follow semver, with one meaning of breaking: a minor
+  never breaks a bundle, a save, a project or this runtime's public API. See
+  [Versions and compatibility](https://storylets.dev/compatibility/#versions-and-compatibility).
+- Nothing else of its own: released in lockstep with the other three.
+
 ## [0.17.0] - 2026-11-06
 
 ### Changed
