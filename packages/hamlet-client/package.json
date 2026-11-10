@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/hamlet-client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "license": "MIT",
   "description": "The Hamlet as a playable browser game: the Storylet Engine choosing the beat and Patter performing it, in one host.",
@@ -11,8 +11,8 @@
     "serve": "node scripts/serve.mjs"
   },
   "dependencies": {
-    "@patterkit/play-helpers": "^1.0.0",
-    "@patterkit/runtime": "^1.0.0",
+    "@patterkit/play-helpers": "^1.0.1",
+    "@patterkit/runtime": "^1.0.1",
     "@storylet-studio/with-patter": ">=1.0.0"
   }
 }

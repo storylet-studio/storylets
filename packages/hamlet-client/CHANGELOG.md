@@ -7,6 +7,13 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-10
+
+### Changed
+
+- **The Hamlet on the Storylet Engine 1.0.1 and Patterplay 1.0.1 everywhere**, in place of 1.0.0, so the
+  Unreal project builds with both plugins on one expr kernel. Nothing changes how the Hamlet plays.
+
 ## [1.0.0] - 2026-11-08
 
 ### Changed

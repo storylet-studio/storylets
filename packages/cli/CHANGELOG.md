@@ -20,6 +20,15 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-10
+
+### Changed
+
+- **Extension manifests can say a group of fields starts closed.** `validate` checks a manifest's `groups`
+  as Storyletter does, instead of warning that it's an unknown key.
+- **Exported playable pages run the Storylet Engine and Patterplay 1.0.1**, where joining strings with `+` is an
+  error at play, as it already was at compile.
+
 ## [1.0.0] - 2026-11-08
 
 ### Changed

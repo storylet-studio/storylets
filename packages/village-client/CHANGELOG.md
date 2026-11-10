@@ -9,6 +9,13 @@ the release notes, and refuses a tag with no dated section for it.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-10
+
+### Changed
+
+- **The page runs the Storylet Engine 1.0.1**, in place of 1.0.0, where joining strings with `+` is an error at
+  play, as it already was at compile. Nothing changes how the Village plays.
+
 ## [1.0.0] - 2026-11-08
 
 ### Changed

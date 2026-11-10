@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-10
+
+### Changed
+
+- **`+` on two strings is now an error at play**, as it already was at compile. Text built from pieces can't be
+  translated, so put the value into the line's own text instead. It comes from expr 1.0.1, on every runtime. The
+  plugin's expr kernel id moves to `ke14a776a`, the same as Patterplay 1.0.1's, so a project with both plugins
+  needs both from this release: with Patterplay 1.0.0 beside it, it won't build.
+
 ## [1.0.0] - 2026-11-08
 
 ### Changed

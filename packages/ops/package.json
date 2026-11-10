@@ -29,7 +29,7 @@
   "dependencies": {
     "@storylet-studio/compiler": "0.0.0",
     "@storylet-studio/model": "1.0.0",
-    "@storylet-studio/runtime": "1.0.0",
+    "@storylet-studio/runtime": "1.0.1",
     "@storylet-studio/with-patter": ">=1.0.0",
     "@wildwinter/expr": "^1.0.1",
     "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0",
@@ -38,6 +38,6 @@
     "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@patterkit/play-helpers": "^1.0.0"
+    "@patterkit/play-helpers": "^1.0.1"
   }
 }

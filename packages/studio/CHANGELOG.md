@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-10
+
 ### Added
 
 - **Extensions can tuck their extra fields away.** An extension can say a group of its fields starts closed, so a
@@ -18,6 +20,8 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **Patterplay 1.0.1 inside: joining strings with `+` now fails in Play**, as it already did when
+  compiling. Text built from pieces can't be translated, so put the value into the line's own text instead.
 - **What's New tells you more about each change.** Each entry now shows its headline and the sentences that explain
   it, breaking changes come first and are marked, fixes are listed by what they fixed instead of counted, and a
   release that only carries a new Patterplay takes one line. The same list is on storylets.dev's What's new page.
