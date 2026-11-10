@@ -36,11 +36,11 @@
     "@storylet-studio/ops": "0.0.0",
     "@storylet-studio/runtime": "1.0.0",
     "@storylet-studio/with-patter": ">=1.0.0",
-    "@wildwinter/app-shell": "^1.1.1",
+    "@wildwinter/app-shell": "^1.2.1",
     "@wildwinter/expr-editor": "^1.0.0",
     "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0",
     "@wildwinter/simple-vc-lib": "^0.5.2",
-    "@wildwinter/toolkit": "^1.0.0",
+    "@wildwinter/toolkit": "^1.1.0",
     "electron-updater": "^6.3.9",
     "konva": "^10.3.0",
     "ws": "^8.21.3"

@@ -8,7 +8,7 @@
 
 import type { SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId } from "@storylet-studio/model";
-import { manifestProblems, missingRequirements, viewsFor } from "@wildwinter/toolkit/extensions";
+import { groupClosed, manifestProblems, missingRequirements, viewsFor } from "@wildwinter/toolkit/extensions";
 import type { Manifest } from "@wildwinter/toolkit/extensions";
 import type { ExtensionDto, ExtensionFieldDto, ExtensionTargetDto } from "../shared/api.js";
 
@@ -35,10 +35,12 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
     }
     const views = viewsFor(manifest, "storylets").map((v) => ({ id: v.id, name: v.name }));
     const missing = missingRequirements(manifest, Object.keys(source.project.extensions ?? {}));
+    const closedGroups = [...new Set(Object.values(targets).flatMap((t) => t.fields.map((f) => f.group)
+      .filter((g): g is string => g !== undefined)))].filter((g) => groupClosed(manifest, g));
     out.push({
       id, name: manifest.name, version: manifest.version, targets, values,
       ...(views.length > 0 ? { views } : {}), ...(manifest.reads !== undefined ? { reads: [...manifest.reads] } : {}),
-      ...(missing.length > 0 ? { missing } : {}),
+      ...(missing.length > 0 ? { missing } : {}), ...(closedGroups.length > 0 ? { closedGroups } : {}),
     });
   }
   return out.length > 0 ? out : undefined;

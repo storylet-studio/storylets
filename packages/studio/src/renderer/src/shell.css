@@ -1099,6 +1099,11 @@ select.set-scope { border: 1px solid var(--line); border-radius: var(--radius-sm
 .shell-fold-cap.ext-heading:hover { color: var(--ink); }
 .ext-section > .shell-fold-body { display: flex; flex-direction: column; gap: 6px; }
 .ext-section > .shell-fold-body:empty { display: none; }
+/* A manifest group's heading inside a section or Project Settings: quiet, in the UI font. A group that starts
+   closed holds its disclosure (app-shell's `.shell-group-cap`), which brightens on hover as the caption does. */
+h4.ext-group { margin: 6px 0 0; font: 500 var(--text-sm)/1.2 var(--font-ui); color: var(--muted); }
+h4.ext-group .shell-group-cap { transition: color var(--dur-tint) var(--ease-standard); }
+h4.ext-group .shell-group-cap:hover { color: var(--ink); }
 
 /* A map of records on a page (extension-rows.ts `recordMapSummaryRow`): a line per key, then the Edit that
    opens the Fields window, where it is edited as a grid. */

@@ -231,3 +231,81 @@ describe("the fold", () => {
     expect(labels(rows)).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
   });
 });
+
+// patterkit's brief extension-closed-field-groups: a manifest's `groups` can say a group starts closed. Within an
+// open section, and in Project Settings, it's a heading with a disclosure and a count, and only the set fields.
+describe("a group that starts closed", () => {
+  const tucked: ExtensionDto = {
+    id: "tucked", name: "Tucked", version: "1.0.0",
+    targets: {
+      card: { fields: [
+        { name: "line", type: "text", label: "Line" },
+        { name: "act", type: "text", label: "Act", group: "More" },
+        { name: "marks", type: "text", label: "Marks", group: "More" },
+      ] },
+      project: { fields: [
+        { name: "studio", type: "text", label: "Studio" },
+        { name: "lens", type: "number", label: "Lens", group: "More" },
+        { name: "grade", type: "text", label: "Grade", group: "More" },
+      ] },
+    },
+    values: { c_bell: { line: "Hush.", act: "turn" }, c_tide: {}, proj_probe: { lens: 35 } },
+    closedGroups: ["More"],
+  };
+  const withTucked = { ...project, extensions: [tucked] } as unknown as ProjectDto;
+  const thost = { project: () => withTucked, save: vi.fn() };
+  const labels = (el: ParentNode): string[] => [...el.querySelectorAll(".shell-fieldrow-label")].map((c) => c.textContent ?? "");
+  const groupCap = (el: ParentNode): HTMLButtonElement | null => el.querySelector<HTMLButtonElement>(".shell-group-cap");
+  const openSection = (nodeId: string): HTMLElement => {
+    const sec = extensionSection(thost, tucked, "card", nodeId);
+    if (sec.querySelector(".shell-fold-cap")?.getAttribute("aria-expanded") !== "true") sec.querySelector<HTMLButtonElement>(".shell-fold-cap")!.click();
+    return sec;
+  };
+
+  it("is a disclosure in an open section, counting and showing what the node sets", () => {
+    const sec = openSection("c_bell");
+    try {
+      expect(groupCap(sec)?.textContent).toBe("More (1 set)");
+      expect(groupCap(sec)?.closest("h4.ext-group")).not.toBeNull();
+      expect(labels(sec)).toEqual(["Line", "Act"]);
+      groupCap(sec)!.click();
+      expect(labels(sec)).toEqual(["Line", "Act", "Marks"]);
+      // Open stays open on the next node.
+      expect(labels(openSection("c_tide"))).toEqual(["Line", "Act", "Marks"]);
+      groupCap(sec)!.click();
+    } finally { sec.querySelector<HTMLButtonElement>(".shell-fold-cap")!.click(); }
+  });
+
+  it("leaves a folded section as it was", () => {
+    const sec = extensionSection(thost, tucked, "card", "c_bell");
+    expect(sec.querySelector(".shell-fold-cap")?.getAttribute("aria-expanded")).toBe("false");
+    expect(labels(sec)).toEqual(["Line", "Act"]);
+  });
+
+  it("is a disclosure in Project Settings too, remembered apart from the pages'", () => {
+    const rows = extensionFields(thost, tucked, "project", "proj_probe");
+    expect(groupCap(rows)?.textContent).toBe("More (1 set)");
+    expect(labels(rows)).toEqual(["Studio", "Lens"]);
+    groupCap(rows)!.click();
+    expect(labels(rows)).toEqual(["Studio", "Lens", "Grade"]);
+    // Still open at the next opening of Settings; the pages' groups are untouched.
+    expect(labels(extensionFields(thost, tucked, "project", "proj_probe"))).toEqual(["Studio", "Lens", "Grade"]);
+    groupCap(rows)!.click();
+  });
+
+  it("locks the rows it draws when opened inside something read-only", () => {
+    const frame = document.createElement("div");
+    frame.classList.add("vc-readonly");
+    const rows = extensionFields(thost, tucked, "project", "proj_probe");
+    frame.append(rows);
+    document.body.append(frame);
+    try {
+      groupCap(rows)!.click();
+      const inputs = [...rows.querySelectorAll<HTMLInputElement>("input")];
+      expect(inputs.length).toBeGreaterThan(0);
+      expect(inputs.every((i) => i.disabled)).toBe(true);
+      expect(groupCap(rows)!.disabled).toBe(false);
+      groupCap(rows)!.click();
+    } finally { frame.remove(); }
+  });
+});

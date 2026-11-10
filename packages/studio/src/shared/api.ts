@@ -653,6 +653,8 @@ export interface ExtensionDto {
   reads?: string[];
   /** The extensions its manifest requires that the project doesn't take, by id. Absent when none. */
   missing?: string[];
+  /** The groups of its Storylets fields that start closed (the manifest's `groups`). Absent when none. */
+  closedGroups?: string[];
 }
 
 /** A view the open project offers, as the editor needs it: whether it opens on this machine. */

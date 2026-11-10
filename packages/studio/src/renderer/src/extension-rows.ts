@@ -14,7 +14,10 @@
 // Every page folds an extension's section to the fields the node sets (the
 // shell's extensionFold, Pattershot's brief F1 to F9, shared with Patterpad):
 // the extension's name is the disclosure and counts them. Project Settings
-// draws every field, unfolded.
+// draws every field, unfolded. A group the manifest says starts closed is its
+// heading with a disclosure, counting what's set and showing only that until
+// opened, in an open section and in Project Settings alike (the shell's
+// fieldGroups; patterkit's brief extension-closed-field-groups).
 //
 // A value commits as typed, through the save queue, so typing coalesces into one
 // write and one undo step per node. Until the write lands the value the author
@@ -22,8 +25,8 @@
 // ---------------------------------------------------------------------------
 
 import { el } from "@wildwinter/app-shell";
-import { extensionFold, isRecordMap, isSet, recordMapSummary, valueRows } from "@wildwinter/app-shell/value-rows";
-import type { ValueAdapter, ValueDecl } from "@wildwinter/app-shell/value-rows";
+import { extensionFold, fieldGroups, isRecordMap, isSet, recordMapSummary, valueRows } from "@wildwinter/app-shell/value-rows";
+import type { FieldGroups, ValueAdapter, ValueDecl } from "@wildwinter/app-shell/value-rows";
 import { pickLists, valueProblems } from "@wildwinter/toolkit/extensions";
 import type { TargetDecl, TypeDecl } from "@wildwinter/toolkit/extensions";
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../../shared/api.js";
@@ -199,20 +202,44 @@ function markShard(holder: HTMLElement, project: ProjectDto | undefined, extensi
   holder.dataset["extName"] = extension.name;
 }
 
-/** One extension's fields for one node, every one, under a heading for each of the manifest's groups: Project
- *  Settings', which doesn't fold (it's where an author goes to set things). */
+/** Whether one of an extension's groups starts closed (its manifest's `groups`). */
+const closedOf = (extension: ExtensionDto) => (group: string): boolean => extension.closedGroups?.includes(group) ?? false;
+
+/** Opening a fold or a closed group draws rows the lock never saw: lock them as it locked the rest, wherever
+ *  `holder` sits in something read-only (a locked shard, a held document, a read-only Settings). */
+function relockOnOpen(holder: HTMLElement): void {
+  holder.addEventListener("click", (e) => {
+    if (!(e.target instanceof Element) || !e.target.closest(".shell-fold-cap, .shell-group-cap")) return;
+    const off = holder.closest<HTMLElement>(".vc-readonly");
+    if (off) lockControls(off, true);
+  });
+}
+
+/** Project Settings' closed groups, by extension: open or closed as the author left them for the session, apart
+ *  from the pages'. One per extension, so one section's sweep never forgets another's rows. */
+const settingsGroups = new Map<string, FieldGroups>();
+let settingsMounts = 0;
+
+/** One extension's fields for one node, every one, under a heading for each of the manifest's groups (a closed
+ *  group's a disclosure): Project Settings', which doesn't fold (it's where an author goes to set things). */
 export function extensionFields(host: ExtensionHost, extension: ExtensionDto, kind: string, nodeId: string): HTMLElement {
   const holder = el("div", "ext-fields");
   markShard(holder, host.project(), extension, kind, nodeId);
   const parts = extensionParts(host, extension, kind, nodeId);
-  let group: string | undefined;
-  // Editor-only fields included: they are the editor's data, never compiled, and this is the editor.
-  for (const decl of parts.fields) {
-    if (decl.group !== undefined && decl.group !== group) { group = decl.group; holder.append(parts.group(group)); }
-    holder.append(parts.row(decl));
-  }
-  // No sweep: one page draws several extensions and nodes, and a sweep after each would forget the others'
-  // rows. The cache holds one row per field of each node opened, which stays small.
+  const groups = settingsGroups.get(extension.id) ?? fieldGroups();
+  settingsGroups.set(extension.id, groups);
+  // Editor-only fields included: they are the editor's data, never compiled, and this is the editor. Each
+  // drawing is a node of its own, so a value cleared while its group is closed keeps its row until Settings
+  // shuts, and the sweep forgets the drawings before.
+  holder.append(...groups.rows({
+    extension: extension.id, node: `${kind}\u0000${nodeId}\u0000${++settingsMounts}`,
+    fields: parts.fields as unknown as ValueDecl[], entry: parts.entry,
+    row: (decl) => parts.row(decl as unknown as ExtensionFieldDto), group: parts.group, closed: closedOf(extension),
+  }));
+  groups.sweep();
+  relockOnOpen(holder);
+  // No sweep of the row cache: one page draws several extensions and nodes, and a sweep after each would forget
+  // the others' rows. It holds one row per field of each node opened, which stays small.
   return holder;
 }
 
@@ -235,16 +262,12 @@ export function extensionSection(host: ExtensionHost, extension: ExtensionDto, k
   const section = fold.section({
     extension: extension.id, caption: extension.name, node: `${kind}\u0000${nodeId}`,
     fields: parts.fields as unknown as ValueDecl[], entry: parts.entry,
-    row: (decl) => parts.row(decl as unknown as ExtensionFieldDto), group: parts.group,
+    row: (decl) => parts.row(decl as unknown as ExtensionFieldDto), group: parts.group, closed: closedOf(extension),
     className: "doc-sect ext-section", captionClassName: "ext-heading insp-label",
   });
   markShard(section, host.project(), extension, kind, nodeId);
   if (o.panel) section.querySelector(":scope > .shell-fold-body")?.classList.add("doc-panel");
-  // Opening the fold draws rows the page's lock never saw: lock them as it locked the rest.
-  section.querySelector(":scope > .shell-fold-cap")?.addEventListener("click", () => {
-    const off = section.closest<HTMLElement>(".vc-readonly");
-    if (off) lockControls(off, true);
-  });
+  relockOnOpen(section);
   return section;
 }
 

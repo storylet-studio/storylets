@@ -10,6 +10,12 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Extensions can tuck their extra fields away.** An extension can say a group of its fields starts closed, so a
+  page's extension section and Project Settings show the group's heading and only the fields you've set in it, such
+  as "More (2 set)". Click the heading to see the rest; it stays open as you move between cards.
+
 ### Changed
 
 - **What's New tells you more about each change.** Each entry now shows its headline and the sentences that explain
