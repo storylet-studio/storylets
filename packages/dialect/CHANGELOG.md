@@ -1,5 +1,11 @@
 # @storylet-studio/dialect
 
+## 1.0.1
+
+### Patch Changes
+
+- 4877ce9: **`+` on two strings is now refused at play too**, as it already was at compile, because text built from pieces can't be translated. `@wildwinter/expr` moves to `^1.0.1`.
+
 ## 1.0.0
 
 ### Major Changes

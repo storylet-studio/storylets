@@ -25,8 +25,8 @@
     "build": "tsup src/index.ts --format esm,cjs --dts --clean"
   },
   "dependencies": {
-    "@storylet-studio/dialect": "1.0.0",
-    "@storylet-studio/model": "1.0.0",
+    "@storylet-studio/dialect": "1.0.1",
+    "@storylet-studio/model": "1.0.1",
     "@wildwinter/expr": "^1.0.1",
     "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0",
     "@wildwinter/toolkit": "^1.1.0",
