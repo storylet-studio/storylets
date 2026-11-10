@@ -44,7 +44,7 @@
   "dependencies": {
     "@storylet-studio/dialect": ">=0.1.0 <2.0.0",
     "@storylet-studio/model": ">=0.1.0 <2.0.0",
-    "@wildwinter/expr": "^1.0.0",
+    "@wildwinter/expr": "^1.0.1",
     "@wildwinter/expr-specificity": "^1.0.0"
   },
   "peerDependencies": {
