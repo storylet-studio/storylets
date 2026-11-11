@@ -15,10 +15,10 @@
 import { EXTENSIONS_DIR, MANIFEST_EXTENSION } from "@storylet-studio/model";
 import type { BundleExtension, ExtensionFieldDecl, NodeExtensions } from "@storylet-studio/model";
 import {
-  HOSTS, compileEntry, compiledTarget, entryProblems, manifestProblems, missingRequirements, orphanedEntries, pickClashes, pickLists,
-  targetOf,
+  HOSTS, addPoolValues, compileEntry, compiledTarget, entryProblems, manifestProblems, missingRequirements, orphanedEntries, pickClashes,
+  pickLists, poolNearDuplicates, poolValues, targetOf,
 } from "@wildwinter/toolkit/extensions";
-import type { Manifest, Problem, TypeDecl, ValueContext } from "@wildwinter/toolkit/extensions";
+import type { Manifest, PoolCounts, Problem, TypeDecl, ValueContext } from "@wildwinter/toolkit/extensions";
 import type { Issue, SourceExtension, SourceProject } from "./project.js";
 
 /** What the pass hands the bundle. */
@@ -77,12 +77,17 @@ interface Taken {
   readonly manifest?: Manifest;
 }
 
+/** Each extension's pools (a pick's `{ "pool": name }` source), by extension id and then pool name: the values
+ *  the project's data holds, in the order an editor offers them (the commonest first). */
+export type ExtensionPools = Record<string, Record<string, string[]>>;
+
 /**
  * Validate every extension, and compile what may be compiled. Issues are the
- * pass's report; `compiled` is what the bundle carries. Data whose manifest is
- * missing or unsound is reported and left out of the bundle, never changed.
+ * pass's report; `compiled` is what the bundle carries; `pools` what an editor
+ * suggests for a pool pick. Data whose manifest is missing or unsound is
+ * reported and left out of the bundle, never changed.
  */
-export function extensionPass(source: SourceProject): { issues: Issue[]; compiled: CompiledExtensions } {
+export function extensionPass(source: SourceProject): { issues: Issue[]; compiled: CompiledExtensions; pools: ExtensionPools } {
   const issues: Issue[] = [];
   const projectPath = source.path;
   const taken = source.project.extensions ?? {};
@@ -145,6 +150,9 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
   const exists = (kind: string, id: string): boolean => nodes.get(id)?.kind === kind;
   const values = new Map<string, NodeExtensions>();
   const projectValues = new Map<string, Record<string, unknown>>();
+  // Each extension's pools: every value a field naming a pool holds, counted over all its data (cards, decks,
+  // the project's own). An editor offers them; two that differ only in case or spacing warn below.
+  const poolCounts = new Map<string, PoolCounts>();
   const shards: { file: SourceExtension; box?: string }[] = [
     ...(source.extensions ?? []).map((file) => ({ file })),
     ...source.boxes.flatMap((b) => (b.extensions ?? []).map((file) => ({ file, box: b.box.box.id }))),
@@ -218,6 +226,7 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
           issues.push({ extension: stem, severity: "warning", path: file.path, where: id,
             message: `entries.${kind}.${id} belongs ${node.box === undefined ? "in the project's own shard" : "in its own box's shard"}; it is compiled from here all the same` });
         }
+        addPoolValues(target, entry, poolCounts.get(stem) ?? poolCounts.set(stem, new Map()).get(stem)!);
         const problems = entryProblems(target, entry, contexts.get(stem) ?? { exists });
         for (const p of problems) issues.push(issueOf(file.path, p, `entries.${kind}.${id}${p.path === "" ? ": " : "."}`, "entries", stem));
         if (problems.some((p) => p.severity === "error")) continue;
@@ -226,6 +235,16 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
         if (kind === "project") { projectValues.set(stem, compiled); continue; }
         values.set(id, { ...(values.get(id) ?? {}), [stem]: compiled });
       }
+    }
+  }
+
+  const pools: ExtensionPools = {};
+  for (const [ext, counts] of [...poolCounts].sort(([a], [b]) => a.localeCompare(b))) {
+    if (counts.size === 0) continue;
+    pools[ext] = Object.fromEntries([...counts.keys()].sort().map((pool) => [pool, poolValues(counts, pool)]));
+    for (const p of poolNearDuplicates(counts)) {
+      issues.push({ extension: ext, severity: p.severity, path: projectPath, field: "extensions", detail: p.code,
+        message: `the Storylet extension "${ext}": ${p.message}` });
     }
   }
 
@@ -240,7 +259,7 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
     const project = projectValues.get(id);
     bundle[id] = { version: manifest.version, fields, ...(project !== undefined ? { project } : {}) };
   }
-  return { issues, compiled: { bundle, nodes: values } };
+  return { issues, compiled: { bundle, nodes: values }, pools };
 }
 
 /** Every pick a manifest declares for Storylets, at any depth (in a record, or as a map's or a list's items). */

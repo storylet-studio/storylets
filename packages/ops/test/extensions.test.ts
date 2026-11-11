@@ -13,7 +13,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalStringify, compileProject, parseSource, projectHash } from "@storylet-studio/compiler";
+import { canonicalStringify, compileProject, extensionPass, parseSource, projectHash } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
 import { parseManifest, unresolvedOf, withoutMark } from "@wildwinter/toolkit/extensions";
@@ -185,6 +185,34 @@ describe("validation, driven by the manifest", () => {
       `${BOX_SHARD}: entries.card.c_bell.to: "to" is "c_tide", which is a card and an entry of the list "places"`,
     ]);
     expect(clash.find((i) => i.detail === "pick-clash")).toMatchObject({ extension: "probe", severity: "warning", field: "extensions" });
+  });
+
+  it("counts a pool pick's names over all the data, the commonest first, and warns of two that differ only in case", () => {
+    const dir = scratch();
+    try {
+      const MANIFEST = "extensions/probe.extension.json";
+      const manifest = JSON.parse(readFileSync(join(dir, MANIFEST), "utf8")) as { targets: { storylets: Record<string, { fields: unknown[] }> } };
+      manifest.targets.storylets["card"]!.fields.push({ name: "place", type: "pick", from: [{ pool: "places" }] });
+      manifest.targets.storylets["project"]!.fields.push({ name: "home", type: "pick", from: [{ pool: "places" }] });
+      writeFileSync(join(dir, MANIFEST), JSON.stringify(manifest));
+      editBox(dir, (e) => {
+        e["card"]!["c_bell"]!["place"] = "The Bell Tower";
+        e["card"]!["c_tide"] = { ...(e["card"]!["c_tide"] ?? {}), place: "the bell tower" };
+      });
+      const root = read(dir, "probe.storyletextension") as { entries: Entries };
+      root.entries["project"] = { proj_probe: { ...(root.entries["project"]?.["proj_probe"] ?? {}), home: "The Bell Tower" } };
+      write(dir, "probe.storyletextension", root);
+      const loaded = loadProject(dir);
+      // Any name is valid: nothing refuses it.
+      expect(messages(runValidate(loaded, { checkBundle: false }).issues, "error")).toEqual([]);
+      const pass = extensionPass(loaded.source!);
+      expect(pass.pools).toEqual({ probe: { places: ["The Bell Tower", "the bell tower"] } });
+      const near = pass.issues.filter((i) => i.detail === "pool-near-duplicate");
+      expect(near.map((i) => `${i.path}: ${i.message}`)).toEqual([
+        `probe.storyletproj: the Storylet extension "probe": the pool "places" has "The Bell Tower" (2 uses) and "the bell tower" (1 use), which differ only in case, spaces, or punctuation`,
+      ]);
+      expect(near[0]).toMatchObject({ extension: "probe", severity: "warning", field: "extensions" });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("reports an entry for a node that has gone, per entry, as a warning, and keeps it", () => {

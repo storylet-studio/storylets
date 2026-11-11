@@ -51,11 +51,11 @@ export function extensionProblemLine(p: Pick<Problem, "message" | "detail" | "ex
 
   // The project's side: its pin and its manifest.
   const noManifest = /^the project takes the Storylet extension "([^"]+)", but has no manifest for it/.exec(m);
-  if (noManifest) return `This project takes the extension ${quoted(noManifest[1]!)}, but its manifest isn't in the extensions folder. Its data is kept, but your game won't get it.`;
+  if (noManifest) return `This project uses the extension ${quoted(noManifest[1]!)}, but its manifest isn't in the extensions folder. Its data is kept, but your game won't get it.`;
   const version = /^the project takes "[^"]+" (?:at version (\S+)|with no version), but its manifest is version ([^;]+);/.exec(m);
   if (version) {
-    return say(version[1] ? `The project takes version ${version[1]}, but the manifest is version ${version[2]}.` : `The project doesn't say which version it takes, and the manifest is version ${version[2]}.`,
-      "Run storyletengine format to take the manifest's version.");
+    return say(version[1] ? `The project uses version ${version[1]}, but the manifest is version ${version[2]}.` : `The project doesn't say which version it uses, and the manifest is version ${version[2]}.`,
+      "Run storyletengine format to move the project to the manifest's version.");
   }
   if (/^the project's pin for "[^"]+" has settings, /.test(m)) {
     return say("The project still holds settings for this extension, which extensions don't have any more.", "They're ignored.");
@@ -68,7 +68,14 @@ export function extensionProblemLine(p: Pick<Problem, "message" | "detail" | "ex
       .replace(/"([^"]*)"/g, (_, s: string) => quoted(s));
     return say(`${quoted(pickClash[1]!)} is ${sources}, so a value naming it is ambiguous.`, "Rename one of them.");
   }
+  // Two of a pool's names that differ only in case, spacing, or punctuation: `the Storylet extension "<x>": the pool
+  // "<p>" has "<a>" (<n> uses) and "<b>" (<n> use), which differ only in ...`.
+  const nearPool = /^the Storylet extension "[^"]+": the pool "[^"]+" has (.+), which differ only in case, spaces, or punctuation$/.exec(m);
+  if (nearPool) {
+    const names = nearPool[1]!.replace(/"([^"]*)" \((\d+ uses?)\)/g, (_, v: string, n: string) => `${quoted(v)} (${n})`);
+    return say(`${names} differ only in capitals, spaces, or punctuation, so your game will take them as different names.`, "If they're the same, change one to match the other.");
+  }
   const notTaken = /^data for the Storylet extension "([^"]+)", which the project does not take/.exec(m);
-  if (notTaken) return `There's data here for the extension ${quoted(notTaken[1]!)}, which this project doesn't take. It's kept, but your game won't get it.`;
+  if (notTaken) return `There's data here for the extension ${quoted(notTaken[1]!)}, which this project doesn't use. It's kept, but your game won't get it.`;
   return undefined;
 }

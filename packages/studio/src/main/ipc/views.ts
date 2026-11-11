@@ -191,7 +191,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
       const what = differs
         ? "Reinstalling replaces its installed files on this machine, and the project's copy of its manifest, which this package changes. You can undo the project's part."
         : "Reinstalling replaces its installed files on this machine. The project stays as it is.";
-      if (await ask(`Reinstall ${name} ${v}?`, `This package is ${name} ${v}, the version ${mine ? "this project takes" : "installed here"}. ${what} Its open views close.`, [`Reinstall ${v}`, "Cancel"]) !== 0) return null;
+      if (await ask(`Reinstall ${name} ${v}?`, `This package is ${name} ${v}, the version ${mine ? "this project uses" : "installed here"}. ${what} Its open views close.`, [`Reinstall ${v}`, "Cancel"]) !== 0) return null;
       closeViews();
       const installedNow = await installExtensionPackage(pkg, dir());
       if (!installedNow.ok) return { error: installedNow.why };
@@ -203,7 +203,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
 
     const lines = plan.changes.length > 0 ? plan.changes : ["No fields or views change."];
     const how = mine
-      ? "The project takes it as one step you can undo, and its views install on this machine."
+      ? "The project moves to it as one step you can undo, and its views install on this machine."
       : "Its views install on this machine. No project changes.";
     if (mine) { const why = mayWrite(); if (why !== undefined) return { error: why }; }
     if (await ask(`Update ${name}${plan.from ? ` from ${plan.from}` : ""} to ${plan.to}?`, `${lines.join(" ")} ${how} Values it no longer accepts show among the problems afterwards.`, [`Update to ${plan.to}`, "Cancel"]) !== 0) return null;
@@ -241,7 +241,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
     const out: ExtensionPackage[] = [];
     for (const id of missing) {
       const go = await ask(`${name} needs \u201c${id}\u201d`,
-        `${name} works only in a project that also takes the extension \u201c${id}\u201d, which this one doesn't. Choose its package to add both, as one step you can undo.`,
+        `${name} works only in a project that also uses the extension \u201c${id}\u201d, which this one doesn't. Choose its package to add both, as one step you can undo.`,
         [`Choose \u201c${id}\u201d Package\u2026`, "Cancel"]);
       if (go !== 0) return null;
       const path = await pickPackage(`Add \u201c${id}\u201d`, `Choose the package of \u201c${id}\u201d, which ${name} needs: its folder, or a .tgz file made by npm pack.`);
@@ -254,7 +254,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
       // One level: what the requirement needs in turn must be in the project, or among what's being added.
       const further = missingRequirements(req.manifest, [...taken, pkg.manifest.id, ...missing]);
       if (further.length > 0) {
-        return { error: `${req.manifest.name} needs ${further.map((f) => `\u201c${f}\u201d`).join(" and ")} too, which this project doesn't take. Add ${further.length > 1 ? "them" : "it"} first, then ${name}.` };
+        return { error: `${req.manifest.name} needs ${further.map((f) => `\u201c${f}\u201d`).join(" and ")} too, which this project doesn't use. Add ${further.length > 1 ? "them" : "it"} first, then ${name}.` };
       }
       out.push(req);
     }
@@ -373,10 +373,17 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
         const editor = deps.editor();
         if (!at || !editor || editor.isDestroyed()) return;
         const name = at.manifest.name || id;
-        const taken = takenExtensions(deps.session()).some((t) => t.id === id);
+        const taken = takenExtensions(deps.session()).find((t) => t.id === id);
         const last = mine.length === 1;
+        // Whether this is the copy the project opens, and what it opens once it's gone.
+        const using = taken ? chooseInstalled(mine, id, taken.pin).installed?.version : undefined;
+        const after = using === version ? chooseInstalled(mine.filter((i) => i.version !== version), id, taken!.pin).installed?.version : undefined;
+        const views = viewsFor(at.manifest, "storylets").map((v) => v.name);
+        const its = views.length === 1 ? `its ${views[0]}` : "its views";
         const detail = [
-          ...(taken ? [`This project takes ${name}${last ? ", so its views will show as not installed until you install them again" : ""}.`] : []),
+          ...(using === version
+            ? [after ? `This project uses this version, and will open ${after} instead.` : `This project uses this version, so ${its} won't open until you install it again.`]
+            : using ? [`This project uses ${using}, not this version.`] : []),
           "Other projects on this machine that use this version lose its views too.",
           last ? `${name}'s views keep their own settings on this machine, and those go too.` : "The other installed versions keep their views' settings.",
         ].join(" ");
@@ -414,7 +421,7 @@ export function createViewHost(deps: ViewHostDeps): ViewHost {
         let take = plan.project === "take";
         if (plan.project === "update") {
           take = await ask(`Update ${name} in this project?`,
-            `This project takes ${name}${plan.pinned ? ` ${plan.pinned}` : ""}, and this package is ${plan.version}. Updating takes it into the project as one step you can undo. Its views are installed on this machine either way.`,
+            `This project uses ${name}${plan.pinned ? ` ${plan.pinned}` : ""}, and this package is ${plan.version}. Updating moves the project to it as one step you can undo. Its views are installed on this machine either way.`,
             [`Update to ${plan.version}`, "Not Now"]) === 0;
         }
         // What it requires and the project lacks goes in with it, in the same step, or nothing does.

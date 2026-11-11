@@ -33,7 +33,7 @@
     "@storylet-studio/with-patter": ">=1.0.0",
     "@wildwinter/expr": "^1.0.1",
     "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0",
-    "@wildwinter/toolkit": "^1.1.0",
+    "@wildwinter/toolkit": "^1.2.0",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1"
   },

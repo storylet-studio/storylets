@@ -642,7 +642,10 @@ export interface ProjectDto {
 export interface ExtensionDto {
   id: string;
   name: string;
+  /** The manifest's version. */
   version: string;
+  /** The version the project names for it (its pin), when it names one. */
+  taken?: string;
   /** By node kind: `card`, `outcome`, `box`, `deck`, `tagGroup`, `tag`, `handTemplate`, `hand`, `project`. */
   targets: Record<string, ExtensionTargetDto>;
   /** By node id: the node's values, raw. */
@@ -655,6 +658,9 @@ export interface ExtensionDto {
   missing?: string[];
   /** The groups of its Storylets fields that start closed (the manifest's `groups`). Absent when none. */
   closedGroups?: string[];
+  /** Its pools (a pick's `{ "pool": name }` source), by pool name: the names the project's data already uses,
+   *  the commonest first, for the box to suggest. Absent when there are none. */
+  pools?: Record<string, string[]>;
 }
 
 /** A view the open project offers, as the editor needs it: whether it opens on this machine. */
@@ -676,8 +682,8 @@ export interface ExtensionFieldDto {
   values?: string[];
   stages?: string[];
   to?: string;
-  /** A pick's sources, in order: fixed words, a reference kind's nodes, the extension's own project lists. */
-  from?: ({ words: string[] } | { to: string } | { list: string })[];
+  /** A pick's sources, in order: fixed words, a reference kind's nodes, the extension's own project lists, a pool of free names. */
+  from?: ({ words: string[] } | { to: string } | { list: string } | { pool: string })[];
   fields?: ExtensionFieldDto[];
   key?: { type: string; to?: string };
   of?: Omit<ExtensionFieldDto, "name"> & { name?: string };

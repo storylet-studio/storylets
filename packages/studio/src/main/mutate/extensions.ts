@@ -56,7 +56,7 @@ export async function setExtensionValues(
   const pin = source.project.extensions?.[extension];
   const file = (source.manifests ?? []).find((m) => m.id === extension);
   if (pin === undefined || file === undefined || manifestProblems(file.manifest).some((p) => p.severity === "error")) {
-    return no("bad-request", `This project doesn't take ${quoted(extension)}, so nothing was written.`);
+    return no("bad-request", `This project doesn't use ${quoted(extension)}, so nothing was written.`);
   }
   const manifest = file.manifest as Manifest;
   const name = manifest.name;
@@ -139,7 +139,7 @@ export async function removeExtension(session: ProjectSession, id: string): Prom
   const source = session.loaded.source;
   if (source === undefined) return refuse(session, "the project did not load");
   const taken = source.project.extensions ?? {};
-  if (!taken[id]) return { error: `This project doesn't take ${id}.` };
+  if (!taken[id]) return { error: `This project doesn't use ${id}.` };
   // The loader keeps the manifest unchecked: its name only when it has one.
   const raw = source.manifests?.find((m) => m.id === id)?.manifest as { name?: unknown } | undefined;
   const name = typeof raw?.name === "string" && raw.name ? raw.name : id;

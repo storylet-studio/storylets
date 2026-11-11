@@ -14,7 +14,7 @@ import { ok } from "./results.js";
 import type { SettingsDialog, SettingsSectionHandle } from "@wildwinter/app-shell";
 import type { OpenResult, PlayRung, ProjectDto, ProjectSettingsDto, PropertyDeclDto, StageTargetDto, StudioApi, VcsSetting } from "../../shared/api.js";
 import { VCS_OPTIONS } from "../../shared/api.js";
-import { extensionFields, extensionsFor } from "./extension-rows.js";
+import { extensionFields, extensionLine, extensionsFor } from "./extension-rows.js";
 import type { ExtensionHost } from "./extension-rows.js";
 import { PLAY_RUNGS, RUNG_BLURB, RUNG_LABEL } from "./play-ladder.js";
 
@@ -154,9 +154,10 @@ export function createProjectSettings(
     // One section per Storylet extension with project-level fields, named for the extension, in the Project
     // group: the project's own values, which have no page but this dialog.
     const extensionSections = extensionsFor(project(), "project").map((extension) => ({
-      id: `ext-${extension.id}`, label: extension.name, group: "Project",
+      id: `ext-${extension.id}`, label: extension.name, group: "Extensions",
       mount: (h: HTMLElement) => {
         const node = project()?.projectNode;
+        h.append(el("p", { className: "set-note", text: extensionLine(extension) }));
         if (node !== undefined) h.append(extensionFields(extensionHost, extension, "project", node));
         return {};
       },

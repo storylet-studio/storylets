@@ -7,7 +7,7 @@ export { describeDeclarations, describeDisagreement, propertyMeta, sameDeclarati
 export type { CompileResult } from "./compile.js";
 export { compileMaps, mapDrawing } from "./maps.js";
 export { extensionNodes, extensionPass } from "./extensions.js";
-export type { CompiledExtensions } from "./extensions.js";
+export type { CompiledExtensions, ExtensionPools } from "./extensions.js";
 export { contentAboveRung, summariseLadder, ladderWarning, playRungOf, PLAY_RUNGS } from "./play-ladder.js";
 export type { LadderItem, LadderItemKind } from "./play-ladder.js";
 export type { MapDrawing } from "./maps.js";

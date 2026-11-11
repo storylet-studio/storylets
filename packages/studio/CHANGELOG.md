@@ -10,6 +10,23 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **A field can take any name, and suggests the ones you've used.** Where an extension's field lets you name
+  something only the game knows (a point of interest, a camera), you type the name in a box that offers the names
+  already used for the same kind of thing anywhere in the project, the commonest first, with the field's fixed
+  choices above them. Arrow keys and Enter pick one; anything else you type is kept as it is. Two names that differ
+  only in capitals, spaces, or punctuation show in Problems, so a typo doesn't become a second name.
+
+### Changed
+
+- **An extension's settings are easier to read.** A field's help is a tooltip on its name (or shows when you reach
+  the field from the keyboard), lists and maps in Project Settings are tables, and a group of fields that starts
+  closed shows what you've set above its heading.
+- **Extensions in plain words.** File > Extensions says which installed version of an extension this project uses,
+  and says what the project loses before you uninstall that one. Each extension's page in Project Settings says what
+  it is and which version, under its own Extensions heading.
+
 ## [1.1.0] - 2026-11-10
 
 ### Added

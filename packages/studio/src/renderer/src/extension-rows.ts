@@ -98,9 +98,10 @@ export function extensionCount(extension: ExtensionDto, kind: string, nodeId: st
   return (extension.targets[kind]?.fields ?? []).filter((d) => isSet(d as unknown as ValueDecl, values[d.name])).length;
 }
 
-/** The adapter for one extension's rows: the project's nodes, and that extension's project lists for a pick's
+/** The adapter for one extension's rows: the project's nodes, that extension's project lists for a pick's
  *  `list` sources, read off its project values (the toolkit's `pickLists`) when a choice is asked for, so a list
- *  entry added in Project Settings is offered before Save. */
+ *  entry added in Project Settings is offered before Save, and its pools for a pick's `pool` sources: the names
+ *  the project already uses, the commonest first (patterkit's brief pool-picks-app-shell-1-3). */
 export function adapterOf(host: ExtensionHost, extension: ExtensionDto): ValueAdapter {
   const project = host.project();
   const target = { fields: extension.targets["project"]?.fields ?? [] } as unknown as TargetDecl;
@@ -110,7 +111,16 @@ export function adapterOf(host: ExtensionHost, extension: ExtensionDto): ValueAd
     // A held node by its name wherever the project has it; undefined, so "gone", only when it has none.
     label: (kind, id) => project?.extensionNodes?.[kind]?.find((n) => n.id === id)?.label,
     list: (name) => pickLists(target, host.projectEntry?.(extension.id) ?? saved)(name),
+    pool: (name) => extension.pools?.[name],
   };
+}
+
+/** The line an extension's Project Settings page opens with: that it's an extension, and the version the project
+ *  uses (patterkit's brief extensions-plain-words-app-shell-1-3; Patterpad's `extensionLine`). */
+export function extensionLine(x: Pick<ExtensionDto, "name" | "taken" | "version">): string {
+  return x.taken !== undefined
+    ? `${x.name} extension, version ${x.taken}.`
+    : `${x.name} extension. The project doesn't name a version; its manifest is ${x.version}.`;
 }
 
 /** Whose extension shards hold a node's values: its box's id, or the project's own owner for the project and
@@ -123,7 +133,9 @@ export function extensionOwner(project: ProjectDto | undefined, kind: string, no
 /** One extension's parts for one node: its fields, the values shown (a value typed but not yet written over the
  *  saved one), a row per field and a heading per group. Drawn whole (`extensionFields`) or folded
  *  (`extensionSection`). */
-function extensionParts(host: ExtensionHost, extension: ExtensionDto, kind: string, nodeId: string): {
+function extensionParts(host: ExtensionHost, extension: ExtensionDto, kind: string, nodeId: string,
+  /** Lay maps and lists of records out as tables, a column per field: Project Settings has the room. */
+  tables = false): {
   fields: readonly ExtensionFieldDto[]; entry: Record<string, unknown> | undefined;
   row: (decl: ExtensionFieldDto) => HTMLElement; group: (name: string) => HTMLElement;
 } {
@@ -152,6 +164,7 @@ function extensionParts(host: ExtensionHost, extension: ExtensionDto, kind: stri
       adapter,
       // The card Fields tab's row classes, so an extension's rows line up with the box's own.
       className: "doc-row doc-row-top", labelClassName: "doc-row-label", controlClassName: "insp-input",
+      ...(tables ? { tables: true } : {}),
       ...(renamedTo !== undefined ? { replaceProblem: `${extension.name} has since renamed this stage “${renamedTo}”. Pick “${renamedTo}” to update it.` } : {}),
       ...(host.readOnly ? {} : { onCommit: (v: unknown) => commitExtensionValue(host, extension.id, nodeId, decl.name, v) }),
     });
@@ -225,7 +238,7 @@ let settingsMounts = 0;
 export function extensionFields(host: ExtensionHost, extension: ExtensionDto, kind: string, nodeId: string): HTMLElement {
   const holder = el("div", "ext-fields");
   markShard(holder, host.project(), extension, kind, nodeId);
-  const parts = extensionParts(host, extension, kind, nodeId);
+  const parts = extensionParts(host, extension, kind, nodeId, true);
   const groups = settingsGroups.get(extension.id) ?? fieldGroups();
   settingsGroups.set(extension.id, groups);
   // Editor-only fields included: they are the editor's data, never compiled, and this is the editor. Each

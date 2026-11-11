@@ -5,7 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderBoxTabBody, renderCardWorkspace } from "./inspector.js";
-import { adapterOf, extensionFields, extensionSection, extensionTabs, knownTab, sweepExtensionFold } from "./extension-rows.js";
+import { adapterOf, extensionFields, extensionLine, extensionSection, extensionTabs, knownTab, sweepExtensionFold } from "./extension-rows.js";
 import { problemTarget } from "./problems.js";
 import { setPlayRung } from "./play-ladder.js";
 import { resetDocTabMemory, setDocTab } from "./doc-tab-memory.js";
@@ -146,6 +146,14 @@ describe("a pick", () => {
     expect(adapterOf({ project: () => withShot, save: vi.fn() }, shot).list!("nowhere")).toBeUndefined();
   });
 
+  it("suggests a pool's names, as the project counted them, from that extension only", () => {
+    const pooled: ExtensionDto = { ...shot, pools: { places: ["The Bell Tower", "Quay"] } };
+    const xhost = { project: () => ({ ...project, extensions: [pooled] } as unknown as ProjectDto), save: vi.fn() };
+    expect(adapterOf(xhost, pooled).pool!("places")).toEqual(["The Bell Tower", "Quay"]);
+    expect(adapterOf(xhost, pooled).pool!("nowhere")).toBeUndefined();
+    expect(adapterOf(xhost, shot).pool!("places")).toBeUndefined();
+  });
+
   it("offers its words, the cards and the list's entries on a card's Fields tab", () => {
     const h = { ...host(), extensions: { project: () => withShot, save: vi.fn() } } as InspectorHost;
     const centre = document.createElement("div");
@@ -262,10 +270,10 @@ describe("a group that starts closed", () => {
     return sec;
   };
 
-  it("is a disclosure in an open section, counting and showing what the node sets", () => {
+  it("is a disclosure in an open section, with what the node sets above it", () => {
     const sec = openSection("c_bell");
     try {
-      expect(groupCap(sec)?.textContent).toBe("More (1 set)");
+      expect(groupCap(sec)?.textContent).toBe("More");
       expect(groupCap(sec)?.closest("h4.ext-group")).not.toBeNull();
       expect(labels(sec)).toEqual(["Line", "Act"]);
       groupCap(sec)!.click();
@@ -284,7 +292,7 @@ describe("a group that starts closed", () => {
 
   it("is a disclosure in Project Settings too, remembered apart from the pages'", () => {
     const rows = extensionFields(thost, tucked, "project", "proj_probe");
-    expect(groupCap(rows)?.textContent).toBe("More (1 set)");
+    expect(groupCap(rows)?.textContent).toBe("More");
     expect(labels(rows)).toEqual(["Studio", "Lens"]);
     groupCap(rows)!.click();
     expect(labels(rows)).toEqual(["Studio", "Lens", "Grade"]);
@@ -307,5 +315,28 @@ describe("a group that starts closed", () => {
       expect(groupCap(rows)!.disabled).toBe(false);
       groupCap(rows)!.click();
     } finally { frame.remove(); }
+  });
+});
+
+describe("an extension's Project Settings page", () => {
+  it("opens with a line saying it's an extension, and the version the project uses", () => {
+    expect(extensionLine({ name: "Pattershot", version: "0.7.0", taken: "0.7.0" })).toBe("Pattershot extension, version 0.7.0.");
+    expect(extensionLine({ name: "Pattershot", version: "0.7.0" }))
+      .toBe("Pattershot extension. The project doesn't name a version; its manifest is 0.7.0.");
+  });
+
+  it("lays a list of records out as a table, where a card's page doesn't", () => {
+    const listed: ExtensionDto = {
+      id: "listed", name: "Listed", version: "1.0.0",
+      targets: {
+        card: { fields: [{ name: "beats", type: "list", label: "Beats", of: { type: "record", fields: [{ name: "at", type: "number" }, { name: "say", type: "text" }] } }] },
+        project: { fields: [{ name: "beats", type: "list", label: "Beats", of: { type: "record", fields: [{ name: "at", type: "number" }, { name: "say", type: "text" }] } }] },
+      },
+      values: { proj_probe: { beats: [{ at: 1, say: "Hush." }] }, c_bell: { beats: [{ at: 1, say: "Hush." }] } },
+    };
+    const lhost = { project: () => ({ ...project, extensions: [listed] } as unknown as ProjectDto), save: vi.fn() };
+    expect(extensionFields(lhost, listed, "project", "proj_probe").querySelector(".shell-recordgrid-table")).not.toBeNull();
+    const sec = extensionSection(lhost, listed, "card", "c_bell");
+    expect(sec.querySelector(".shell-recordgrid-table")).toBeNull();
   });
 });

@@ -6,6 +6,7 @@
 // is untouched, and validation says why.
 // ---------------------------------------------------------------------------
 
+import { extensionPass } from "@storylet-studio/compiler";
 import type { SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId } from "@storylet-studio/model";
 import { groupClosed, manifestProblems, missingRequirements, viewsFor } from "@wildwinter/toolkit/extensions";
@@ -16,6 +17,8 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
   const taken = source.project.extensions;
   if (taken === undefined || Object.keys(taken).length === 0) return undefined;
   const out: ExtensionDto[] = [];
+  // A pool pick's suggestions: the compiler's own count, so the editor offers what validation sees.
+  const pools = extensionPass(source).pools;
   for (const id of Object.keys(taken)) {
     const file = (source.manifests ?? []).find((m) => m.id === id);
     if (file === undefined || manifestProblems(file.manifest).some((p) => p.severity === "error")) continue;
@@ -38,9 +41,11 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
     const closedGroups = [...new Set(Object.values(targets).flatMap((t) => t.fields.map((f) => f.group)
       .filter((g): g is string => g !== undefined)))].filter((g) => groupClosed(manifest, g));
     out.push({
-      id, name: manifest.name, version: manifest.version, targets, values,
+      id, name: manifest.name, version: manifest.version,
+      ...(typeof taken[id]?.version === "string" ? { taken: taken[id]!.version } : {}), targets, values,
       ...(views.length > 0 ? { views } : {}), ...(manifest.reads !== undefined ? { reads: [...manifest.reads] } : {}),
       ...(missing.length > 0 ? { missing } : {}), ...(closedGroups.length > 0 ? { closedGroups } : {}),
+      ...(pools[id] !== undefined ? { pools: pools[id] } : {}),
     });
   }
   return out.length > 0 ? out : undefined;

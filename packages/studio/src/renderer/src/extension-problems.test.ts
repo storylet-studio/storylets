@@ -33,7 +33,7 @@ describe("a Storylet extension's problem for the writer", () => {
 
   it("words the project's own checks", () => {
     expect(line('the project takes the Storylet extension "probe", but has no manifest for it at extensions/probe.extension.json; its data is left as it is, and not compiled'))
-      .toBe("This project takes the extension “probe”, but its manifest isn't in the extensions folder. Its data is kept, but your game won't get it.");
+      .toBe("This project uses the extension “probe”, but its manifest isn't in the extensions folder. Its data is kept, but your game won't get it.");
     expect(line(`the project's pin for "probe" has settings, which extensions no longer have; they're ignored`))
       .toBe("Probe: The project still holds settings for this extension, which extensions don't have any more. They're ignored.");
   });
@@ -45,6 +45,11 @@ describe("a Storylet extension's problem for the writer", () => {
       .toBe("Probe: Note on the card “bell” is “c_tide”, which is a card and an entry of the list “places”, so it's ambiguous. Rename one of them.");
     expect(line('the Storylet extension "probe": "Gate" is a card and an entry of the list "places", so a value naming it is ambiguous', "pick-clash"))
       .toBe("Probe: “Gate” is a card and an entry of the list “Places”, so a value naming it is ambiguous. Rename one of them.");
+  });
+
+  it("words a pool's names that differ only in case, spaces or punctuation", () => {
+    expect(line('the Storylet extension "probe": the pool "places" has "The Bell Tower" (2 uses) and "the bell tower" (1 use), which differ only in case, spaces, or punctuation', "pool-near-duplicate"))
+      .toBe("Probe: “The Bell Tower” (2 uses) and “the bell tower” (1 use) differ only in capitals, spaces, or punctuation, so your game will take them as different names. If they're the same, change one to match the other.");
   });
 
   it("leaves a problem with no extension, or a shape it does not know, to the table", () => {

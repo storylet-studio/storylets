@@ -9,7 +9,7 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { createProjectSettings } from "./project-settings.js";
-import type { ProjectSettingsDto, StudioApi } from "../../shared/api.js";
+import type { ProjectDto, ProjectSettingsDto, StudioApi } from "../../shared/api.js";
 
 // jsdom carries <dialog> but not its modal behaviour; the settings frame is
 // otherwise ordinary DOM, which is what is under test here.
@@ -215,5 +215,25 @@ describe("Project Settings > Game scopes (host scopes like Patter's)", () => {
     panelOf(frame).querySelector<HTMLButtonElement>("button[title='Remove driver'], button[aria-label='Remove driver']")!.click();
     await save(frame);
     expect(saved[0]!.hostScopes.map((h) => h.token)).toEqual(["world"]);
+  });
+});
+
+describe("Project Settings' extension pages", () => {
+  it("sit under their own Extensions heading, each opening with what it is and the version the project uses", async () => {
+    document.body.replaceChildren();
+    const project = {
+      projectNode: "proj_probe",
+      extensions: [{
+        id: "probe", name: "Probe", version: "1.1.0", taken: "1.1.0",
+        targets: { project: { fields: [{ name: "studio", type: "text", label: "Studio" }] } }, values: {},
+      }],
+    } as unknown as ProjectDto;
+    const panel = createProjectSettings(studio(), () => {}, () => {}, () => false, () => project);
+    panel.open("ext-probe");
+    const frame = await opened();
+    const rail = [...frame.querySelectorAll(".settings-tabs > *")].map((t) => t.textContent);
+    expect(rail.slice(rail.indexOf("Extensions"))).toEqual(["Extensions", "Probe"]);
+    expect(rail.indexOf("Extensions")).toBeGreaterThan(rail.indexOf("Publish"));
+    expect([...frame.querySelectorAll(".set-note")].map((n) => n.textContent)).toContain("Probe extension, version 1.1.0.");
   });
 });

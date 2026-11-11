@@ -297,12 +297,12 @@ describe("the Extensions window", () => {
     expect(readFileSync(manifest, "utf8")).toBe(before.manifest);
   });
 
-  it("won't remove an extension the project doesn't take", async () => {
+  it("won't remove an extension the project doesn't use", async () => {
     const { call } = host();
-    expect(await call("extension:remove", "nope")).toEqual({ error: "This project doesn't take nope." });
+    expect(await call("extension:remove", "nope")).toEqual({ error: "This project doesn't use nope." });
   });
 
-  it("uninstalls one version, asked first, saying whether the views' settings go", async () => {
+  it("uninstalls one version, asked first, saying whether it's the copy the project uses and whether the views' settings go", async () => {
     const { call } = host();
     shell.installed = [probe(), { ...probe(), version: "1.0.0", root: "/views/probe/1.0.0" }];
     shell.answers = [1, 0, 0];
@@ -310,11 +310,11 @@ describe("the Extensions window", () => {
     expect(shell.uninstalled).toEqual([]); // cancelled
     await call("extension:uninstall", "probe", "1.0.0");
     expect(shell.uninstalled).toEqual(["probe@1.0.0"]);
-    expect(shell.details[1]).toBe("This project takes Probe. Other projects on this machine that use this version lose its views too. The other installed versions keep their views' settings.");
+    expect(shell.details[1]).toBe("This project uses 1.1.0, not this version. Other projects on this machine that use this version lose its views too. The other installed versions keep their views' settings.");
     await call("extension:uninstall", "probe", "1.1.0");
     expect(shell.uninstalled).toEqual(["probe@1.0.0", "probe@1.1.0"]);
-    expect(shell.details[2]).toContain("so its views will show as not installed until you install them again.");
-    expect(shell.details[2]).toContain("and those go too.");
+    // The copy in use, with no other to open: its view won't open, and its settings go with the last copy.
+    expect(shell.details[2]).toBe("This project uses this version, so its Probe view won't open until you install it again. Other projects on this machine that use this version lose its views too. Probe's views keep their own settings on this machine, and those go too.");
     expect(shell.asked).toEqual(["Uninstall Probe 1.0.0 from this machine?", "Uninstall Probe 1.0.0 from this machine?", "Uninstall Probe 1.1.0 from this machine?"]);
   });
 });
@@ -329,7 +329,7 @@ describe("Update...", () => {
     expect(await call("extension:update", "probe")).toEqual({ error: "That package is Lights (\u201clights\u201d), not Probe (\u201cprobe\u201d), so nothing changed." });
     shell.version = "1.0.0";
     expect(await call("extension:update", "probe")).toEqual({
-      error: "This project takes Probe 1.1.0, newer than this package's 1.0.0, so nothing changed: an update never goes back to an older version.",
+      error: "This project uses Probe 1.1.0, newer than this package's 1.0.0, so nothing changed: an update never goes back to an older version.",
     });
     expect(shell.installs).toBe(0);
     expect(shell.asked).toEqual([]);
@@ -356,7 +356,7 @@ describe("Update...", () => {
     const r = await call("extension:update", "probe") as { error?: string };
     expect(r.error).toBeUndefined();
     expect(shell.asked).toEqual(["Update Probe from 1.1.0 to 1.2.0?"]);
-    expect(shell.details[0]).toMatch(/The project takes it as one step you can undo, and its views install on this machine\. Values it no longer accepts show among the problems afterwards\.$/);
+    expect(shell.details[0]).toMatch(/The project moves to it as one step you can undo, and its views install on this machine\. Values it no longer accepts show among the problems afterwards\.$/);
     expect(shell.installs).toBe(1);
     expect(readFileSync(join(session.loaded.dir, "probe.storyletproj"), "utf8")).toContain('version: "1.2.0"');
     expect(session.history.undoLabel).toBe("Update Probe");
