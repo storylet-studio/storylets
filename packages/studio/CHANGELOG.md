@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-11
+
 ### Added
 
 - **A field can take any name, and suggests the ones you've used.** Where an extension's field lets you name
