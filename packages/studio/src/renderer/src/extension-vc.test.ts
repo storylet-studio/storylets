@@ -3,9 +3,9 @@
 // is a shard of its own, so somebody else holding one locks that extension's rows, with a sentence naming the
 // extension and the holder, and leaves the box's own fields and every other extension's rows editable.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderCardWorkspace } from "./inspector.js";
-import { extensionFields, extensionOwner } from "./extension-rows.js";
+import { extensionFields, extensionOwner, openExtensionSection } from "./extension-rows.js";
 import { applyExtensionLocks, extensionLockMessage, extensionRowStates, extensionStates, lockControls, vcKeys } from "./vc-view.js";
 import { setPlayRung } from "./play-ladder.js";
 import { resetDocTabMemory, setDocTab } from "./doc-tab-memory.js";
@@ -45,7 +45,9 @@ const host = (): InspectorHost => ({
   extensions: { project: () => project, save: vi.fn() },
 } as InspectorHost);
 
-const fieldsTab = (): HTMLElement => {
+// Closed, a section draws no rows (app-shell 1.4): most of these look inside open ones.
+const fieldsTab = (open = true): HTMLElement => {
+  for (const x of ["probe", "cues"]) openExtensionSection(x, "card", open);
   const centre = document.createElement("div");
   setDocTab(`card:${deck.id}/${card.id}`, "fields");
   renderCardWorkspace(centre, box, deck, card, [], host());
@@ -60,6 +62,7 @@ beforeEach(() => {
   resetDocTabMemory();
   Element.prototype.scrollIntoView = (): void => {};
 });
+afterEach(() => { for (const x of ["probe", "cues"]) openExtensionSection(x, "card", false); });
 
 describe("a held extension shard", () => {
   it("locks that extension's rows alone, saying whose and by whom", () => {
@@ -77,15 +80,15 @@ describe("a held extension shard", () => {
     expect(own.every((c) => !c.disabled)).toBe(true);
   });
 
-  it("says so under the folded section's caption, leaves the caption live, and locks the rows opening it draws", () => {
-    const centre = fieldsTab();
+  it("says so under the closed section's caption, leaves the caption live, and locks the rows opening it draws", () => {
+    const centre = fieldsTab(false);
     applyExtensionLocks(centre, extensionStates(held));
     const locked = group(centre, "probe");
     expect(locked.children[1]?.classList.contains("ext-lock")).toBe(true);
     const caption = locked.querySelector<HTMLButtonElement>(".shell-fold-cap")!;
     expect(caption.disabled).toBe(false);
-    // The card sets one of Probe's two fields, so the other shows only once the fold opens.
-    expect(controls(locked).length).toBe(1);
+    // Closed, the section draws none of Probe's fields.
+    expect(controls(locked).length).toBe(0);
     caption.click();
     try {
       expect(controls(locked).length).toBe(2);

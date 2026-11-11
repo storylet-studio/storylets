@@ -20,6 +20,11 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **A page shows the extensions you use, and Add offers the rest.** An extension with nothing set on a card, an
+  outcome, a tag or a tag group isn't drawn there any more; "+ Add" at the foot lists it by name, and choosing it
+  opens its fields with the cursor in the first. A closed extension is its name alone, counting what's set and any
+  problem ("Probe (3 set, 1 problem)"), and Go to issue opens it. An extension's built-in table entries show first
+  in Project Settings, and can be changed and reset but not removed.
 - **An extension's settings are easier to read.** A field's help is a tooltip on its name (or shows when you reach
   the field from the keyboard), lists and maps in Project Settings are tables, and a group of fields that starts
   closed shows what you've set above its heading.

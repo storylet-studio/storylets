@@ -37,7 +37,7 @@ import type { PropListOptions } from "./prop-list.js";
 import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
 import {
-  extensionCount, extensionGroups, extensionSection, extensionTabBody, extensionTabs, extensionsFor, knownTab,
+  extensionCount, extensionDoor, extensionTabBody, extensionTabs, extensionsFor, knownTab,
 } from "./extension-rows.js";
 import type { ExtensionHost } from "./extension-rows.js";
 
@@ -910,13 +910,16 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
   // The tab is the label, so the panel carries no section head of its own.
   function cardFieldsBody(): Node[] {
     // A Storylet extension's own fields follow the box's, in a group headed by its name.
-    const extensionBody = extensionGroups(extHost(h), "card", card.id);
-    if (box.fields.length === 0 && extensionBody.length > 0) return [el("div", { className: "doc-panel" }, ...extensionBody)];
+    // Those with nothing set and nothing open are offered by "+ Add" instead (P7).
+    const door = extensionDoor(extHost(h), "card", card.id);
+    const extensionBody = door.add ? [...door.sections, door.add] : door.sections;
+    if (box.fields.length === 0 && door.sections.length > 0) return [el("div", { className: "doc-panel" }, ...extensionBody)];
     if (box.fields.length === 0) {
       // Both halves of the orientation the audit found missing: where fields
       // come from, AND what a card with none IS - the cold-start question a
       // narrative designer brings to every card page.
-      return [el("p", { className: "doc-tab-note", text: "No card fields declared. Define what every card can carry on the box's Card template tab. A card with no fields is a key. Your game looks it up by game id and supplies the text." })];
+      const note = el("p", { className: "doc-tab-note", text: "No card fields declared. Define what every card can carry on the box's Card template tab. A card with no fields is a key. Your game looks it up by game id and supplies the text." });
+      return door.add ? [note, el("div", { className: "doc-panel" }, door.add)] : [note];
     }
     const setField = (name: string, value: string): void => {
       let f = edit.fields.find((x) => x.name === name);
@@ -1340,9 +1343,8 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   // A Storylet extension's values for the outcome, beside its own fields, under the extension's name. Only
   // once the outcome exists: a new one has no id to key them by until it is saved.
   if (o.id) {
-    for (const extension of extensionsFor(extHost(h).project(), "outcome")) {
-      body.append(extensionSection(extHost(h), extension, "outcome", o.id));
-    }
+    const door = extensionDoor(extHost(h), "outcome", o.id);
+    body.append(...door.sections, ...(door.add ? [door.add] : []));
   }
 
   const gateHost = el("div", { className: "insp-exed" });
@@ -2079,9 +2081,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       // A Storylet extension's values for the tag, beside its properties, under the extension's name. A tag
       // added on this page has no id until it is saved, and so no values yet.
       if (v.id !== undefined) {
-        for (const extension of extensionsFor(extHost(h).project(), "tag")) {
-          block.append(extensionSection(extHost(h), extension, "tag", v.id));
-        }
+        const door = extensionDoor(extHost(h), "tag", v.id);
+        block.append(...door.sections, ...(door.add ? [door.add] : []));
       }
       return block;
     });
@@ -2114,9 +2115,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       propList(edit.properties, () => { commit(); redraw(); }, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag",
         stages: stagesOf(h, (name) => ({ kind: "property", scope: "hand", box: box.id, holder: detail.id, name })) }), ...soloPointer, ...nudge));
     // The group's own Storylet extension values, after its properties: what the group is, before its tags.
-    for (const extension of extensionsFor(extHost(h).project(), "tagGroup")) {
-      view.append(extensionSection(extHost(h), extension, "tagGroup", detail.id, { panel: true }));
-    }
+    const groupDoor = extensionDoor(extHost(h), "tagGroup", detail.id, { panel: true });
+    view.append(...groupDoor.sections, ...(groupDoor.add ? [groupDoor.add] : []));
     view.append(section("Tags", "declared, not freeform", ...valBody, add));
 
     // The spatial template of play: this group is a map, so its tags carry outlines

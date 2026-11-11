@@ -698,6 +698,8 @@ export interface ExtensionFieldDto {
   valueHelp?: Record<string, string>;
   /** A quality's renames: every name a stage has had, to the stage it is now. */
   renamedStages?: Record<string, string>;
+  /** A map's built-in entries (toolkit 1.3): drawn first by app-shell's map views, names fixed, reset not removed. */
+  builtIn?: Record<string, unknown>;
 }
 
 /** The game's shared scopes folder, as the renderer is told it. */

@@ -11,10 +11,12 @@
 // on a tab named for the extension, a tag group's and a tag's beside their
 // properties, the project's in Settings. This module only draws.
 //
-// Every page folds an extension's section to the fields the node sets (the
-// shell's extensionFold, Pattershot's brief F1 to F9, shared with Patterpad):
-// the extension's name is the disclosure and counts them. Project Settings
-// draws every field, unfolded. A group the manifest says starts closed is its
+// Every page draws an extension's section closed (the shell's extensionFold,
+// shared with Patterpad): the extension's name is the disclosure and counts
+// what's set and what's wrong; open, every field. Where a page draws them in
+// place, an extension with nothing to show on a node isn't drawn and "+ Add"
+// offers it instead (`extensionDoor`, P7). Project Settings draws every field,
+// unfolded. A group the manifest says starts closed is its
 // heading with a disclosure, counting what's set and showing only that until
 // opened, in an open section and in Project Settings alike (the shell's
 // fieldGroups; patterkit's brief extension-closed-field-groups).
@@ -27,7 +29,8 @@
 import { el } from "@wildwinter/app-shell";
 import { extensionFold, fieldGroups, isRecordMap, isSet, recordMapSummary, valueRows } from "@wildwinter/app-shell/value-rows";
 import type { FieldGroups, ValueAdapter, ValueDecl } from "@wildwinter/app-shell/value-rows";
-import { pickLists, valueProblems } from "@wildwinter/toolkit/extensions";
+import { openContextMenu } from "@wildwinter/app-shell/context-menu";
+import { entryProblems, pickLists, valueProblems } from "@wildwinter/toolkit/extensions";
 import type { TargetDecl, TypeDecl } from "@wildwinter/toolkit/extensions";
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../../shared/api.js";
 import type { ExtensionDto, ExtensionFieldDto, ProjectDto } from "../../shared/api.js";
@@ -51,6 +54,9 @@ export interface ExtensionHost {
   viewInstalled?(extension: string, view: string): boolean;
   /** Open (or bring forward) a view of an extension; it follows the page's node. */
   openView?(extension: string, view: string): void;
+  /** Draw the page again: after "+ Add" opens a section, or a section closes with nothing left to show. Absent:
+   *  no "+ Add" (every extension a page has is drawn as a closed section instead). */
+  redraw?(): void;
 }
 
 const rows = valueRows();
@@ -256,38 +262,104 @@ export function extensionFields(host: ExtensionHost, extension: ExtensionDto, ki
   return holder;
 }
 
-/** The pages' fold, kept across their redraws: each extension's section stays folded or open as the author
- *  left it, from node to node (the shell's extensionFold; Pattershot's brief, F4). */
+/** The pages' fold, kept across their redraws: each extension's section stays closed or open as the author
+ *  left it, by extension and kind of node (the shell's extensionFold; Pattershot's brief, F4; app-shell 1.4). */
 const fold = extensionFold();
 
-/** At the end of each page draw: forget the rows the fold kept for nodes the draw didn't show, so a value
- *  cleared while folded keeps its row until the author leaves the node (F5). */
+/** At the end of each page draw: forget what the open sections' closed groups kept for nodes the draw didn't
+ *  show. */
 export function sweepExtensionFold(): void { fold.sweep(); }
 
+const sentence = (message: string): string => `${message.charAt(0).toUpperCase()}${message.slice(1)}.`;
+
+/** Every problem in a node's values for an extension, as sentences, for a closed section's caption ("Probe (2 set,
+ *  1 problem)"): closed, a section draws no row to say them. None for a node with no entry. Patterpad's
+ *  `sectionProblems`. */
+export function sectionProblems(fields: readonly ExtensionFieldDto[], entry: Record<string, unknown> | undefined, adapter: ValueAdapter): string[] {
+  if (entry === undefined) return [];
+  const exists = (kind: string, id: string): boolean => adapter.nodes(kind).some((n) => n.id === id) || adapter.label?.(kind, id) !== undefined;
+  return entryProblems({ fields } as unknown as TargetDecl, entry, {
+    exists, ...(adapter.list ? { list: (name: string) => adapter.list!(name) } : {}),
+  }).map((p) => sentence(p.message));
+}
+
+/** What the fold needs to know of one extension on one node: whether to draw it, and what its caption says. */
+function sectionState(host: ExtensionHost, extension: ExtensionDto, kind: string, nodeId: string) {
+  const parts = extensionParts(host, extension, kind, nodeId);
+  const state = {
+    extension: extension.id, kind, fields: parts.fields as unknown as ValueDecl[], entry: parts.entry,
+    problems: sectionProblems(parts.fields, parts.entry, adapterOf(host, extension)),
+  };
+  return { parts, state };
+}
+
+/** The section to put focus in once it's drawn: the one just opened from "+ Add". */
+let focusWhenDrawn: string | null = null;
+
+/** Open an extension's section on a kind of node, for whatever the page draws next: Go to issue, for a problem
+ *  inside a section that's closed (or not drawn at all). */
+export function openExtensionSection(extension: string, kind: string, open = true): void {
+  fold.setOpen(extension, open, kind);
+}
+
 /**
- * One extension's section for one node, folded: the extension's name as the caption and disclosure, counting
- * what the node sets ("Probe (3 set)"), then only the fields set here until the author opens it to every field
- * (the shell's extensionFold, Pattershot's brief F1 to F7). `panel` sits the rows in a panel, for a page whose
- * other sections are panelled.
+ * One extension's section for one node: the extension's name as the caption and disclosure, counting what the
+ * node sets and what's wrong ("Probe (3 set, 1 problem)"). Closed, it is the caption alone; open, every field
+ * (the shell's extensionFold). `panel` sits the rows in a panel, for a page whose other sections are panelled.
+ * Closing one that has nothing left to show redraws the page, so it goes back to "+ Add".
  */
 export function extensionSection(host: ExtensionHost, extension: ExtensionDto, kind: string, nodeId: string, o: { panel?: boolean } = {}): HTMLElement {
-  const parts = extensionParts(host, extension, kind, nodeId);
+  const { parts, state } = sectionState(host, extension, kind, nodeId);
+  const node = `${kind}\u0000${nodeId}`;
   const section = fold.section({
-    extension: extension.id, caption: extension.name, node: `${kind}\u0000${nodeId}`,
-    fields: parts.fields as unknown as ValueDecl[], entry: parts.entry,
+    ...state, caption: extension.name, node,
     row: (decl) => parts.row(decl as unknown as ExtensionFieldDto), group: parts.group, closed: closedOf(extension),
     className: "doc-sect ext-section", captionClassName: "ext-heading insp-label",
+    onToggle: (open) => { if (!open && !fold.drawn(state)) host.redraw?.(); },
   });
   markShard(section, host.project(), extension, kind, nodeId);
   if (o.panel) section.querySelector(":scope > .shell-fold-body")?.classList.add("doc-panel");
   relockOnOpen(section);
+  if (focusWhenDrawn === `${extension.id}\u0000${node}`) {
+    focusWhenDrawn = null;
+    queueMicrotask(() => section.querySelector<HTMLElement>(".shell-fold-body :is(input, select, textarea, button)")?.focus());
+  }
   return section;
 }
 
-/** Every extension's section for one node, folded: what the card's Fields tab shows after the box's own
- *  fields. Empty when no extension targets the kind. */
-export function extensionGroups(host: ExtensionHost, kind: string, nodeId: string): HTMLElement[] {
-  return extensionsFor(host.project(), kind).map((extension) => extensionSection(host, extension, kind, nodeId));
+/**
+ * The extensions on one node, where a page draws them in place (a card's Fields tab, an outcome, a tag group, a
+ * tag): a section for each that has something to show here (a value set, a problem, or its section opened on
+ * this kind of node), and a quiet "+ Add" at the foot offering the rest by name. "You see what's attached, and
+ * Add offers the rest" (patterkit design/proposals/inspector-one-door.md, P7): Patterpad's inspector does the
+ * same. Choosing one opens its section on this kind of node, redraws, and puts focus in its first field. No
+ * "+ Add" when every extension is drawn, on a read-only page, or when the host can't redraw.
+ */
+export function extensionDoor(host: ExtensionHost, kind: string, nodeId: string, o: { panel?: boolean } = {}): { sections: HTMLElement[]; add: HTMLElement | null } {
+  const sections: HTMLElement[] = [];
+  const offers: ExtensionDto[] = [];
+  for (const extension of extensionsFor(host.project(), kind)) {
+    if (fold.drawn(sectionState(host, extension, kind, nodeId).state)) sections.push(extensionSection(host, extension, kind, nodeId, o));
+    else offers.push(extension);
+  }
+  if (offers.length === 0 || host.readOnly || host.redraw === undefined) return { sections, add: null };
+  const add = el("button", "insp-add ext-add", "+ Add");
+  add.type = "button";
+  add.dataset["tip"] = "Add an extension's fields here";
+  add.setAttribute("aria-haspopup", "menu");
+  add.addEventListener("click", () => {
+    const r = add.getBoundingClientRect();
+    openContextMenu(r.left, r.bottom + 4, offers.map((x, i) => ({
+      label: x.name,
+      ...(i === 0 ? { heading: "Extensions" } : {}),
+      onClick: () => {
+        fold.setOpen(x.id, true, kind);
+        focusWhenDrawn = `${x.id}\u0000${kind}\u0000${nodeId}`;
+        host.redraw?.();
+      },
+    })));
+  });
+  return { sections, add };
 }
 
 // --- the tab named for the extension (deck, box, hand template, hand) ------------

@@ -19,6 +19,7 @@ import { boxForPath } from "./problem-copy.js";
 import { expandOutcome, setDocTab } from "./inspector.js";
 import { renderProblems } from "./views.js";
 import { extensionProblemLine } from "./extension-problems.js";
+import { openExtensionSection } from "./extension-rows.js";
 import { flash, ok, quietly } from "./results.js";
 import type { ProblemNames } from "./problem-copy.js";
 import type { ViewActions } from "./views.js";
@@ -306,6 +307,10 @@ export function createProblems(ctx: ProblemsContext) {
   function jump(p: Problem): void {
     const t = problemTarget(p, session.project?.boxes ?? []);
     if (!t) return;
+    // A problem in an extension's values is said inside its section, which closed draws no rows (and with
+    // nothing set isn't drawn at all): open it on that kind of node first, as Patterpad's goToProblem does.
+    const extKind = p.extension !== undefined ? /^entries\.(\w+)\./.exec(p.message)?.[1] : undefined;
+    if (p.extension !== undefined && extKind !== undefined) openExtensionSection(p.extension, extKind);
     const actions = ctx.actions();
     switch (t.kind) {
       case "card":

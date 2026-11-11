@@ -608,7 +608,7 @@ describe("the topbar's project name", () => {
   it("says nothing about a server for a project that has none", () => {
     const lead = projectLead(project, undefined, go);
     expect(lead.textContent).toBe("This Room"); // no app name in its own window, no spaced hyphen (October 2026)
-    expect(lead.querySelector(".pname-note")).toBeNull();
+    expect(lead.querySelector(".shell-project-title-note")).toBeNull();
     // And it is still the way home, with WHERE in the tooltip: two projects can
     // share a name and nothing else on screen tells them apart.
     expect(lead.dataset["tip"]).toBe("The project overview\n/p/this-room.storylets");
@@ -616,14 +616,14 @@ describe("the topbar's project name", () => {
 
   it("carries the status line, in the Server menu's own words, when there are edits", () => {
     const lead = projectLead(project, { status: "3 edits unpushed", edits: 3 }, go);
-    expect(lead.querySelector(".pname-note")?.textContent).toBe("3 edits unpushed"); // its own span, spaced by CSS
+    expect(lead.querySelector(".shell-project-title-note")?.textContent).toBe("3 edits unpushed"); // its own span, spaced by app-shell CSS
     expect(lead.firstChild?.textContent).toBe("This Room");
   });
 
   it("is silent while the project is level with the server: nothing nags", () => {
     const lead = projectLead(project, { status: "In sync", edits: 0 }, go);
     expect(lead.textContent).toBe("This Room");
-    expect(lead.querySelector(".pname-note")).toBeNull();
+    expect(lead.querySelector(".shell-project-title-note")).toBeNull();
   });
 });
 

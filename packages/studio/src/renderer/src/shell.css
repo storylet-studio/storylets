@@ -483,14 +483,6 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .ctable tr.ct-group.rest th { color: var(--muted); }
 .ctable tr.ct-group th > * + * { margin-left: 8px; }
 .ctable .ct-also { display: block; font-family: var(--font-ui); font-size: var(--text-sm); font-style: italic; color: var(--muted); }
-/* The project name is a button (A13) and a DELIBERATE exception to "controls
-   have edges": it is a title first and a door second, so it stays borderless
-   and only takes the accent when reached for. Not `.btn`. */
-button.pname { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; transition: color var(--dur-tint) var(--ease-standard); }
-button.pname:hover { color: var(--accent); }
-/* Where a server-backed project stands, beside its name: quieter again than the
-   name, because it is a fact about the project and never a nag. */
-.pname-note { margin-left: 8px; color: var(--muted); font-weight: var(--weight-regular); }
 /* The kit gallery (New Project, New Box) is the shell's (kit-gallery.css), on
    its dialog frame. What stays ours is the reading face on the name, as every
    name an author types here is set. */

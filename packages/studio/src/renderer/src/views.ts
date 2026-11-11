@@ -10,7 +10,7 @@
 // in the document itself (design review 2026-08, A17).
 // ---------------------------------------------------------------------------
 
-import { iconNode, plural, renderStepperBar, tipWithKey, wireReorder } from "@wildwinter/app-shell";
+import { iconNode, plural, projectTitle, renderStepperBar, tipWithKey, wireReorder } from "@wildwinter/app-shell";
 import type { IconName } from "@wildwinter/app-shell";
 import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "@wildwinter/app-shell";
@@ -268,15 +268,15 @@ export function projectLead(
   go: () => void,
 ): HTMLElement {
   // The project's name and nothing else: no app name in its own window, and no
-  // spaced hyphen. The remote status is a separate, quieter span beside it (the
-  // October 2026 UI review, 3-composition.md proposal 8).
-  const button = el("button", {
-    className: "pname shell-topbar-title", tip: `The project overview\n${project.dir}`, onClick: go,
-  }, project.name);
-  if (remote !== undefined && remote.edits > 0) {
-    button.append(el("span", { className: "pname-note shell-topbar-sub", text: remote.status }));
-  }
-  return button;
+  // spaced hyphen. The remote status is a separate, quieter note beside it (the
+  // October 2026 UI review, 3-composition.md proposal 8). Drawn by app-shell's
+  // projectTitle (1.4), so Storyletter and Patterpad cannot drift apart.
+  return projectTitle({
+    name: project.name,
+    path: project.dir,
+    note: remote !== undefined && remote.edits > 0 ? remote.status : undefined,
+    onOpen: go,
+  }).el;
 }
 
 /**

@@ -3,9 +3,9 @@
 // values after the box's own on Fields, the outcome's values in its block, a tab named for the extension on a box's page, values saved through the host,
 // and a problem in an extension shard landing on the node it names.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderBoxTabBody, renderCardWorkspace } from "./inspector.js";
-import { adapterOf, extensionFields, extensionLine, extensionSection, extensionTabs, knownTab, sweepExtensionFold } from "./extension-rows.js";
+import { adapterOf, extensionDoor, extensionFields, extensionLine, extensionSection, extensionTabs, knownTab, openExtensionSection } from "./extension-rows.js";
 import { problemTarget } from "./problems.js";
 import { setPlayRung } from "./play-ladder.js";
 import { resetDocTabMemory, setDocTab } from "./doc-tab-memory.js";
@@ -54,17 +54,25 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = (): void => {};
 });
 
+// The fold is the pages' own, kept across draws by extension and kind: close whatever a test opened.
+afterEach(() => {
+  for (const x of ["probe", "shot", "spare", "tucked", "listed"]) {
+    for (const kind of ["card", "outcome", "box", "deck", "tag", "tagGroup"]) openExtensionSection(x, kind, false);
+  }
+});
+
 describe("a card's Fields tab", () => {
   const fieldsTab = (h: InspectorHost): HTMLElement => {
     const centre = document.createElement("div");
     setDocTab(`card:${deck.id}/${card.id}`, "fields");
+    openExtensionSection("probe", "card");
     renderCardWorkspace(centre, box, deck, card, [], h);
     return centre;
   };
 
   it("shows the box's fields, then the extension's under its name, grouped as the manifest says", () => {
     const centre = fieldsTab(host());
-    expect(centre.querySelector(".ext-heading")?.textContent).toBe("Probe (3 set)");
+    expect(centre.querySelector(".ext-heading")?.textContent).toBe("Probe (3 set, 1 problem)"); // the renamed stage
     expect(centre.querySelector(".ext-group")?.textContent).toBe("Sound");
     const captions = [...centre.querySelectorAll(".shell-fieldrow-label")].map((c) => c.textContent);
     expect(captions.slice(0, 4)).toEqual(["mood", "Note", "act", "Cue"]);
@@ -94,6 +102,7 @@ describe("an outcome's block", () => {
   it("carries the extension's values under its name", () => {
     const centre = document.createElement("div");
     setDocTab(`card:${deck.id}/${card.id}`, "outcomes");
+    openExtensionSection("probe", "outcome");
     renderCardWorkspace(centre, box, deck, card, [], host());
     if (!centre.querySelector(".outcome-body")) centre.querySelector<HTMLButtonElement>("button.outcome-row")!.click();
     const body = centre.querySelector(".outcome-body")!;
@@ -107,6 +116,7 @@ describe("a tab named for the extension", () => {
     expect(extensionTabs(project, "box", box.id)).toEqual([{ key: "ext:probe", label: "Probe", count: 1 }]);
     expect(extensionTabs(project, "deck", deck.id)).toEqual([]);
     const centre = document.createElement("div");
+    openExtensionSection("probe", "box");
     renderBoxTabBody(centre, box, "ext:probe", host());
     expect(centre.querySelector<HTMLInputElement>(".ext-section input")!.value).toBe("salt");
   });
@@ -158,6 +168,7 @@ describe("a pick", () => {
     const h = { ...host(), extensions: { project: () => withShot, save: vi.fn() } } as InspectorHost;
     const centre = document.createElement("div");
     setDocTab(`card:${deck.id}/${card.id}`, "fields");
+    openExtensionSection("shot", "card");
     renderCardWorkspace(centre, box, deck, card, [], h);
     const row = [...centre.querySelectorAll(".shell-fieldrow")].find((r) => r.querySelector(".shell-fieldrow-label")?.textContent === "To")!;
     const options = [...row.querySelectorAll("option")].map((o) => o.textContent);
@@ -187,44 +198,36 @@ describe("the fold", () => {
   const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(".shell-fieldrow-label")].map((c) => c.textContent ?? "");
   const caption = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(".shell-fold-cap")!;
 
-  it("shows only the fields a node sets, and counts them in the caption (F1, F2)", () => {
+  it("closed, is its caption alone, counting what the node sets (app-shell 1.4)", () => {
     const sec = extensionSection(xhost, spare, "card", "c_bell");
     expect(caption(sec).textContent).toBe("Spare (1 set)");
     expect(caption(sec).getAttribute("aria-expanded")).toBe("false");
-    expect(labels(sec)).toEqual(["Line"]);
-    // No group heading above a group with nothing shown.
-    expect(sec.querySelector(".ext-group")).toBeNull();
-    // Nothing set: the caption alone.
+    // No fields, set or not: a writer took the set ones for an open section and the rest for missing.
+    expect(labels(sec)).toEqual([]);
     const bare = extensionSection(xhost, spare, "card", "c_tide");
     expect(caption(bare).textContent).toBe("Spare");
     expect(labels(bare)).toEqual([]);
   });
 
-  it("opens to every field, and stays open from node to node (F3, F4)", () => {
-    const sec = extensionSection(xhost, spare, "card", "c_bell");
-    caption(sec).click();
-    try {
-      expect(caption(sec).getAttribute("aria-expanded")).toBe("true");
-      expect(labels(sec)).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
-      expect(sec.querySelector(".ext-group")?.textContent).toBe("Sound");
-      expect(labels(extensionSection(xhost, spare, "card", "c_tide"))).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
-    } finally { caption(sec).click(); }
-    expect(labels(extensionSection(xhost, spare, "card", "c_tide"))).toEqual([]);
+  it("counts a problem in the caption, and says it as the rollover", () => {
+    const wrong = { ...spare, values: { c_bell: { line: "Hush.", weight: "heavy" } } } as unknown as ExtensionDto;
+    const whost = { project: () => ({ ...withSpare, extensions: [wrong] } as unknown as ProjectDto), save: vi.fn() };
+    const sec = extensionSection(whost, wrong, "card", "c_bell");
+    expect(caption(sec).textContent).toBe("Spare (2 set, 1 problem)");
+    expect(caption(sec).closest("[data-tip]")?.getAttribute("data-tip") ?? caption(sec).dataset["tip"]).toBeTruthy();
   });
 
-  it("keeps a value cleared while folded until the author leaves the node (F5)", () => {
-    sweepExtensionFold(); sweepExtensionFold();
-    extensionSection(xhost, spare, "card", "c_bell");
-    sweepExtensionFold();
-    const cleared = { ...withSpare, extensions: [{ ...spare, values: { ...spare.values, c_bell: { weight: 1 } } }] } as unknown as ProjectDto;
-    const chost = { project: () => cleared, save: vi.fn() };
-    // Redrawn on the same node: Line stays, now empty.
-    expect(labels(extensionSection(chost, cleared.extensions![0]!, "card", "c_bell"))).toEqual(["Line"]);
-    sweepExtensionFold();
-    // Another node drawn, then back: only what is set.
-    extensionSection(chost, cleared.extensions![0]!, "card", "c_tide");
-    sweepExtensionFold();
-    expect(labels(extensionSection(chost, cleared.extensions![0]!, "card", "c_bell"))).toEqual([]);
+  it("opens to every field, and stays open on that kind of node only (F3, F4)", () => {
+    const sec = extensionSection(xhost, spare, "card", "c_bell");
+    caption(sec).click();
+    expect(caption(sec).getAttribute("aria-expanded")).toBe("true");
+    expect(labels(sec)).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
+    expect(sec.querySelector(".ext-group")?.textContent).toBe("Sound");
+    expect(labels(extensionSection(xhost, spare, "card", "c_tide"))).toEqual(["Line", "Weight", "Loud", "Cue", "Sound"]);
+    // Open on a card leaves the deck's closed.
+    expect(labels(extensionSection(xhost, spare, "deck", deck.id))).toEqual([]);
+    caption(sec).click();
+    expect(labels(extensionSection(xhost, spare, "card", "c_tide"))).toEqual([]);
   });
 
   it("folds an extension's own tab too, and the tab counts what the caption counts", () => {
@@ -284,10 +287,11 @@ describe("a group that starts closed", () => {
     } finally { sec.querySelector<HTMLButtonElement>(".shell-fold-cap")!.click(); }
   });
 
-  it("leaves a folded section as it was", () => {
+  it("draws nothing of a closed section", () => {
     const sec = extensionSection(thost, tucked, "card", "c_bell");
     expect(sec.querySelector(".shell-fold-cap")?.getAttribute("aria-expanded")).toBe("false");
-    expect(labels(sec)).toEqual(["Line", "Act"]);
+    expect(labels(sec)).toEqual([]);
+    expect(groupCap(sec)).toBeNull();
   });
 
   it("is a disclosure in Project Settings too, remembered apart from the pages'", () => {
@@ -339,4 +343,61 @@ describe("an extension's Project Settings page", () => {
     const sec = extensionSection(lhost, listed, "card", "c_bell");
     expect(sec.querySelector(".shell-recordgrid-table")).toBeNull();
   });
+});
+
+// P7 (patterkit design/proposals/inspector-one-door.md): you see what's attached, and Add offers the rest.
+describe("+ Add on a page", () => {
+  const quiet: ExtensionDto = {
+    id: "spare", name: "Spare", version: "1.0.0",
+    targets: { card: { fields: [{ name: "line", type: "text", label: "Line" }, { name: "loud", type: "boolean", label: "Loud" }] } },
+    values: { c_bell: { line: "Hush." } },
+  };
+  const both = { ...project, extensions: [probe, quiet] } as unknown as ProjectDto;
+  const doorHost = (redraw = vi.fn()) => ({ project: () => both, save: vi.fn(), redraw });
+
+  it("draws an extension the node uses, and offers one it doesn't by name", () => {
+    const tidy = { ...quiet, values: {} };
+    const d = extensionDoor({ ...doorHost(), project: () => ({ ...both, extensions: [probe, tidy] } as unknown as ProjectDto) }, "card", "c_bell");
+    expect(d.sections.map((s) => s.querySelector(".shell-fold-cap")?.textContent?.startsWith("Probe"))).toEqual([true]);
+    expect(d.add?.textContent).toBe("+ Add");
+    d.add!.getBoundingClientRect = () => ({ left: 0, bottom: 0 } as DOMRect);
+    d.add!.click();
+    const items = [...document.querySelectorAll(".shell-ctx-menu [role=menuitem], .ctx-menu button, [role=menu] button")].map((b) => b.textContent);
+    expect(items.join("|")).toContain("Spare");
+    document.body.querySelectorAll("[role=menu], .shell-ctx-menu, .ctx-menu").forEach((m) => m.remove());
+  });
+
+  it("has nothing to add when every extension is drawn, or the page is read-only", () => {
+    expect(extensionDoor(doorHost(), "card", "c_bell").add).toBeNull();
+    const tidy = { ...quiet, values: {} };
+    const ro = { project: () => ({ ...both, extensions: [probe, tidy] } as unknown as ProjectDto), save: vi.fn(), redraw: vi.fn(), readOnly: true };
+    expect(extensionDoor(ro, "card", "c_bell").add).toBeNull();
+  });
+
+  it("draws an opened section with nothing set, and offers it again once closed", () => {
+    const tidy = { ...quiet, values: {} };
+    const redraw = vi.fn();
+    const h = { project: () => ({ ...both, extensions: [tidy] } as unknown as ProjectDto), save: vi.fn(), redraw };
+    expect(extensionDoor(h, "card", "c_tide").sections).toEqual([]);
+    openExtensionSection("spare", "card");
+    const d = extensionDoor(h, "card", "c_tide");
+    expect(d.sections).toHaveLength(1);
+    expect(d.add).toBeNull();
+    // Closing it with nothing set asks the page to redraw, so it goes back to + Add.
+    d.sections[0]!.querySelector<HTMLButtonElement>(".shell-fold-cap")!.click();
+    expect(redraw).toHaveBeenCalled();
+    expect(extensionDoor(h, "card", "c_tide").sections).toEqual([]);
+  });
+
+  it("puts + Add at the foot of a card's Fields tab", () => {
+    const tidy = { ...quiet, values: {} };
+    const h = { ...host(), extensions: doorHostFor([probe, tidy]) } as InspectorHost;
+    const centre = document.createElement("div");
+    setDocTab(`card:${deck.id}/${card.id}`, "fields");
+    renderCardWorkspace(centre, box, deck, card, [], h);
+    const panel = centre.querySelector(".ext-section")!.parentElement!;
+    expect(panel.lastElementChild?.textContent).toBe("+ Add");
+  });
+
+  const doorHostFor = (extensions: ExtensionDto[]) => ({ project: () => ({ ...project, extensions } as unknown as ProjectDto), save: vi.fn(), redraw: vi.fn() });
 });

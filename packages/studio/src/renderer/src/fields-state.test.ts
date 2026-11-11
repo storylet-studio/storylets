@@ -3,10 +3,10 @@
 // editor tells it to show, which item it follows, the page's summary and Edit button in place of the field,
 // and the edits it sends back landing through the page's own save.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fieldsHint, fieldsNodeLabel, fieldsState, followTarget, recordMapFields, selectedNodes, withoutViewEdited } from "./fields-state.js";
 import { createFieldsLink } from "./fields-link.js";
-import { extensionSection, sweepExtensionFold } from "./extension-rows.js";
+import { extensionSection, openExtensionSection, sweepExtensionFold } from "./extension-rows.js";
 import type { ExtensionHost } from "./extension-rows.js";
 import type { ExtensionDto, FieldsEdit, FieldsWinState, ProjectDto, StudioApi } from "../../shared/api.js";
 
@@ -88,13 +88,15 @@ describe("what the window shows", () => {
 });
 
 describe("on the page", () => {
-  beforeEach(() => { sweepExtensionFold(); sweepExtensionFold(); });
+  // Closed, a section draws no rows (app-shell 1.4): these look inside an open one.
+  beforeEach(() => { sweepExtensionFold(); openExtensionSection("shot", "card"); });
+  afterEach(() => { openExtensionSection("shot", "card", false); });
 
   it("a map of records is a line per key and an Edit button that opens the window on the item (H3)", () => {
     const open = vi.fn();
     const sec = extensionSection({ ...host(), openFields: open }, shot, "card", "c_bell");
-    // The summary is the field to the fold: the map holds keys, so it is set and shows folded.
-    expect(sec.querySelector(".shell-fold-cap")?.textContent).toBe("Shot (1 set)");
+    // The map holds keys, so it counts as set.
+    expect(sec.querySelector(".shell-fold-cap")?.textContent).toBe("Shot (1 set, 1 problem)"); // t_gone is no tag the project has
     const lines = [...sec.querySelectorAll(".ext-summary-line")].map((l) => l.textContent);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(/^cast\/TAM: /);
@@ -137,11 +139,8 @@ describe("on the page", () => {
 
   it("no keys: the Edit button alone", () => {
     const sec = extensionSection({ ...host(), openFields: vi.fn() }, shot, "card", "c_tide");
-    sec.querySelector<HTMLButtonElement>(".shell-fold-cap")!.click();
-    try {
-      expect(sec.querySelector(".ext-summary-line")).toBeNull();
-      expect(sec.querySelector(".ext-edit")).not.toBeNull();
-    } finally { sec.querySelector<HTMLButtonElement>(".shell-fold-cap")!.click(); }
+    expect(sec.querySelector(".ext-summary-line")).toBeNull();
+    expect(sec.querySelector(".ext-edit")).not.toBeNull();
   });
 });
 

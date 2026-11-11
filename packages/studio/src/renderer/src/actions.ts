@@ -470,7 +470,7 @@ export function createActions(ctx: ActionsContext) {
     openHand: actions.openHand,
     extensions: {
       project: () => ctx.session.project, save: saves.saveExtension, openFields: ctx.openFields,
-      viewInstalled: ctx.viewInstalled, openView: ctx.openView,
+      viewInstalled: ctx.viewInstalled, openView: ctx.openView, redraw: () => ctx.renderCentre(),
     },
     // From a hand's Cards tab, sideways: the card's parent is its deck, and the
     // way back to the place it was opened from is offered beside the way up
