@@ -20,3 +20,10 @@ export const STORYLETTER_WORDMARK =
   "</g></g>" +
   '<text x="232" y="150" font-family="var(--font-read), Georgia, serif" font-weight="500" font-size="120" letter-spacing="-2" fill="var(--ink)">Storylet<tspan style="fill:light-dark(#c8902f,#e0b463)">ter</tspan></text>' +
   "</svg>";
+
+// The mark alone: the wordmark's thread, for the welcome's slot above the title. Same geometry and colours.
+export const STORYLETTER_MARK =
+  '<svg viewBox="-4 -4 108 108" role="img" aria-label="Storyletter" xmlns="http://www.w3.org/2000/svg"><g fill="none">' +
+  '<path d="M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88" style="stroke:light-dark(#36284a,#9a89b5)" stroke-width="12" stroke-linecap="round"/>' +
+  '<circle cx="88" cy="12" r="9.5" style="fill:light-dark(#c8902f,#e0b463)"/><circle cx="12" cy="88" r="9.5" style="fill:light-dark(#c8902f,#e0b463)"/><circle cx="50" cy="50" r="9.5" style="fill:light-dark(#c8902f,#e0b463)"/>' +
+  "</g></svg>";

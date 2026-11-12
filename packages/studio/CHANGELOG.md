@@ -10,6 +10,15 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-12
+
+### Changed
+
+- **A calmer welcome.** With no project open, Storyletter shows its name, a few buttons, and your recent projects, and
+  nothing else. The first time, it starts you off with The Hamlet. The kits and examples are all in New Project.
+- **What's new waits until you ask.** After an update nothing opens over your work: a "What's new" button in the
+  top bar opens a short list of what changed, with a link to the full notes.
+
 ## [1.2.0] - 2026-11-11
 
 ### Added

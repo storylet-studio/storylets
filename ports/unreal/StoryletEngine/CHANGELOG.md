@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-12
+
+### Changed
+
+- **Nothing new in this runtime.** 1.0.2 is the JS play helpers' release (they take app-shell 2.0), released in
+  lockstep so every runtime keeps one version.
+
 ## [1.0.1] - 2026-11-10
 
 ### Changed

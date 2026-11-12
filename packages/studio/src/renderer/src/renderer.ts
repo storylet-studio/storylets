@@ -1002,8 +1002,9 @@ async function boot(): Promise<void> {
   // bar and one remark, never a dialog over the work (the October 2026 review).
   // It installs on quit if the chip is never clicked.
   studio.onUpdaterReady((info) => { showUpdateReady(info, { host: shell.topbarTrail, restart: () => studio.updaterRestart() }); });
-  // The first launch after an update says what's new in it (main gives this answer once per launch).
-  void studio.whatsNewState().then((st) => whatsNewAfterUpdate(st, { ...whatsNewOpts, onClose: () => studio.whatsNewSeen() }));
+  // The first launch after an update puts a quiet "What's new" chip in the top bar (main gives this answer once
+  // per launch); the dialog opens only from it, or from Help (patterkit quiet-welcome-and-whats-new.md, W3).
+  void studio.whatsNewState().then((st) => whatsNewAfterUpdate(st, { ...whatsNewOpts, host: shell.topbarTrail, onClose: () => studio.whatsNewSeen() }));
   // The way out of a project the server has not seen the whole of. Registered
   // at boot for the same reason as the four above: main asks at the moment of
   // quitting, and a question nobody is listening for falls back to a native box

@@ -20,7 +20,8 @@ import { setPlayRung } from "./play-ladder.js";
 import { setCardChoices, setGameScopes } from "./expr-panels.js";
 import { flash, ok } from "./results.js";
 import { placeUsable } from "./navigation.js";
-import { EXAMPLE_KITS, PROJECT_KITS, openNewProject } from "./kits.js";
+import { EXAMPLE_KITS, openNewProject } from "./kits.js";
+import { STORYLETTER_MARK } from "./wordmark.js";
 import type { ProjectStart } from "./kits.js";
 import type { Navigation } from "./navigation.js";
 import type { SaveQueue } from "./save-queue.js";
@@ -105,38 +106,28 @@ export function createLifecycle(ctx: LifecycleContext) {
     ctx.signalReady();   // the welcome screen is up: safe to reveal the window
     ctx.tellDeckFocused(false);
     ctx.liveLink(false);   // Live Link: no project, no control
-    // THREE JOBS, kept apart (2026-08-29): START, LEARN, RETURN. Since the kit
-    // gallery brief (section 6, 2026-09-27) the first two are the gallery's own
-    // tiles, so the welcome shows what the app is FOR before anything is chosen:
-    // the game kits to start from, and the worked examples to learn from (a kit
-    // gives you a starting shape; an example shows you a finished one, and the
-    // concepts are learned from the finished one). A tile opens New Project on
-    // that choice, so its full description and its button are one click on,
-    // never a surprise. The screen is the shell's (welcome.ts); what is ours is
-    // the words and what each click does.
+    // Two states, one job each (patterkit design/proposals/quiet-welcome-and-whats-new.md,
+    // W1 and W2; Ian, 2026-11-12: the welcome was the busiest page in the app).
+    // A first run is the mark, the title, and the Hamlet (the example marked
+    // Start here), New, and Open; with recents it's Open and New, the recent
+    // names, and the Hamlet as a line. The kits and the other examples are New
+    // Project's, and only there. The Hamlet opens New Project with it chosen, so
+    // the author sees it opens as their own copy, in a folder they choose, BEFORE
+    // anything asks for a folder.
     ctx.showWorkspace(false);
+    const mark = document.createElement("div");
+    mark.innerHTML = STORYLETTER_MARK;
+    const start = EXAMPLE_KITS.find((k) => k.badge !== undefined) ?? EXAMPLE_KITS[0];
     mountWelcome(ctx.welcomeHost, {
       title: "Storyletter",
       sub: "Which story beat happens next? Open a project and deal a hand.",
-      actions: [
-        { label: "Open a project…", primary: true, onClick: () => void adopt(studio.openProjectDialog()) },
-        { label: "New project…", onClick: () => newProject() },
-      ],
-      groups: [
-        { caption: "Start from a kit", tiles: true,
-          items: PROJECT_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, ...(k.features ? { features: k.features } : {}), onOpen: () => newProject(k.id) })) },
-        // An example is never opened in place (it lives inside the installed app,
-        // which is read-only and replaced by the next update), so opening one asks
-        // for a folder. Say so BEFORE the click.
-        { caption: "Learn from a finished project", note: "Each opens as your own copy, in a folder you choose.", tiles: true,
-          items: EXAMPLE_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, ...(k.features ? { features: k.features } : {}), ...(k.badge !== undefined ? { badge: k.badge } : {}), onOpen: () => newProject(k.id) })) },
-      ],
+      mark,
+      open: { label: "Open a project…", onClick: () => void adopt(studio.openProjectDialog()) },
+      create: { label: "New project…", onClick: () => newProject() },
+      ...(start ? { tour: { label: `Try ${start.name}`, prompt: "New to Storylets?", onClick: () => newProject(start.id) } } : {}),
       // What the project CALLS itself, with the folder stem as the fallback for
       // an entry recorded before names were stored (app-shell 0.25.0). The path
-      // stays beside it: two projects may legitimately share a name, and the
-      // folder is how you tell them apart.
-      // The store keeps eight and the File menu shows eight; so does this.
-      maxRecents: 8,
+      // is its rollover, and shows under it when two names match.
       recents: session.state.recents.map((recent) => ({
         name: recent.name ?? baseName(recent.path).replace(/\.storylets$/, ""),
         path: recent.path,

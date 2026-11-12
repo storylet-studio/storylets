@@ -8,6 +8,14 @@ section for it.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-12
+
+### Changed
+
+- **The play helpers work with app-shell 2.0 as well as 1.x** (`@storylet-studio/play-helpers` takes
+  `@wildwinter/app-shell` `>=1.0.0 <3.0.0`), so a game that also uses Patter's play helpers, or Storyletter's
+  own tree, installs one copy of it. The runtime itself is unchanged.
+
 ## [1.0.1] - 2026-11-10
 
 ### Changed
