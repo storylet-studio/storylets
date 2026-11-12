@@ -182,7 +182,11 @@ namespace StoryletStudio.StoryletEngine.TestHost
             TcpListener listener = null;
             try
             {
-                Thread.Sleep(150);
+                // Wait for the refused attempt to register rather than for a fixed time: a refused
+                // connect took over 150 ms on the play-unity release runner (2026-11-12, twice), and
+                // until it fails the hello queues by design. _dropped is the runtime's own record of it.
+                var dropped = typeof(StoryletLiveLink).GetField("_dropped", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                Check(failures, "socket: the refused first connect registers", dropped != null && WaitFor(() => (bool)dropped.GetValue(link)), "never dropped");
                 Check(failures, "socket: a refused first connect reads as connecting", link.State == LiveLinkState.Connecting, link.State.ToString());
 
                 var engine = new Engine(BundleLoader.Parse(bundleJson), new EngineOptions { Seed = 7 });
