@@ -352,7 +352,7 @@ func _build_log(s, caption_text := "Log") -> void:
 	auto_cb.text = "Autoscroll"
 	auto_cb.tooltip_text = "Scroll to the latest entry on every refresh."
 	auto_cb.button_pressed = _log_autoscroll
-	auto_cb.toggled.connect(func(on: bool) -> void: _log_autoscroll = on)
+	auto_cb.toggled.connect(_on_log_autoscroll)
 	tools_row.add_child(auto_cb)
 	var copy_btn := Button.new()
 	copy_btn.text = "Copy"
@@ -375,6 +375,10 @@ func _build_log(s, caption_text := "Log") -> void:
 	_body.add_child(scroll)
 	_log_views.append({"flow": s, "label": lines, "scroll": scroll, "last_seq": -1})
 	_refresh_log()
+
+
+func _on_log_autoscroll(on: bool) -> void:
+	_log_autoscroll = on
 
 
 func _on_log_kind(on: bool, kind: String) -> void:

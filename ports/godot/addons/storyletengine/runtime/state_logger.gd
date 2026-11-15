@@ -71,14 +71,23 @@ static func _extra_state(flow_save: Dictionary) -> Dictionary:
 ## rebuild re-mounts on capture. opts: {"sink": Callable(String), "label":
 ## String}.
 static func create_state_logger(engine: StoryletEngine, flow: StoryletFlow, opts: Dictionary = {}) -> StoryletStateLogger:
-	var flow_id := flow.id
-	var live := func() -> Variant: return engine.get_flow(flow_id)
+	# Static functions with the data bound, not lambdas: the logger keeps both for
+	# its life, and a GDScript lambda freed after its script aborts a C# game on
+	# quit (godotengine/godot#122532).
 	return StoryletStateLogger.new(
-		func() -> Array:
-			var mounts: Array = engine.list_bags()
-			var f = live.call()
-			if f != null:
-				mounts.append_array((f as StoryletFlow).list_bags())
-			return mounts,
-		func() -> Dictionary: return _extra_state(engine.save_game()["flows"].get(flow_id, {})),
+		_mounts_for.bind(engine, flow.id),
+		_extra_for.bind(engine, flow.id),
 		opts)
+
+
+## The shared bags and the flow's own, re-taking the flow by name each time.
+static func _mounts_for(engine: StoryletEngine, flow_id: String) -> Array:
+	var mounts: Array = engine.list_bags()
+	var f = engine.get_flow(flow_id)
+	if f != null:
+		mounts.append_array((f as StoryletFlow).list_bags())
+	return mounts
+
+
+static func _extra_for(engine: StoryletEngine, flow_id: String) -> Dictionary:
+	return _extra_state(engine.save_game()["flows"].get(flow_id, {}))

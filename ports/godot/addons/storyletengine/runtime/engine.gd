@@ -1788,7 +1788,13 @@ func list_bags() -> Array:
 func subscribe_trace(handler: Callable) -> Callable:
 	if not _engine_trace_handlers.has(handler):
 		_engine_trace_handlers.append(handler)
-	return func() -> void: _engine_trace_handlers.erase(handler)
+	# A method Callable, not a lambda: a game that keeps it past quit in C# must
+	# not hold a GDScript lambda (godotengine/godot#122532 aborts the process).
+	return _erase_from.bind(_engine_trace_handlers, handler)
+
+
+static func _erase_from(listeners: Array, fn: Callable) -> void:
+	listeners.erase(fn)
 
 
 func engine_tracing() -> bool:
@@ -2133,10 +2139,14 @@ func preview_load(envelope) -> Dictionary:
 	return report
 
 
-## An on_error that says nothing, for preview_load's scratch engine. Made in a
-## static function, so the lambda holds no reference to the engine asking.
+## An on_error that says nothing, for preview_load's scratch engine: a static
+## method Callable, so it holds no reference to the engine asking and no lambda.
 static func _ignore_errors() -> Callable:
-	return func(_e): pass
+	return _say_nothing
+
+
+static func _say_nothing(_e) -> void:
+	pass
 
 
 ## What open_flow(id, {"restore": saved}) would do to a flow of that name,

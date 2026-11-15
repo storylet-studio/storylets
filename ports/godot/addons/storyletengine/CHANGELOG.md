@@ -9,8 +9,8 @@ the same version number always means the same runtime behaviour.
 ### Fixed
 
 - **A C# game no longer crashes as it quits.** In Godot's .NET build, a game whose C# scripts gave the engine its
-  own registry, ran it beside Patterplay on one registry, or kept hold of something from its state layer (such as
-  the function `subscribe` hands back), played correctly but aborted on quit. Neither the engine nor the shared
+  own registry, ran it beside Patterplay on one registry, kept hold of the function `subscribe_trace` (the engine's
+  or a flow's) or a bag's `subscribe` hands back, or made a state logger, played correctly but aborted on quit. Neither the engine nor the shared
   expression kernel keeps GDScript lambdas any more, which Godot 4.7 can't free safely once their script has gone
   (godotengine/godot#122532, fixed for Godot 4.8). A state logger also no longer keeps itself alive through the
   bags it watches.

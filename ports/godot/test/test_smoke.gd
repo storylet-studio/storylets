@@ -233,7 +233,7 @@ func _handlers(bundle: Dictionary) -> void:
 	flow.subscribe_trace(on_flow)
 	var unsubscribe := flow.subscribe_trace(on_flow)
 	engine.subscribe_trace(on_engine)
-	engine.subscribe_trace(on_engine)
+	var engine_unsubscribe := engine.subscribe_trace(on_engine)
 	var late := func(_e: Dictionary) -> void: heard["late"] += 1
 	var adds_late := func(_e: Dictionary) -> void: flow.subscribe_trace(late)
 	flow.subscribe_trace(adds_late)
@@ -246,6 +246,10 @@ func _handlers(bundle: Dictionary) -> void:
 	unsubscribe.call()
 	flow.advance_turns(str(bundle["boxes"][0]["id"]))
 	_check("one unsubscribe removes a handler subscribed twice", heard["flow"] == 2, str(heard))
+	var engine_heard: int = heard["engine"]
+	engine_unsubscribe.call()
+	flow.advance_turns(str(bundle["boxes"][0]["id"]))
+	_check("the engine's unsubscribe removes its handler too", heard["engine"] == engine_heard, str(heard))
 
 
 ## The LoadReport reaches the host from both helpers that used to drop it, and

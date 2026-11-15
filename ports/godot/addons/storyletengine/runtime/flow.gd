@@ -282,7 +282,12 @@ func turn(box_ref: String) -> float:
 func subscribe_trace(handler: Callable) -> Callable:
 	if not _trace_handlers.has(handler):
 		_trace_handlers.append(handler)
-	return func() -> void: _trace_handlers.erase(handler)
+	# A method Callable, not a lambda (see StoryletEngine.subscribe_trace).
+	return _erase_from.bind(_trace_handlers, handler)
+
+
+static func _erase_from(listeners: Array, fn: Callable) -> void:
+	listeners.erase(fn)
 
 
 func _tracing() -> bool:
