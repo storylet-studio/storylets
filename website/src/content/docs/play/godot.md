@@ -332,6 +332,89 @@ If you run with the plugin disabled, Godot treats a `.storyletsc` as a non-resou
 leaves it out of the export. In that case add `*.storyletsc` to your export preset's
 **Resources ▸ "Filters to export non-resource files/folders"**.
 
+## Using C#
+
+A game written in C# with Godot's .NET build uses this same addon. Godot runs GDScript and C# side by
+side, so your C# scripts call the Storylet Engine directly. There's nothing extra to install, and the
+editor half (the importer, the bundle inspector, and the export hook) works as it does for a GDScript game.
+
+C# can't name a GDScript `class_name`, so load each class you need by its script path. The calls are
+the GDScript ones by name, and what comes back are Godot types: a board is a `Godot.Collections.Dictionary`
+of hands, each an array of card Dictionaries.
+
+```csharp
+using Godot;
+using Godot.Collections;
+
+public partial class Storylets : Node
+{
+    static readonly GDScript StoryletBundle = GD.Load<GDScript>("res://addons/storyletengine/runtime/bundle.gd");
+    static readonly GDScript StoryletEngine = GD.Load<GDScript>("res://addons/storyletengine/runtime/engine.gd");
+
+    GodotObject _engine;   // keep it: a flow holds its engine weakly
+    GodotObject _flow;
+
+    public override void _Ready()
+    {
+        var loaded = StoryletBundle.Call("load_from_string", FileAccess.GetFileAsString("res://story.storyletsc")).AsGodotDictionary();
+        if (!loaded["ok"].AsBool()) { GD.PushError(loaded["error"]); return; }
+
+        _engine = StoryletEngine.Call("create", loaded["bundle"], new Dictionary { ["seed"] = 7 }).AsGodotObject();
+        if (_engine == null) return;              // create has already said why
+        _flow = _engine.Call("open_flow", "main").AsGodotObject();
+
+        _flow.Call("deal_many");
+        var board = _flow.Call("board").AsGodotDictionary();
+        foreach (var (hand, cards) in board)
+            foreach (Dictionary card in cards.AsGodotArray())
+                GD.Print($"{hand} holds {card["gameId"]}");
+    }
+
+    public void Play(string handId, string cardId)
+    {
+        foreach (Dictionary outcome in _flow.Call("outcomes", cardId, handId).AsGodotArray())
+        {
+            if (!outcome["available"].AsBool()) continue;
+            var error = _flow.Call("play", cardId, outcome["gameId"], handId).AsString();   // "" on success
+            if (error != "") GD.PushWarning(error);
+            return;
+        }
+    }
+}
+```
+
+Everything on this page works the same way: `save_game()` and `load_game()` hand back Dictionaries
+(re-take the flow with `get_flow` after a load), option keys are the GDScript ones, and errors are
+values and `push_error`s, never C# exceptions.
+
+**Your game's own C# state** goes behind `host_scopes` as a `get` / `set` pair of C# lambdas, so your
+cards' conditions read your C# objects directly and outcomes write to them:
+
+```csharp
+var world = new System.Collections.Generic.Dictionary<string, Variant> { ["time_of_day"] = "day" };
+_engine = StoryletEngine.Call("create", loaded["bundle"], new Dictionary
+{
+    ["host_scopes"] = new Dictionary
+    {
+        ["world"] = new Dictionary
+        {
+            ["get"] = Callable.From((string name) => world.TryGetValue(name, out var v) ? v : default),
+            ["set"] = Callable.From((string name, Variant value) => { world[name] = value; }),
+        },
+    },
+    ["on_error"] = Callable.From((Dictionary e) => GD.PushWarning($"{e["kind"]}: {e["message"]}")),
+}).AsGodotObject();
+```
+
+Returning `default` (a nil `Variant`) means unset. As in GDScript, have the lambdas capture the store
+they need, not the object that holds the engine.
+
+Names are strings and values are `Variant`s, so a typo shows up when the game runs, not when it
+compiles. If you call the engine from many places, wrap the calls you use in a small typed class of
+your own.
+
+Godot's C# builds don't export to the web yet, so a game that has to run in a browser needs GDScript.
+
 ## Which Storylet Engine is this?
 
 **`StoryletEngineVersion.CURRENT`** is this runtime's version, as in its `plugin.cfg` (`"1.0.0"`). A game, a tool

@@ -225,7 +225,7 @@ static func _half(scope: String, decls: Array, shared: bool) -> Array:
 # ("story.gold", "deck.tavern.drawn") instead of every caller pasting a prefix on.
 static func _bag_from_decls(decls: Array, path_prefix: String) -> StoryletPropertyBag:
 	return StoryletPropertyBag.new(decls, {
-		"normalise": func(n: String) -> String: return n,
+		"normalise": _identity(),
 		"path_prefix": path_prefix,
 	})
 
@@ -975,9 +975,17 @@ func _register_mount(m: Dictionary) -> String:
 
 
 ## Identity name normalisation: storylets property names are case-significant
-## as authored.
+## as authored. A method Callable, never a lambda: the registry keeps it for as
+## long as the scope is registered, and a game's registry can outlive this
+## script. In Godot's .NET build a lambda freed after its script aborts the
+## process on quit (godotengine/godot#122532, fixed for 4.8); a method Callable
+## has nothing to free.
 static func _identity() -> Callable:
-	return func(n: String) -> String: return n
+	return _identity_name
+
+
+static func _identity_name(n: String) -> String:
+	return n
 
 
 ## Every shared bag back to its declared defaults, in place (the registry keeps
