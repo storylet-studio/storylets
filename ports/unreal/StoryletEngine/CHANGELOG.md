@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-11-15
+
+### Changed
+
+- **Nothing new in this runtime.** 1.0.3 is the Godot runtime's fix (a C# game no longer crashes as it quits),
+  released in lockstep so every runtime keeps one version.
+
 ## [1.0.2] - 2026-11-12
 
 ### Changed
