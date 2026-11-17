@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
 ### Added
 
 - **A hand can set its own slots to unbounded.** A hand made from a template could override the template's slot

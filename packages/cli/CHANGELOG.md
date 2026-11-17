@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
 ### Changed
 
 - **A hand's own slots can be unbounded.** `compile` and `validate` accept `slots: "unbounded"` on a hand, as on a

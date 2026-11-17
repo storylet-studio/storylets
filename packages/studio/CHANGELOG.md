@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-17
+
 ### Added
 
 - **A template hand's slots can be unbounded.** On a hand made from a template, Slots now offers as the template,
