@@ -1924,6 +1924,49 @@ export const fixtures: Fixtures = {
         { op: "peek", expect: ["c_w"] },   // both zone cards claimed; the wildcard remains
       ] },
 
+    // A hand's own `slots` overrides its template's or rule's, and takes the
+    // same values: a count, or "unbounded" (runtime 1.1.0). Until then a
+    // hand-level "unbounded" dealt nothing in JS, Godot and Unreal, and Unity
+    // refused the bundle.
+    { name: "a hand's own slots override its template's, unbounded included",
+      cards: [
+        { id: "c_a", priority: 3 },
+        { id: "c_b", priority: 2 },
+        { id: "c_c", priority: 1 },
+      ],
+      templates: [{ id: "t_one", slots: 1 }],
+      hands: [
+        { id: "h_capped", template: "t_one" },
+        { id: "h_open", template: "t_one", slots: "unbounded" },
+      ],
+      script: [
+        { op: "deal", hands: ["h_capped"], expectBoard: { h_capped: ["c_a"] } },
+        { op: "deal", hands: ["h_open"], expectBoard: { h_capped: ["c_a"], h_open: ["c_b", "c_c"] } },
+        // Dealt again, the open hand keeps what it holds and reports nothing outranked.
+        { op: "deal", hands: ["h_open"], expectBoard: { h_capped: ["c_a"], h_open: ["c_b", "c_c"] } },
+      ] },
+
+    { name: "a hand's own slots override its rule's, either way",
+      cards: [
+        { id: "c_a", priority: 2 },
+        { id: "c_b", priority: 1 },
+      ],
+      hands: [{ id: "h_rule", rule: { slots: 1 }, slots: "unbounded" }],
+      script: [
+        { op: "deal", hands: ["h_rule"], expectBoard: { h_rule: ["c_a", "c_b"] } },
+      ] },
+
+    { name: "a count on the hand caps an unbounded template",
+      cards: [
+        { id: "c_a", priority: 2 },
+        { id: "c_b", priority: 1 },
+      ],
+      templates: [{ id: "t_open" }],
+      hands: [{ id: "h_one", template: "t_open", slots: 1 }],
+      script: [
+        { op: "deal", hands: ["h_one"], expectBoard: { h_one: ["c_a"] } },
+      ] },
+
     { name: "a template's condition is shared: one edit governs every instance",
       story: [{ name: "open", type: "boolean", default: false }],
       cards: [{ id: "c_a" }],

@@ -551,7 +551,8 @@ export interface HandFixture {
    *  (4.6). A reference passes through the gameId resolution untouched. */
   chosen?: Record<string, string>;
   rule?: HandRuleFixture;
-  slots?: number;
+  /** Overrides the template's or rule's slots: a count, or "unbounded". */
+  slots?: number | "unbounded";
   properties?: PropertyDecl[];
 }
 

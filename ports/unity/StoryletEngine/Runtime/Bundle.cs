@@ -523,7 +523,8 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Standalone hands: the inline rule.</summary>
         public HandRule Rule;
         /// <summary>Override; defaults to the template's / rule's slots. The ONLY
-        /// template field an instance may override.</summary>
+        /// template field an instance may override. PositiveInfinity for
+        /// "unbounded", null when absent.</summary>
         public double? Slots;
         /// <summary>Standalone hands' own @hand state (template instances inherit
         /// the template's declarations).</summary>

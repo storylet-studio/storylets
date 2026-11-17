@@ -191,6 +191,16 @@ const definedOf = (card: { weight?: number; inOneHand?: number; acrossHands?: "o
 export function compileProject(source: SourceProject): CompileResult {
   const issues: Issue[] = [];
   const report = (issue: Issue): void => { issues.push(issue); };
+  // A slot cap, on a template, a rule or a hand's own override, is a whole
+  // number from 0 up, or "unbounded" (runtime 1.1.0 for the hand's own). A
+  // string count or a fraction would reach the runtimes as nonsense: a hand
+  // that deals nothing, or a bundle Unity refuses.
+  const checkSlots = (slots: unknown, path: string, where: string, field: string): void => {
+    if (slots === undefined || slots === "unbounded") return;
+    if (typeof slots === "number" && Number.isInteger(slots) && slots >= 0) return;
+    report({ severity: "error", path, where,
+      message: `${field} is ${JSON.stringify(slots)}: give a whole number from 0 up, or "unbounded"` });
+  };
   // Storylet extensions: one manifest-driven pass, its values attached to the
   // nodes once the bundle is assembled (extensions.ts).
   const extensions = extensionPass(source);
@@ -1305,6 +1315,7 @@ export function compileProject(source: SourceProject): CompileResult {
           report({ severity: "error", path: handsPath, where: effectiveGameId(template), message: `binds "${effectiveGameId(groupsById.get(groupId)!)}" and also asks each hand to choose one: a template can do either, not both` });
         }
       }
+      checkSlots(template.slots, handsPath, effectiveGameId(template), "slots");
       handTemplates.push({
         id: template.id,
         gameId: effectiveGameId(template),
@@ -1368,7 +1379,9 @@ export function compileProject(source: SourceProject): CompileResult {
         }
       } else if (hand.rule) {
         checkBindings(effectiveGameId(hand), hand.rule.bindings, hand.properties ?? []);
+        checkSlots(hand.rule.slots, handsPath, effectiveGameId(hand), "rule slots");
       }
+      checkSlots(hand.slots, handsPath, effectiveGameId(hand), "slots");
       hands.push({
         id: hand.id,
         gameId: effectiveGameId(hand),

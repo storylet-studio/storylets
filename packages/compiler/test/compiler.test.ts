@@ -86,6 +86,25 @@ describe("example project", () => {
     expect(out.bundle!.content.hash).not.toBe(bundle!.content.hash);   // but a real source change
   });
 
+  it("a slot cap is a whole number from 0 up or unbounded, on a hand as on its template or rule", () => {
+    const open = structuredClone(source);
+    const hand = open.boxes[0]!.hands.hands[0]!;
+    hand.slots = "unbounded";
+    const result = compileProject(open);
+    expect(errors(result.issues)).toEqual([]);
+    expect(result.bundle!.boxes[0]!.hands.find((h) => h.id === hand.id)!.slots).toBe("unbounded");
+
+    const bad = structuredClone(source);
+    (bad.boxes[0]!.hands.hands[0]! as { slots: unknown }).slots = "3";
+    // The example has no standalone hand, so add one.
+    bad.boxes[0]!.hands.hands.push({ id: "h_extra", rule: { bindings: {}, slots: 1.5 as unknown as number } });
+    (bad.boxes[0]!.hands.templates[0]! as { slots: unknown }).slots = -1;
+    const messages = errors(compileProject(bad).issues);
+    expect(messages).toContain('slots is "3": give a whole number from 0 up, or "unbounded"');
+    expect(messages).toContain('rule slots is 1.5: give a whole number from 0 up, or "unbounded"');
+    expect(messages).toContain('slots is -1: give a whole number from 0 up, or "unbounded"');
+  });
+
   it("the staleness gate trips when a shard changes", () => {
     expect(bundleIsFresh(bundle!, source)).toBe(true);
     const edited = structuredClone(source);

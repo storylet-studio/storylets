@@ -3343,10 +3343,11 @@ export class Flow {
   }
 
   private handCapacity(hand: Hand<Expression>): number {
-    if (hand.slots !== undefined) return hand.slots;
-    const declared = hand.template !== undefined
+    // The hand's own override first, then its template's or rule's; each is a
+    // count or "unbounded", and an absent cap is unbounded too.
+    const declared = hand.slots ?? (hand.template !== undefined
       ? this.internals.templatesById.get(hand.template)?.slots
-      : hand.rule?.slots;
+      : hand.rule?.slots);
     return declared === undefined || declared === "unbounded" ? Infinity : declared;
   }
 

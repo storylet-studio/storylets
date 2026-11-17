@@ -844,8 +844,9 @@ export interface Hand<E> {
   /** Standalone hands: the inline rule. */
   rule?: HandRule<E>;
   /** Override; defaults to the template's / rule's slots. The ONLY template
-   *  field an instance may override (schema 2.6). */
-  slots?: number;
+   *  field an instance may override (schema 2.6). A count, or "unbounded"
+   *  (runtime 1.1.0), as on a template or a rule. */
+  slots?: number | "unbounded";
   /** Standalone hands' own @hand state (template instances inherit the
    *  template's declarations). */
   properties?: PropertyDecl[];

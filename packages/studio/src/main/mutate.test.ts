@@ -1203,6 +1203,17 @@ describe("hands", () => {
     expect(handDetail(session, encBox, "h_docks")!.slots).toBe("");
   });
 
+  it("a template hand can override its slots with unbounded, and go back to the template's", async () => {
+    const session = scratchProject();
+    await saveHand(session, encBox, "h_docks", { slots: "unbounded" });
+    expect(handDetail(session, encBox, "h_docks")!.slots).toBe("unbounded");
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    expect(reopened.session.loaded.source!.boxes[0]!.hands.hands.find((h) => h.id === "h_docks")!.slots).toBe("unbounded");
+    await saveHand(session, encBox, "h_docks", { slots: "" });
+    expect(handDetail(session, encBox, "h_docks")!.slots).toBe("");
+  });
+
   it("converts a template instance to standalone (an empty rule) and back", async () => {
     const session = scratchProject();
     await saveHand(session, encBox, "h_docks", { template: "" });

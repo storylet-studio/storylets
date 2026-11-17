@@ -584,7 +584,7 @@ export interface BoxDto {
    *  bindings under chosen for an instance, rule bindings for a standalone.
    *  The Where row shows a place's region from it and warns on contradictions. */
   hands: {
-    id: string; gameId: string; title?: string; template?: string; slots?: number; tags: Record<string, string>;
+    id: string; gameId: string; title?: string; template?: string; slots?: number | "unbounded"; tags: Record<string, string>;
     /** A MOVING hand's groups: those it fills from a property at ask time, each
      *  with every tag (gameId) that property can name (ops `tagsOfHand`).
      *  Absent for a hand whose every binding is fixed. */
@@ -1713,7 +1713,8 @@ export interface HandDetail {
   movableFrom: string[];
   /** Standalone hands: the inline rule. */
   rule?: { bindings: BindingDto[]; condition?: string; slots: string };
-  /** Slot override as typed; blank follows the template's / rule's slots. */
+  /** Slot override as typed: a whole number or "unbounded"; blank follows the
+   *  template's / rule's slots. */
   slots: string;
   /** This hand's own state (standalone; instances inherit the template's). */
   properties: PropertyDeclDto[];

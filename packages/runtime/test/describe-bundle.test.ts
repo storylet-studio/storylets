@@ -71,6 +71,17 @@ describe("describeBundle: the deal() surface", () => {
     expect(describeBundle(open).hands[0]!.slots).toBe("unbounded");
   });
 
+  it("a hand's own slots override its template's, unbounded or a count", () => {
+    const over = expandBundle({
+      templates: [{ id: "t_one", slots: 1 }, { id: "t_open" }],
+      hands: [
+        { id: "h_a", template: "t_one", slots: "unbounded" },
+        { id: "h_b", template: "t_open", slots: 2 },
+      ],
+    });
+    expect(describeBundle(over).hands.map((h) => h.slots)).toEqual(["unbounded", 2]);
+  });
+
   it("reports a hole filled from a property: the hand that moves", () => {
     // The one thing about a hand its name cannot say. An integrator reading the
     // asset has to know that writing hand.elder.zone MOVES this hand, because

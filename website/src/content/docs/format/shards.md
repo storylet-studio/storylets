@@ -512,6 +512,11 @@ the template lists in `chooses`) or written out in full (a `rule` object with it
 `bindings`, `condition` and `slots`). It's one or the other. A hand made from a template can
 override only `slots`; everything else comes from the template.
 
+Every `slots`, on a template, a rule or a hand, is a whole number from 0 up or `"unbounded"`. A
+hand's own `slots` overrides its template's or its rule's, so one hand can hold everything while
+the others keep the template's cap. A hand-level `"unbounded"` needs Storylet Engine 1.1.0 or
+later.
+
 A hand's `gameId` is the name `deal` is called with from game code, so renaming one is a
 breaking change beyond the project's own borders. The merge driver warns when a merge renames
 one. A hand with no `gameId` of its own gets one derived from its title.

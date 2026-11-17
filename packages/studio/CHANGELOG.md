@@ -10,6 +10,17 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **A template hand's slots can be unbounded.** On a hand made from a template, Slots now offers as the template,
+  unbounded, or a count, so one hand can hold everything while the others keep the template's cap.
+
+### Fixed
+
+- **A slot count that isn't a whole number is a problem.** A slots value written by hand in a shard, on a template,
+  a rule or a hand, must be a whole number from 0 up or `"unbounded"`; anything else shows in Problems instead of
+  reaching the game as a hand that deals nothing.
+
 ## [1.3.0] - 2026-11-12
 
 ### Changed

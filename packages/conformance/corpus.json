@@ -16288,6 +16288,365 @@
       ]
     },
     {
+      "name": "a hand's own slots override its template's, unbounded included",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 3,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_b",
+                    "gameId": "b",
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_c",
+                    "gameId": "c",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_one",
+                "gameId": "one",
+                "slots": 1,
+                "properties": []
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_capped",
+                "gameId": "capped",
+                "template": "t_one"
+              },
+              {
+                "id": "h_open",
+                "gameId": "open",
+                "template": "t_one",
+                "slots": "unbounded"
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_capped"
+          ],
+          "expectBoard": {
+            "h_capped": [
+              "c_a"
+            ]
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_open"
+          ],
+          "expectBoard": {
+            "h_capped": [
+              "c_a"
+            ],
+            "h_open": [
+              "c_b",
+              "c_c"
+            ]
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_open"
+          ],
+          "expectBoard": {
+            "h_capped": [
+              "c_a"
+            ],
+            "h_open": [
+              "c_b",
+              "c_c"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a hand's own slots override its rule's, either way",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_b",
+                    "gameId": "b",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_rule",
+                "gameId": "rule",
+                "rule": {
+                  "slots": 1
+                },
+                "slots": "unbounded"
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_rule"
+          ],
+          "expectBoard": {
+            "h_rule": [
+              "c_a",
+              "c_b"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a count on the hand caps an unbounded template",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_b",
+                    "gameId": "b",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_open",
+                "gameId": "open",
+                "slots": "unbounded",
+                "properties": []
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_one",
+                "gameId": "one",
+                "template": "t_open",
+                "slots": 1
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_one"
+          ],
+          "expectBoard": {
+            "h_one": [
+              "c_a"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "a template's condition is shared: one edit governs every instance",
       "bundle": {
         "schema": "storylets/bundle@0",

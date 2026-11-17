@@ -8,6 +8,14 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **A hand can set its own slots to unbounded.** A hand made from a template could override the template's slot
+  count with a number only; it now takes `"unbounded"` too, as a template and a hand's own rule already did, so one
+  hand can hold everything its template would cap. Before, a bundle with a hand-level `"unbounded"` dealt that
+  hand nothing in the JS, Godot and Unreal runtimes and was refused by Unity's loader. A bundle that uses it needs
+  1.1.0 or later.
+
 ## [1.0.3] - 2026-11-15
 
 ### Changed

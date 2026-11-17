@@ -244,10 +244,9 @@ const movableHoles = (bundle: Bundle, hand: Hand<Expression>, box: Box<Expressio
 
 /** The effective slot cap, resolved the way the session resolves capacity. */
 const handSlots = (hand: Hand<Expression>, box: Box<Expression>): number | "unbounded" => {
-  if (hand.slots !== undefined) return hand.slots;
-  const declared = hand.template !== undefined
+  const declared = hand.slots ?? (hand.template !== undefined
     ? box.handTemplates.find((t) => t.id === hand.template)?.slots
-    : hand.rule?.slots;
+    : hand.rule?.slots);
   return declared === undefined ? "unbounded" : declared;
 };
 

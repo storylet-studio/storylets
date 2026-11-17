@@ -356,10 +356,12 @@ static func _movable_holes(hand: Dictionary, groups: Array) -> Array:
 ## The effective slot cap, resolved the way the flow resolves capacity: the
 ## hand's override, else the template's or rule's, else unbounded (INF).
 static func _hand_slots(hand: Dictionary, template: Variant) -> float:
-	if hand.has("slots"):
-		return float(hand["slots"])
-	var declared = null
-	if hand.has("template"):
+	# The hand's own override first: a count or "unbounded", as on a template
+	# or a rule (1.1.0).
+	var declared = hand.get("slots")
+	if declared != null:
+		pass  # the override stands
+	elif hand.has("template"):
 		if template != null:
 			declared = template.get("slots")
 	else:

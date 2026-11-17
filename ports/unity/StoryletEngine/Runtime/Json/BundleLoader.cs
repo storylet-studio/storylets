@@ -484,7 +484,8 @@ namespace StoryletStudio.StoryletEngine
                     Slots = ParseSlots(rule["slots"]),
                 };
             }
-            if (o["slots"] != null) hand.Slots = o.Value<double>("slots");
+            // A count or "unbounded", as on a template or a rule (1.1.0).
+            if (o["slots"] != null) hand.Slots = ParseSlots(o["slots"]);
             if (o["properties"] is JArray props) hand.Properties = ParsePropertyDecls(props);
             hand.Extensions = ParseNodeExtensions(o["extensions"]);
             return hand;

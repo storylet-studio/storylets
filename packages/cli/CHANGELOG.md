@@ -20,6 +20,13 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Changed
+
+- **A hand's own slots can be unbounded.** `compile` and `validate` accept `slots: "unbounded"` on a hand, as on a
+  template or a rule, for runtimes 1.1.0 and later.
+- **A slot count that isn't a whole number is an error.** On a template, a rule or a hand, slots must be a whole
+  number from 0 up or `"unbounded"`.
+
 ## [1.0.1] - 2026-11-10
 
 ### Changed

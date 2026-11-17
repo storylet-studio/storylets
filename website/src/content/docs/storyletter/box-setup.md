@@ -87,8 +87,8 @@ A hand's document has four tabs, and opens on **Cards**.
   name a tag, the picker also offers it under **from a property**, and the hand then moves to
   wherever that property says.
 - **Slots** is how many cards the hand holds. A hand with its own rule switches between
-  `unbounded` and a bounded count. A hand made from a template has a single override
-  field; leave it blank and the template's value applies.
+  `unbounded` and a bounded count. A hand made from a template chooses between **as
+  template** (the template's value applies), `unbounded`, and a bounded count of its own.
 - **Properties** is the hand's own `@hand` state. A hand made from a template inherits the
   template's properties, and the tab tells you to edit them on the template so every hand
   follows.

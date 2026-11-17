@@ -975,6 +975,25 @@ function slotsControl(bounded: boolean, size: string, choose: (slots: "unbounded
   return el("div", { className: "insp-segrow" }, seg, field);
 }
 
+/**
+ * A template hand's Slots override: as the template, unbounded, or bounded and
+ * how many. `value` is the override as stored in the edit: "" (as template),
+ * "unbounded", or a whole number. Bounding starts from the template's count
+ * when it has one, else 3.
+ */
+function overrideSlotsControl(value: string, declared: string, choose: (slots: string) => void, typed: (count: string) => void, commit: () => void): HTMLElement {
+  const mode = value.trim() === "" ? "as template" : value === "unbounded" ? "unbounded" : "bounded";
+  const start = /^\d+$/.test(declared) ? declared : "3";
+  const seg = segmented((["as template", "unbounded", "bounded"] as const).map((label) => ({
+    label, on: mode === label,
+    pick: () => choose(label === "as template" ? "" : label === "unbounded" ? "unbounded" : start),
+  })));
+  const field = inputField(mode === "bounded" ? value : "", "insp-input insp-mono insp-short",
+    { mode: "input", set: (v) => { if (/^\d+$/.test(v)) typed(v); }, commit });
+  field.placeholder = start; field.disabled = mode !== "bounded";
+  return el("div", { className: "insp-segrow" }, seg, field);
+}
+
 /** The `stages` option for a list whose rows are qualities of one kind:
  *  `make` names a row's quality from its declared name. A row with no name
  *  yet has no quality to carry anything for. */
@@ -1545,6 +1564,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     }));
     const declared = standalone() ? edit.rule?.slots ?? "unbounded" : templateNow?.slots ?? "unbounded";
     const slotsNow = /^\d+$/.test(edit.slots) ? Number(edit.slots)
+      : edit.slots === "unbounded" ? undefined
       : (/^\d+$/.test(String(declared)) ? Number(declared) : undefined);
     const specs = (): DocTabSpec[] => [
       { key: "cards", label: "Cards", ...(cards ? { count: tierCount(cards) } : {}) },
@@ -1586,11 +1606,12 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
         view.append(el("div", { className: "doc-panel cfg-panel" },
           cfgRow("Slots", "How many cards this hand holds.", slots)));
       } else {
-        const slots = inputField(edit.slots, "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.slots = v; }, commit });
-        slots.placeholder = String(declared);
-        // Load-bearing subtitle: "blank follows the template" is the entire
-        // meaning of an empty control, so it does not wait to be approached.
-        const slotsRow = cfgRow("Slots", "The one template field an instance may override. Blank follows the template's slots.", slots);
+        const slots = overrideSlotsControl(edit.slots, String(declared),
+          (next) => { edit.slots = next; commit(); draw(); },
+          (count) => { edit.slots = count; }, commit);
+        // Load-bearing subtitle: what "as template" means is the template's
+        // value, so it says the value rather than waiting to be approached.
+        const slotsRow = cfgRow("Slots", `The one template field a hand may override. As template follows the template's slots (${declared}).`, slots);
         slotsRow.classList.add("cfg-loadbearing");
         view.append(el("div", { className: "doc-panel cfg-panel" }, slotsRow));
       }

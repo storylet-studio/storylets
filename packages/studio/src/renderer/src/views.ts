@@ -1269,7 +1269,7 @@ export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewA
     // A titled hand reads as a title; only a bare gameId reads as a name.
     const row = el("button", { className: "listrow draggable", onClick: () => actions.openHand(box.id, hand.id) },
       el("span", { className: `listname${hand.title !== undefined ? " listtitle" : ""}`, text: hand.title ?? hand.gameId }),
-      listMeta([kind, hand.slots !== undefined ? plural(hand.slots, "slot") : undefined]));
+      listMeta([kind, hand.slots === "unbounded" ? "unbounded" : hand.slots !== undefined ? plural(hand.slots, "slot") : undefined]));
     // Every hand lives in the one hands shard, so they badge together.
     row.dataset["vc"] = vcKeys.hands(box.id);
     // A hand's evidence is its pin, which only the map knows: actions.ts asks

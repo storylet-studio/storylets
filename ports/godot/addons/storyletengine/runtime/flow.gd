@@ -1173,10 +1173,12 @@ static func _copy(value: Variant) -> Variant:
 
 
 func _hand_capacity(hand: Dictionary) -> float:
-	if hand.has("slots"):
-		return float(hand["slots"])
-	var declared = null
-	if hand.has("template"):
+	# The hand's own override first: a count or "unbounded", as on a template
+	# or a rule (1.1.0).
+	var declared = hand.get("slots")
+	if declared != null:
+		pass  # the override stands
+	elif hand.has("template"):
 		var template = _engine._templates_by_id.get(hand["template"])
 		if template != null:
 			declared = template.get("slots")

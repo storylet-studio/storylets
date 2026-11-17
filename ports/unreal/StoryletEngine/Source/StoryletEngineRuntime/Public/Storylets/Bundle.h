@@ -499,7 +499,8 @@ namespace storylets
         /** Standalone hands: the inline rule. */
         std::shared_ptr<HandRule> rule;
         /** Override; defaults to the template's / rule's slots. The ONLY
-         *  template field an instance may override. */
+         *  template field an instance may override. +infinity for
+         *  "unbounded", absent when undeclared. */
         std::optional<double> slots;
         /** Standalone hands' own @hand state (template instances inherit the
          *  template's declarations). */
@@ -1571,8 +1572,8 @@ namespace storylets
                 r->slots = ParseSlots(rule->find("slots"));
                 hand.rule = std::move(r);
             }
-            const JsonValue* slots = o.find("slots");
-            if (slots && !slots->isNull()) hand.slots = slots->num;
+            // A count or "unbounded", as on a template or a rule (1.1.0).
+            hand.slots = ParseSlots(o.find("slots"));
             const JsonValue* props = o.find("properties");
             if (props && props->isArray()) hand.properties = ParsePropertyDecls(*props);
             hand.extensions = ParseNodeExtensions(o);

@@ -92,8 +92,12 @@ export async function saveHand(session: ProjectSession, boxId: string, handId: s
     if (edit.rule.slots !== undefined) hand.rule.slots = coerceSlots(edit.rule.slots);
   }
   if (edit.slots !== undefined) {
+    // The override: a whole number, "unbounded", or blank to follow the
+    // template's or rule's slots.
     const n = Number(edit.slots);
-    if (edit.slots.trim() && Number.isInteger(n) && n >= 0) hand.slots = n; else delete hand.slots;
+    if (edit.slots === "unbounded") hand.slots = "unbounded";
+    else if (edit.slots.trim() && Number.isInteger(n) && n >= 0) hand.slots = n;
+    else delete hand.slots;
   }
   if (edit.properties !== undefined) hand.properties = declsFromDtos(edit.properties);
   return commit(session, "Edit hand", `hand:${handId}`, [handsWrite(session, box)]);
