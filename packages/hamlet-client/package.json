@@ -11,8 +11,8 @@
     "serve": "node scripts/serve.mjs"
   },
   "dependencies": {
-    "@patterkit/play-helpers": "^1.0.1",
-    "@patterkit/runtime": "^1.0.1",
+    "@patterkit/play-helpers": "^1.0.6",
+    "@patterkit/runtime": "^1.0.5",
     "@storylet-studio/with-patter": ">=1.0.0"
   }
 }
