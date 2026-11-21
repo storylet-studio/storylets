@@ -1206,6 +1206,44 @@ namespace storylets
             HostScope resolver_;
         };
 
+        /** A bound host scope's resolver, reading a declared name the game
+         *  hasn't set as its declared default: the value the story would read
+         *  with nothing bound (the declaration's `default`, else its type's),
+         *  so binding a scope never turns a default into unset. Writes, and
+         *  every name the game has set, go straight through; the game's own
+         *  store is never written. Names match as written, as the engine's host
+         *  scopes do. Patterplay's rule (1.0.5), the same on every runtime. */
+        class DeclaredDefaultsResolver : public IScopeResolver
+        {
+        public:
+            DeclaredDefaultsResolver(std::shared_ptr<IScopeResolver> inner, const std::vector<ScopeDeclaration>& decls)
+                : inner_(std::move(inner))
+            {
+                for (const auto& d : decls) defaults_.emplace(d.name, d.defaultOrTypeDefault());
+            }
+            std::optional<StoryletValue> get(const std::string& name) const override
+            {
+                std::optional<StoryletValue> v = inner_->get(name);
+                if (v) return v;
+                auto it = defaults_.find(name);
+                return it != defaults_.end() ? std::optional<StoryletValue>(it->second) : v;
+            }
+            bool canSet() const override { return inner_->canSet(); }
+            void set(const std::string& name, const StoryletValue& value) override { inner_->set(name, value); }
+        private:
+            std::shared_ptr<IScopeResolver> inner_;
+            std::map<std::string, StoryletValue> defaults_;
+        };
+
+        /** The resolver a bound host scope registers: the game's, with its
+         *  declarations' defaults behind it. No declarations: as given. */
+        inline std::shared_ptr<IScopeResolver> WithDeclaredDefaults(
+            std::shared_ptr<IScopeResolver> resolver, const std::vector<ScopeDeclaration>& decls)
+        {
+            if (decls.empty()) return resolver;
+            return std::make_shared<DeclaredDefaultsResolver>(std::move(resolver), decls);
+        }
+
         /** A declaration list as the registry and the bag take it. */
         inline std::vector<ScopeDeclaration> PlainDecls(const std::vector<PropertyDecl>& decls)
         {
@@ -1935,7 +1973,7 @@ namespace storylets
                     options.normalise = &detail::IdentityName;
                     options.writable = spec && spec->writable.has_value() ? *spec->writable : true;
                     options.owner = std::string(detail::RegistryOwner);
-                    reg.defineForeign(token, std::make_shared<detail::HostScopeResolver>(pair.second),
+                    reg.defineForeign(token, detail::WithDeclaredDefaults(std::make_shared<detail::HostScopeResolver>(pair.second), decls),
                         spec && !spec->opaque ? &decls : nullptr, options);
                     registered.push_back(token);
                 }

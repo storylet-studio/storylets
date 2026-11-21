@@ -1,5 +1,5 @@
 {
-  "version": 26,
+  "version": 27,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -12737,6 +12737,304 @@
             "player.hp",
             "a number"
           ]
+        }
+      ]
+    },
+    {
+      "name": "a bound host scope's unset name reads its declared default, a name the game set reads its value, and a story write lands in the game's store",
+      "bundle": {
+        "schema": "storylets/bundle@2",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "scopeRegistry": {
+          "version": 1,
+          "scopes": [
+            {
+              "token": "world",
+              "declarations": [
+                {
+                  "name": "alarms",
+                  "type": "number",
+                  "default": 2
+                },
+                {
+                  "name": "mode",
+                  "type": "enum",
+                  "values": [
+                    "day",
+                    "night"
+                  ],
+                  "default": "night"
+                },
+                {
+                  "name": "count",
+                  "type": "number"
+                },
+                {
+                  "name": "lit",
+                  "type": "boolean",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_defaults",
+                    "gameId": "defaults",
+                    "condition": {
+                      "src": "@world.alarms == 2 and @world.mode == \"night\" and @world.count == 0 and @world.lit == true",
+                      "ast": [
+                        "bin",
+                        "and",
+                        [
+                          "bin",
+                          "and",
+                          [
+                            "bin",
+                            "and",
+                            [
+                              "bin",
+                              "==",
+                              [
+                                "sv",
+                                "world",
+                                "alarms"
+                              ],
+                              [
+                                "n",
+                                2
+                              ]
+                            ],
+                            [
+                              "bin",
+                              "==",
+                              [
+                                "sv",
+                                "world",
+                                "mode"
+                              ],
+                              [
+                                "s",
+                                "night"
+                              ]
+                            ]
+                          ],
+                          [
+                            "bin",
+                            "==",
+                            [
+                              "sv",
+                              "world",
+                              "count"
+                            ],
+                            [
+                              "n",
+                              0
+                            ]
+                          ]
+                        ],
+                        [
+                          "bin",
+                          "==",
+                          [
+                            "sv",
+                            "world",
+                            "lit"
+                          ],
+                          [
+                            "b",
+                            true
+                          ]
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_raise",
+                        "gameId": "raise",
+                        "changes": {
+                          "@world.alarms": {
+                            "src": "@world.alarms + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "world",
+                                "alarms"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "c_raised",
+                    "gameId": "raised",
+                    "condition": {
+                      "src": "@world.alarms == 3",
+                      "ast": [
+                        "bin",
+                        "==",
+                        [
+                          "sv",
+                          "world",
+                          "alarms"
+                        ],
+                        [
+                          "n",
+                          3
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "hostScopes": {
+        "world": {
+          "lit": true
+        }
+      },
+      "script": [
+        {
+          "op": "assertEngineRead",
+          "path": "world.alarms",
+          "expect": 2
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "world.mode",
+          "expect": "night"
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "world.count",
+          "expect": 0
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "world.lit",
+          "expect": true
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_defaults"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_defaults",
+          "outcome": "raise",
+          "from": "h_q",
+          "expectTrace": [
+            "write @world.alarms world.alarms"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "world.alarms": 3
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_raised"
+            ]
+          }
+        },
+        {
+          "op": "saveLoad"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "world.alarms": 3,
+            "world.count": 0
+          }
         }
       ]
     },

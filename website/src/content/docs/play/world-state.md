@@ -97,6 +97,10 @@ const engine = new Engine(bundle, {
 });
 ```
 
+A declared name your resolver hasn't set yet (it gives `undefined` or `null`) reads the default
+the project declares for it, as it would with nothing bound, and reading it writes nothing to
+your state. Patter reads a bound World the same way, so two engines sharing one `@world` agree.
+
 Bind any of them, or none. A declared scope you leave out, the engine backs itself from the
 declared defaults, as a property it saves, which is fine for most games. A game running more
 than one engine registers its scopes once in its registry instead, and hands the registry to

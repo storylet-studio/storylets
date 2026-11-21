@@ -998,6 +998,24 @@ const toForeignDecl = (d: HostScopeDecl): ScopeDeclaration => ({
   ...(d.writable !== undefined ? { writable: d.writable } : {}),
 });
 
+/** A bound host scope's resolver, reading a declared name the game hasn't set
+ *  as its declared default: the value the story would read with nothing bound
+ *  (the declaration's `default`, else its type's), so binding a scope never
+ *  turns a default into unset. Writes, and every name the game has set, go
+ *  straight through; the game's own store is never written. No declarations:
+ *  the resolver as given. Patterplay's rule (1.0.5), the same on every runtime. */
+function withDeclaredDefaults(resolver: ScopeResolver, decls: ScopeDeclaration[]): ScopeResolver {
+  if (decls.length === 0) return resolver;
+  const byName = new Map(decls.map((d) => [d.name, d]));
+  const get = (name: string): ScalarValue | undefined => {
+    const v = resolver.get(name);
+    if (v !== undefined && v !== null) return v;
+    const d = byName.get(name);
+    return d ? structuredClone(d.default ?? defaultFor(d)) as ScalarValue : v;
+  };
+  return resolver.set ? { get, set: (name, value) => resolver.set!(name, value) } : { get };
+}
+
 /** A self-backed host scope's declarations: the scope's own `writable`
  *  folded into each, since an owned bag reads writability per declaration. */
 const selfBackedDecls = (spec: HostScopeSpec): ScopeDeclaration[] =>
@@ -1674,7 +1692,8 @@ export class Engine {
             : `hostScopes binds "${token}", which this bundle doesn't declare` });
         }
         const decls = spec?.declarations?.map(toForeignDecl);
-        mount(token, () => { reg.defineForeign(token, resolver, decls, { normalise: identity, writable: spec?.writable ?? true, owner: OWNER }); });
+        const reader = withDeclaredDefaults(resolver, decls ?? []);
+        mount(token, () => { reg.defineForeign(token, reader, decls, { normalise: identity, writable: spec?.writable ?? true, owner: OWNER }); });
       }
       // A declared host scope nobody bound. A standalone engine is its own
       // game, so it self-backs the scope from its declared defaults,

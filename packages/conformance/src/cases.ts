@@ -1488,6 +1488,41 @@ export const fixtures: Fixtures = {
         { op: "setState", host: { player: { hp: true } }, expectRefused: ["player.hp", "a number"] },
       ] },
 
+    // A bound scope's unset name reads its declared default (its own `default`,
+    // else its type's), as it would with nothing bound: binding a World never
+    // turns a default into unset (Patterplay 1.0.5's rule, patter 6f46c953, so
+    // both engines read one shared @world alike). A name the game has set reads
+    // the game's value; a story write lands in the game's store.
+    { name: "a bound host scope's unset name reads its declared default, a name the game set reads its value, and a story write lands in the game's store",
+      scopeRegistry: { version: 1, scopes: [
+        { token: "world", declarations: [
+          { name: "alarms", type: "number", default: 2 },
+          { name: "mode", type: "enum", values: ["day", "night"], default: "night" },
+          { name: "count", type: "number" },
+          { name: "lit", type: "boolean", default: false },
+        ] },
+      ] },
+      hostScopes: { world: { lit: true } },
+      cards: [
+        { id: "c_defaults", condition: '@world.alarms == 2 and @world.mode == "night" and @world.count == 0 and @world.lit == true',
+          outcomes: [{ id: "o_raise", changes: { "@world.alarms": "@world.alarms + 1" } }] },
+        { id: "c_raised", condition: "@world.alarms == 3" },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "assertEngineRead", path: "world.alarms", expect: 2 },
+        { op: "assertEngineRead", path: "world.mode", expect: "night" },
+        { op: "assertEngineRead", path: "world.count", expect: 0 },
+        { op: "assertEngineRead", path: "world.lit", expect: true },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_defaults"] } },
+        { op: "play", card: "c_defaults", outcome: "raise", from: "h_q", expectTrace: ["write @world.alarms world.alarms"] },
+        { op: "assertState", expect: { "world.alarms": 3 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_raised"] } },
+        // The game's store kept the write: an engine built again on the same binding reads 3.
+        { op: "saveLoad" },
+        { op: "assertState", expect: { "world.alarms": 3, "world.count": 0 } },
+      ] },
+
     { name: "a token the bundle doesn't declare is reported as set-up, naming the declared spelling when only the case differs",
       scopeRegistry: { version: 1, scopes: [
         { token: "player", declarations: [{ name: "hp", type: "number", default: 10 }] },

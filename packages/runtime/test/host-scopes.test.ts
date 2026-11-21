@@ -114,3 +114,29 @@ describe("bundles before host scopes", () => {
     expect(bundle.world).toBeUndefined();
   });
 });
+
+describe("a bound scope's unset names read their declared defaults", () => {
+  // The corpus pins the reads; what it can't see is the game's own store.
+  it("reads the default without writing it into the game's store", () => {
+    const store = new Map<string, unknown>();
+    const engine = new Engine(bundle, { hostScopes: { player: {
+      get: (n) => store.get(n) as never,
+      set: (n, v) => { store.set(n, v); },
+    } } });
+    expect(engine.getProperty("player.hp")).toBe(10);
+    expect(engine.getProperty("player.name")).toBe("");
+    expect(store.size).toBe(0);
+    engine.setProperty("player.hp", 4);
+    expect(store.get("hp")).toBe(4);
+    expect(engine.getProperty("player.hp")).toBe(4);
+  });
+
+  it("reads a null the game holds as the default, and leaves an opaque scope as given", () => {
+    const engine = new Engine(bundle, { hostScopes: {
+      player: { get: () => null as never },
+      fx: { get: () => undefined },
+    } });
+    expect(engine.getProperty("player.hp")).toBe(10);
+    expect(() => engine.getProperty("fx.glow")).toThrow();
+  });
+});

@@ -97,8 +97,11 @@ import type {
  *  story's), on a flow and on the engine (ruling 3, 2026-10-28); the `setPath` op.
  *  26: the section `versions`: whether a version is in a range (`versionInRange`), the check something built
  *  for the Storylet Engine makes against the one it finds; Patterplay's 23 cases, so both families answer
- *  alike. No earlier expectation changed. */
-export const CORPUS_VERSION = 26;
+ *  alike. No earlier expectation changed.
+ *  27: a bound host scope's declared name the game hasn't set reads its declared default (its own
+ *  `default`, else its type's), as it would with nothing bound, as Patterplay 1.0.5 reads one; writes and
+ *  names the game has set go through to the game's store. No earlier expectation changed. */
+export const CORPUS_VERSION = 27;
 
 /** The dialect a fixture's expressions compile in: the engine's own, plus the
  *  host scopes the fixture being expanded declares (`@player`), as a project's

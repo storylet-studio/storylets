@@ -63,6 +63,7 @@ const CREATE_OPTION_KEYS := ["seed", "log", "host_scopes", "registry", "on_repla
 ## The owner label on everything this engine registers: named in a clash error
 ## and carried on the registry's examiner rows.
 const OWNER := "Storylet Engine"
+const _Values := preload("res://addons/storyletengine/runtime/expr/values.gd")
 ## The four instance kinds, in the order their bags register.
 const OWNED_KINDS := ["box", "deck", "hand", "value"]
 ## open_flow's options. "restore" takes a save_flow blob and opens the flow AS
@@ -885,6 +886,7 @@ func _init_shared(bound: Dictionary) -> void:
 			var decls: Array = []
 			for d in spec.get("declarations", []):
 				decls.append(_foreign_decl(d))
+			foreign = _with_declared_defaults(foreign, decls)
 			refused = _mount_shared({"key": t, "resolver": foreign, "decls": decls, "writable": spec.get("writable", true) != false})
 			if refused != "":
 				break
@@ -944,6 +946,41 @@ static func _foreign_decl(d: Dictionary) -> Dictionary:
 		if d.has(k) and d[k] != null:
 			out[k] = d[k]
 	return out
+
+
+## A bound host scope's resolver, reading a declared name the game hasn't set
+## (its resolver gives null) as that declaration's default: its own "default",
+## else its type's, the value a self-backed scope seeds with. So binding a scope
+## never turns a default into unset. Writes, and every name the game has set, go
+## straight through, and the game's store is never written. No declarations: the
+## resolver as given. A static function with the data bound, never a lambda (a
+## kept lambda aborts a C# game as it quits). Patterplay's rule (1.0.5), the same
+## on every runtime (JS's withDeclaredDefaults).
+static func _with_declared_defaults(resolver: Dictionary, decls: Array) -> Dictionary:
+	if decls.is_empty() or not (resolver.get("get") is Callable):
+		return resolver
+	var by_name := {}
+	for d in decls:
+		var n := str(d.get("name", ""))
+		if not by_name.has(n):
+			by_name[n] = d
+	var out := {"get": StoryletEngine._read_or_default.bind(resolver["get"], by_name)}
+	if resolver.has("set"):
+		out["set"] = resolver["set"]
+	return out
+
+
+## The game's value for `name`, or its declared default when the game gives
+## null. Names match as written, as the engine's host scopes do. A flags default
+## is a fresh copy each read, so no default is ever shared.
+static func _read_or_default(name: String, getter: Callable, by_name: Dictionary) -> Variant:
+	var v = getter.call(name)
+	if v != null:
+		return v
+	var d = by_name.get(name)
+	if d == null:
+		return v
+	return StoryletPropertyBag._copy_value(_Values.to_value(StoryletPropertyBag.default_for(d)))
 
 
 ## A self-backed host scope's declarations: the scope's own `writable` folded

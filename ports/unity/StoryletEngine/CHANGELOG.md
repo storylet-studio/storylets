@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A bound scope's unset names read their declared defaults.** A name your game hasn't set yet in a scope you bind
+  through `HostScopes` (your `@world`, say) now reads the default the project declares for it, as it would with nothing
+  bound, where it used to read as unset (false in a condition, a failed sum). A name your game has set reads your
+  value, a story's write still lands in your store, and reading a default writes nothing to it. Patterplay reads a
+  bound World the same way from 1.0.5, so when both engines share one `@world` they agree about every name.
+
 ## [1.1.0] - 2026-11-17
 
 ### Added

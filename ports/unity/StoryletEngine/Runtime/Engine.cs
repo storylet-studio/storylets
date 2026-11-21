@@ -170,6 +170,43 @@ namespace StoryletStudio.StoryletEngine
     {
     }
 
+    /// <summary>A bound host scope's resolver, reading a declared name the game
+    /// hasn't set (null) as its declared default: the value the story would read
+    /// with nothing bound (the declaration's Default, else its type's), so binding
+    /// a scope never turns a default into unset. Writes, and every name the game
+    /// has set, go straight through; the game's own store is never written. No
+    /// declarations: the resolver as given. Names match as written, as the
+    /// engine's host scopes do. ExprValue is immutable, so a default is never
+    /// shared mutably (the TypeScript engine clones for the same reason).
+    /// Patterplay's rule (1.0.5), the same on every runtime.</summary>
+    internal sealed class DeclaredDefaultsResolver : IScopeResolver
+    {
+        private readonly IScopeResolver _inner;
+        private readonly Dictionary<string, ScopeDeclaration> _byName;
+
+        private DeclaredDefaultsResolver(IScopeResolver inner, Dictionary<string, ScopeDeclaration> byName)
+        {
+            _inner = inner; _byName = byName;
+        }
+
+        public static IScopeResolver For(IScopeResolver inner, IReadOnlyCollection<ScopeDeclaration> decls)
+        {
+            if (decls == null || decls.Count == 0) return inner;
+            var byName = new Dictionary<string, ScopeDeclaration>(StringComparer.Ordinal);
+            foreach (var d in decls) if (d?.Name != null && !byName.ContainsKey(d.Name)) byName[d.Name] = d;
+            return new DeclaredDefaultsResolver(inner, byName);
+        }
+
+        public bool CanSet => _inner.CanSet;
+        public ExprValue Get(string name)
+        {
+            var v = _inner.Get(name);
+            if (v != null || name == null) return v;
+            return _byName.TryGetValue(name, out var d) ? d.DefaultOrTypeDefault() : null;
+        }
+        public void Set(string name, ExprValue value) => _inner.Set(name, value);
+    }
+
     public sealed class EngineOptions
     {
         /// <summary>Default seed for each flow's PRNG; override per flow in
@@ -1502,7 +1539,8 @@ namespace StoryletStudio.StoryletEngine
                     }
                     var decls = spec?.Declarations?.Select(ToForeignDecl).ToList();
                     var writable = spec?.Writable ?? true;
-                    Mount(token, () => reg.DefineForeign(token, resolver, decls,
+                    var reader = DeclaredDefaultsResolver.For(resolver, decls);
+                    Mount(token, () => reg.DefineForeign(token, reader, decls,
                         new ForeignScopeOptions { Normalise = Identity, Writable = writable, Owner = OwnerLabel }));
                 }
                 // A declared host scope nobody bound. A standalone engine is its
