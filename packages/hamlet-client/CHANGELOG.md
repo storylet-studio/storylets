@@ -7,6 +7,13 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-21
+
+### Changed
+
+- **The Godot, Unity and Unreal projects on Patterplay 1.0.5**, in place of 1.0.3 (Godot) and 1.0.1 (Unity and
+  Unreal), so a C# Godot game built from the demo no longer crashes as it quits. Nothing changes how the Hamlet plays.
+
 ## [1.0.1] - 2026-11-10
 
 ### Changed
