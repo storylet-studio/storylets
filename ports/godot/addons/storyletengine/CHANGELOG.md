@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-21
+
 ### Fixed
 
 - **A bound scope's unset names read their declared defaults.** A name your game hasn't set yet in a scope you bind
