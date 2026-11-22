@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/compiler",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Storylet Engine compiler: .storylets shards in, validated .storyletsc bundle out. Canonical serialisation, publish-gate validation, the hash32 staleness gate.",
   "type": "module",
   "license": "MIT",

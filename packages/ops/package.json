@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/ops",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Pure-function operations layer shared by the CLI, the editor and CI: init, new box, export, validate, format, ask (peek / deal), merge, coverage. Returns planned writes; callers commit them through the VC layer.",
   "type": "module",
   "license": "MIT",
@@ -44,7 +44,7 @@
     "build": "tsup src/index.ts --format esm,cjs --dts --clean"
   },
   "dependencies": {
-    "@storylet-studio/compiler": "1.0.0",
+    "@storylet-studio/compiler": "1.0.1",
     "@storylet-studio/model": "1.1.0",
     "@storylet-studio/runtime": "1.1.1",
     "@storylet-studio/with-patter": ">=1.0.0",
