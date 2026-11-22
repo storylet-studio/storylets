@@ -11,15 +11,23 @@ script a hand-off.
 
 ## Getting it
 
-Download a standalone binary for your platform from the [Download page](/download/). It is
-one file, with no Node installation needed and nothing else to install alongside it.
+If you have Node, install it from npm:
+
+```sh
+npm install -g @storylet-studio/cli
+storyletengine validate ./my-project.storylets
+```
+
+Or run it without installing, with `npx @storylet-studio/cli validate ./my-project.storylets`.
+
+Without Node, download a standalone binary for your platform from the [Download page](/download/).
+It's one file, with nothing else to install alongside it.
 
 ```sh
 chmod +x ./storyletengine-macos-arm64
 ./storyletengine-macos-arm64 validate ./my-project.storylets
 ```
 
-The binaries are how the CLI ships for now: it isn't on npm yet, so there's no `npx` for it.
 Put the binary somewhere on your `PATH` and call it `storyletengine` if you want the short
 form. The JS runtime is on npm (`@storylet-studio/runtime`), and every runtime also ships as a
 zip on the Download page.

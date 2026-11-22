@@ -1,11 +1,28 @@
 {
   "name": "@storylet-studio/ops",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
   "description": "Pure-function operations layer shared by the CLI, the editor and CI: init, new box, export, validate, format, ask (peek / deal), merge, coverage. Returns planned writes; callers commit them through the VC layer.",
   "type": "module",
   "license": "MIT",
   "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/ops"
+  },
+  "homepage": "https://storylets.dev/",
+  "keywords": [
+    "storylets",
+    "storylet-studio",
+    "quality-based-narrative",
+    "narrative",
+    "interactive-fiction",
+    "operations",
+    "export"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,15 +44,17 @@
     "build": "tsup src/index.ts --format esm,cjs --dts --clean"
   },
   "dependencies": {
-    "@storylet-studio/compiler": "0.0.0",
+    "@storylet-studio/compiler": "1.0.0",
     "@storylet-studio/model": "1.1.0",
     "@storylet-studio/runtime": "1.1.1",
     "@storylet-studio/with-patter": ">=1.0.0",
     "@wildwinter/expr": "^1.0.1",
-    "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0",
     "@wildwinter/toolkit": "^1.3.0",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1"
+  },
+  "peerDependencies": {
+    "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0"
   },
   "devDependencies": {
     "@patterkit/play-helpers": "^1.0.6"

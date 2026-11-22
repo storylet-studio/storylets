@@ -71,17 +71,20 @@ old list back into the project.
 
 ## Shipping shape
 
-Patter's CLI distribution, carried whole except for npm: the package is
-private, and nothing here is published there.
+Patter's CLI distribution, carried whole.
 
-- **`dist/cli.js`** is **thin**: the CLI's own code, with its libraries resolved from the
-  workspace's `node_modules` (the same shape as Patter's npm CLI).
+- **npm**: `npm install -g @storylet-studio/cli` installs the `storyletengine` command, and
+  `npx @storylet-studio/cli <command>` runs it without installing.
+- **`dist/cli.js`** is **thin**: the CLI's own code, with its libraries (`@storylet-studio/ops` and
+  theirs) installed from npm beside it (the same shape as Patter's npm CLI).
 - **Standalone binaries**: `npm run build:standalone` (Bun `--compile`) emits
   one native executable per platform - no Node required - carrying its own licence and every
   bundled library's notice (`storyletengine licences`). macOS binaries are
   Developer ID signed (hardened runtime + JIT entitlements,
   `entitlements.plist`); Windows ships unsigned by policy.
-- **Release flow**: tagging `cli-vX.Y.Z` runs
+- **Release flow**: Changesets versions and publishes the npm package with the others;
+  `npm run ship:cli -- patch` runs the whole chain, and `npm run release:cli` then tags
+  `cli-vX.Y.Z`, which runs
   [.github/workflows/cli.yml](../../.github/workflows/cli.yml) - macOS builds
   and signs its own binaries, Linux cross-compiles the Linux + Windows set,
   and all five land as GitHub Release assets.

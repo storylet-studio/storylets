@@ -26,12 +26,16 @@
     "studio": "npm run dev -w @storylet-studio/studio",
     "website": "npm --prefix website run dev",
     "bump:app": "node scripts/bump-app-version.mjs app",
-    "bump:cli": "node scripts/bump-app-version.mjs cli",
     "changeset": "changeset",
     "version-packages": "changeset version && npm install --package-lock-only --ignore-scripts",
     "release": "npm run typecheck && npm run build:libs && npm test && node scripts/check-published-manifests.mjs && changeset publish",
     "release:guard": "node scripts/release-guard.mjs",
-    "check:published": "node scripts/check-published-manifests.mjs"
+    "check:published": "node scripts/check-published-manifests.mjs",
+    "release:cli": "node scripts/release.mjs cli",
+    "release:status": "node scripts/release-status.mjs",
+    "release:npm": "node scripts/release-npm.mjs",
+    "ship:cli": "node scripts/ship-cli.mjs",
+    "ship:npm": "node scripts/ship-npm.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.1",

@@ -1,18 +1,17 @@
 // Bump one of the tag-released apps to a new version.
 //
 //   npm run bump:app -- 0.4.0     # Storyletter (the desktop app)
-//   npm run bump:cli -- 0.3.0     # the standalone `storyletengine` CLI
 //
-// Each has its own tag-driven pipeline, separate from the runtimes' lockstep
-// `bump:play`: Storyletter ships on a bare `v*` tag (bare v* is Storyletter's
+// Storyletter has its own tag-driven pipeline, separate from the runtimes'
+// lockstep `bump:play`: it ships on a bare `v*` tag (bare v* is Storyletter's
 // alone, because electron-builder and electron-updater can only target plain
-// semver tags), the CLI on `cli-v*`. Both pipelines REFUSE a tag whose version
-// disagrees with the manifest, and both refuse one with no dated changelog
-// section, so this script is the one route to a release.
+// semver tags). The pipeline REFUSES a tag whose version disagrees with the
+// manifest, or one with no dated changelog section, so this script is the one
+// route to a release.
 //
-// One script with a table rather than two near-identical files: the pair
-// differ only in which manifest and changelog they touch and what they print,
-// and a second copy is how the two would drift.
+// The CLI used to be a second target here (`bump:cli`). Since 2026-11-22 it is
+// on npm, versioned by Changesets as Patter's is, and released by `ship:cli`
+// or `release:cli`. The table stays so the shape matches Patterpad's script.
 //
 // It:
 //   1. writes the version into the app's package.json and package-lock.json
@@ -39,13 +38,6 @@ const TARGETS = {
     whatsNew: true,
     note: "builds + signs mac/win/linux, publishes the installers\n"
         + "                                         # + the electron-updater feeds to the GitHub Release",
-  },
-  cli: {
-    label: "CLI",
-    dir: "packages/cli",
-    tag: (v) => `cli-v${v}`,
-    note: "builds the standalone executables (mac signed,\n"
-        + "                                         # linux + windows cross-compiled) as release assets",
   },
 };
 

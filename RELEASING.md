@@ -1,7 +1,7 @@
 # Releasing
 
-One repo, several deliverables, each on its own cadence and its own tag family. Everything
-here is tag-triggered: push a tag, a workflow builds and publishes it.
+One repo, several deliverables, each on its own cadence. The **npm packages** are driven by
+Changesets; everything else is tag-triggered: push a tag, a workflow builds and publishes it.
 
 **Read [CONTRIBUTING.md](CONTRIBUTING.md) first** for the repo's shape. This file is for
 whoever is shipping.
@@ -11,12 +11,12 @@ whoever is shipping.
 | Tag | Ships | Workflow | State |
 |---|---|---|---|
 | `vX.Y.Z` | Storyletter, the desktop editor | `storyletter.yml` | built |
-| `cli-vX.Y.Z` | the standalone `storyletengine` binaries | `cli.yml` | built |
+| `cli-vX.Y.Z` | the standalone `storyletengine` binaries (the CLI's npm package is Changesets') | `cli.yml` | built |
 | `play-<engine>-vX.Y.Z` | one of the four Storylet Engine runtimes | `play-<engine>.yml` | built |
 | `village-vX.Y.Z` | the Village browser client | `village.yml` | built |
 | `hamlet-vX.Y.Z` | the Hamlet: its project with a playable page, and the Patter Version's web, Godot, Unity and Unreal zips | `hamlet.yml` | built |
 
-**The five `@storylet-studio/*` npm packages are deliberately not in that table.** They are
+**The eight `@storylet-studio/*` npm packages are deliberately not in that table.** They are
 the one deliverable not driven by a tag: Changesets publishes them when it notices a change.
 See "The npm packages" below.
 
@@ -26,6 +26,57 @@ walks the releases feed skipping any tag that is not plain semver, so `cli-v*` r
 invisible to it. That is exactly what we want. Never give another deliverable a bare `v*` tag:
 a non-Storyletter release would take GitHub's "Latest" badge, it would have no `latest.yml`,
 and Check for Updates would then 404. Patterpad learned this the hard way.
+
+## Before you start: `npm run release:status`
+
+```sh
+npm run release:status
+```
+
+One read-only summary of every train: each published package's repo version against the registry,
+Storyletter's version and the CLI's, and whether each is tagged, unpushed commits, pending changesets,
+an open "Version Packages" PR, and the last few pipeline runs. Run it before and after anything below.
+It queries npm with `--prefer-online` on purpose: see "Checking a release afterwards".
+
+## The usual one: `npm run ship:npm`
+
+**Committed some library work? This is the command.** From a clean tree it pushes, waits for the
+bot to open the Version Packages PR, approves and waits for that PR's parked CI run, shows exactly
+what it would publish, asks once, merges, and waits until the registry actually serves the new
+versions.
+
+```sh
+npm run ship:npm               # push -> wait -> show -> ask -> merge -> verify
+npm run ship:npm -- --dry-run  # plan only: pushes nothing, merges nothing
+npm run ship:npm -- --yes      # no prompt
+```
+
+Cut any runtime release (`bump:play` and its tags) BEFORE this: every push to main makes the bot
+re-version the PR, and `ship:npm` follows the moving head rather than merging past it.
+
+It does NOT commit, and refuses a dirty tree while listing what is still loose. So the cadence for
+ordinary work is two steps, one of them yours: commit your work with explicit paths, then
+`npm run ship:npm`. If it says no changeset is pending, stop and read that sentence: a change to a
+published package that ships without one publishes nothing at all.
+
+## Publishing a PR that is already open: `npm run release:npm`
+
+The back half on its own, for when the push already happened and a "Version Packages" PR is open:
+
+```sh
+npm run release:npm             # shows the bumps, asks, merges, waits, verifies
+npm run release:npm -- --dry-run
+npm run release:npm -- --yes
+```
+
+**Merging with YOUR credentials is load-bearing, which is why this is a local script and not a
+workflow step.** A push made with `GITHUB_TOKEN` does not trigger further workflow runs, so a
+pipeline that merged its own Version Packages PR would land the bumped manifests on main and never
+publish them. With no PR open it says which state you are in: unpushed commits, changesets on main
+with the workflow still running, or genuinely nothing pending.
+
+`ship:npm`, `release:npm` and `ship:cli` share `scripts/lib/version-pr.mjs`, and all of them are
+ported from Patter's scripts of the same names: a fix in one family's copy belongs in the other's.
 
 ## Before the first release
 
@@ -116,11 +167,33 @@ in the repo under a version npm already has, and then npm serves the old range b
 need the new one (2026-09-27, the registry split). `npm run check:published` runs it by hand, and the
 changeset guard now counts a dependency change under an unchanged version as a change.
 
-## The CLI: `cli-vX.Y.Z`
+## The CLI: npm, then `cli-vX.Y.Z`
+
+A CLI release is really two releases, as Patter's is: the npm package `@storylet-studio/cli`
+(Changesets) and the standalone executables (a `cli-v*` tag). The binaries take their version from
+the manifest the npm side bumps, **so the npm half must land first**: tag early and you ship binaries
+labelled with one version and built from another.
 
 ```sh
-git tag cli-vX.Y.Z && git push origin cli-vX.Y.Z
+npm run ship:cli -- patch      # the whole chain, with one confirmation before it publishes
+npm run ship:cli -- minor --yes
+npm run ship:cli -- patch --dry-run
 ```
+
+`ship:cli` writes the changeset, commits, pushes, waits for the "Version Packages" PR, **stops and
+asks**, merges, waits for the registry to serve the new version, pulls, then tags `cli-v<ver>`.
+
+When the CLI moved because `ops` or `compiler` did, Changesets has already bumped it in the same
+Version Packages PR (their pins are exact, as Patter's are), so after `ship:npm` only the tag is
+left:
+
+```sh
+npm run release:cli            # tags cli-v<ver> from @storylet-studio/cli's package.json
+npm run release:cli -- 1.2.0   # or an explicit version
+```
+
+`cli.yml` refuses a tag that disagrees with the manifest or has no section in the CLI's
+CHANGELOG.md, which Changesets now writes. There is no `bump:cli` any more.
 
 Two jobs: macOS builds and signs the two Darwin binaries, Ubuntu cross-compiles the Linux and
 Windows ones, and both upload to the release for that tag. The CLI bundle inlines the
@@ -128,10 +201,11 @@ expression engine's source, so both jobs check out `@wildwinter/expr` alongside.
 
 ## The npm packages: Changesets
 
-Five packages are published to npm under `@storylet-studio`: `model`, `dialect`, `runtime`,
-`play-helpers` and `with-patter`. Everything else is `private: true` and in the Changesets
-`ignore` list: `compiler`, `ops` and `cli` (the CLI ships as binaries only), `conformance`,
-`studio`, `hamlet-client` and `village-client`.
+Eight packages are published to npm under `@storylet-studio`: `model`, `dialect`, `compiler`,
+`runtime`, `play-helpers`, `with-patter`, `ops` and `cli` (the last three since 2026-11-22, the same
+shape as Patter's). Everything else is `private: true` and in the Changesets `ignore` list:
+`conformance`, `studio`, `hamlet-client` and `village-client`. Storyletter pins `ops` and `compiler`
+exactly, as Patterpad pins Patter's, and Changesets moves those pins when they bump.
 
 **The npm libraries are the one deliverable NOT driven by a tag.** Everything above ships
 because you pushed a tag; the packages ship because Changesets noticed a change. Keeping that

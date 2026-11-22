@@ -1,11 +1,29 @@
 {
   "name": "@storylet-studio/cli",
-  "version": "1.1.0",
-  "private": true,
+  "version": "1.1.1",
   "description": "storyletengine - the Storylet Engine CLI: init, new box, validate, format, export (bundle, playable page, workbook), peek, deal, resolve, links, coverage, contract, share-scopes, pack, unpack, merge. A thin front-end over @storylet-studio/ops.",
   "type": "module",
   "license": "MIT",
   "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://storylets.dev/cli/",
+  "keywords": [
+    "storylets",
+    "storylet-studio",
+    "quality-based-narrative",
+    "narrative",
+    "interactive-fiction",
+    "cli",
+    "validate",
+    "export"
+  ],
   "bin": {
     "storyletengine": "./dist/cli.js"
   },
@@ -20,7 +38,7 @@
     "build:standalone:others": "node scripts/build-standalone.mjs --targets=linux-x64,linux-arm64,windows-x64"
   },
   "dependencies": {
-    "@storylet-studio/ops": "0.0.0",
+    "@storylet-studio/ops": "1.0.0",
     "@wildwinter/simple-vc-lib": "^0.5.2"
   }
 }

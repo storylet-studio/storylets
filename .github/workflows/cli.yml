@@ -10,8 +10,10 @@ name: CLI release
 # protects was added. It lived in both build jobs first, and moved into `gate`
 # when the suite gave the two of them something to share.
 #
-# attached to a GitHub Release. Its own tag flow (not Changesets, which
-# handles the npm packages): tagging `cli-vX.Y.Z` builds the binaries via
+# attached to a GitHub Release. The CLI also ships on npm (@storylet-studio/cli),
+# versioned and published by Changesets with the other packages; this tag flow
+# comes after that, cut by `npm run release:cli` (or the last step of `ship:cli`)
+# once npm serves the version, as Patter's is. Tagging `cli-vX.Y.Z` builds the binaries via
 # Bun --compile and uploads them as release assets. The macOS binaries are
 # Developer-ID signed on the macOS runner; Linux + Windows cross-compile on
 # Linux (Windows ships unsigned by policy). One Bun could cross-compile
@@ -60,8 +62,10 @@ jobs:
           version="${GITHUB_REF_NAME#cli-v}"
           manifest=$(node -p "require('./packages/cli/package.json').version")
           [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
-          grep -q "^## \[${version}\] - [0-9]" packages/cli/CHANGELOG.md \
-            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+          # Changesets writes the CLI's changelog now (`## X.Y.Z`); entries before
+          # 1.1.1 were hand-written (`## [X.Y.Z] - date`). Either form will do.
+          grep -qE "^## \[?${version//./\\.}\]?( |$)" packages/cli/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no ${version} section"; exit 1; }
       - run: npm run typecheck
         working-directory: storylets
       - run: npm test

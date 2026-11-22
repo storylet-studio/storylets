@@ -1,11 +1,27 @@
 {
   "name": "@storylet-studio/compiler",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
   "description": "Storylet Engine compiler: .storylets shards in, validated .storyletsc bundle out. Canonical serialisation, publish-gate validation, the hash32 staleness gate.",
   "type": "module",
   "license": "MIT",
   "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/compiler"
+  },
+  "homepage": "https://storylets.dev/",
+  "keywords": [
+    "storylets",
+    "storylet-studio",
+    "quality-based-narrative",
+    "narrative",
+    "interactive-fiction",
+    "compiler"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -28,8 +44,10 @@
     "@storylet-studio/dialect": "1.0.1",
     "@storylet-studio/model": "1.1.0",
     "@wildwinter/expr": "^1.0.1",
-    "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0",
     "@wildwinter/toolkit": "^1.3.0",
     "json5": "^2.2.3"
+  },
+  "peerDependencies": {
+    "@wildwinter/scoperegistry": ">=1.0.0 <2.0.0"
   }
 }

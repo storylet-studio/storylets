@@ -10,9 +10,6 @@
   "ignore": [
     "@storylet-studio/studio",
     "@storylet-studio/village-client",
-    "@storylet-studio/conformance",
-    "@storylet-studio/compiler",
-    "@storylet-studio/ops",
-    "@storylet-studio/cli"
+    "@storylet-studio/conformance"
   ]
 }
