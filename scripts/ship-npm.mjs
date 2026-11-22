@@ -151,4 +151,4 @@ if (failed.length) {
 }
 
 console.log(`\nship:npm: done. ${bumps.map((b) => `@storylet-studio/${b.pkg}@${b.to}`).join(", ")} published.`);
-console.log("  A train that also ships a binary or an app wants its own tag:  npm run release:cli (the runtimes and Storyletter: bump:play, bump:app)| release:play | release:pad");
+console.log("  A train that also ships a binary or an app wants its own tag:  npm run release:cli (the runtimes and Storyletter: bump:play, bump:app)");
