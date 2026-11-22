@@ -196,6 +196,34 @@ describe("outcome fields on the Outcomes sheet", () => {
   });
 });
 
+describe("an outcome with no changes", () => {
+  // Source may leave `changes` out of an outcome that only names a choice (Saltmarsh's o_listen), and
+  // it validates. The export threw on one until 2026-11-22.
+  it("exports it, with an empty Changes cell and \"(no changes)\" on the deck sheet", async () => {
+    const one = loadProject(exampleDir).source!;
+    const box = one.boxes[0]!;
+    const deck = box.decks.find((d) => (d.shard.cards ?? []).some((c) => c.outcomes.length > 0))!;
+    const card = deck.shard.cards.find((c) => c.outcomes.length > 0)!;
+    const { changes: _dropped, ...bare } = card.outcomes[0]!;
+    const source: SourceProject = {
+      ...one,
+      boxes: [{
+        ...box,
+        decks: box.decks.map((d) => (d === deck ? {
+          ...d,
+          shard: { ...d.shard, cards: d.shard.cards.map((c) => (c === card
+            ? { ...c, outcomes: [bare as typeof card.outcomes[0], ...c.outcomes.slice(1)] } : c)) },
+        } : d)),
+      }],
+    };
+    const { wb: book } = await exported(source);
+    const row = rowWhere(book.getWorksheet("Outcomes")!, 4, bare.gameId ?? bare.id);
+    expect(row[6]).toBe("");
+    const deckRow = rowWhere(book.getWorksheet(deck.shard.deck?.title ?? "")!, 2, card.gameId ?? card.id);
+    expect(deckRow.join("\n")).toContain("(no changes)");
+  });
+});
+
 describe("sheet naming", () => {
   it("adds a Box column and disambiguates colliding deck titles across boxes", async () => {
     const loaded = loadProject(exampleDir);

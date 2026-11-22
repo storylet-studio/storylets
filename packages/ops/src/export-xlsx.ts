@@ -78,8 +78,11 @@ const label = (entity: { id: string; gameId?: string; title?: string }): string 
 const properties = (decls: PropertyDecl[] | undefined): string =>
   (decls ?? []).map((d) => `${d.name} = ${String(scalar(defaultFor(d)))}`).join("; ");
 
+// `changes` may be absent in source: an outcome that only names a choice ("Listen", Saltmarsh's
+// o_listen) validates, and the compiler fills in `{}`. The type says otherwise, so guard here as
+// stages.ts and rename-property.ts already do.
 const changes = (outcome: Outcome<string>): string =>
-  Object.entries(outcome.changes).map(([target, expr]) => `${target} = ${expr}`).join("; ");
+  Object.entries(outcome.changes ?? {}).map(([target, expr]) => `${target} = ${expr}`).join("; ");
 
 /** One outcome as a line of the deck sheet's Outcomes cell. */
 const outcomeLine = (outcome: Outcome<string>): string => {
